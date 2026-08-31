@@ -1,0 +1,38 @@
+# ---- Wails / 前端构建产物 ----
+frontend/dist
+node_modules
+frontend/package.json.md5
+
+# ---- 编译产物(wails build / go build 输出) ----
+build/bin/
+*.app
+*.dmg
+*.exe
+/gbt32960-simulator
+/gbt32960-simulator.exe
+
+# ---- Go 测试 / 覆盖率产物 ----
+*.test
+*.out
+coverage.*
+
+# ---- 根目录调试截图(agent 视觉走查产物) ----
+/*.png
+
+# ---- IDE / 编辑器 ----
+.idea/
+.vscode/
+
+# ---- macOS ----
+.DS_Store
+
+# ---- AI / Agent 开发文档产物 ----
+# .codegraph 是指向 ~/.omo 的符号链接(代码索引,agent 产物)
+.codegraph
+.claude/
+.opencode/
+.codex/
+.cursor/
+.omo/
+.agents/
+.cache/

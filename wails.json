@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "gbt32960-simulator",
+  "outputfilename": "gbt32960-simulator",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "sunsky",
+    "email": "qingyun.fang@sirun.net"
+  }
+}

@@ -1,0 +1,796 @@
+/* ============================================================
+   GB/T 32960 模拟器 — 设计 Token 与全局样式
+   主题由 <html data-theme="dark|light"> 驱动:
+   · Ant Design 组件走 ConfigProvider 的 Design Token(见 src/theme/index.ts)
+   · 自定义布局/日志/面板走下方 CSS 变量
+   分层:页面背景 → 面板/卡片 → 输入框(三级)
+   Dark 为既有基准(视觉不变),Light 为新增主题。
+   ============================================================ */
+
+/* Dark 主题变量(默认:首帧无闪烁兜底;未设置 data-theme 时即 Dark) */
+:root,
+:root[data-theme='dark'] {
+  --bg-page: #141414;
+  --bg-panel: #1f1f1f;
+  --bg-elevated: #262626;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.15);
+  --text-primary: rgba(255, 255, 255, 0.88);
+  --text-secondary: rgba(255, 255, 255, 0.65);
+  --text-tertiary: rgba(255, 255, 255, 0.45);
+  --text-disabled: rgba(255, 255, 255, 0.35);
+  --primary: #1677ff;
+  --success: #52c41a;
+  --warning: #faad14;
+  --error: #ff4d4f;
+  --primary-hover-bg: rgba(22, 119, 255, 0.1);
+  --row-hover-bg: rgba(22, 119, 255, 0.06);
+  --item-hover-bg: rgba(255, 255, 255, 0.04);
+  --divider-grip: rgba(255, 255, 255, 0.25);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.18);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
+  --hl-bg: rgba(22, 119, 255, 0.32);
+  --hl-shadow: 0 0 0 1px rgba(22, 119, 255, 0.75), 0 0 8px rgba(22, 119, 255, 0.5);
+}
+
+/* Light 主题变量:工业工具风(浅灰页面底 → 白色面板 → 白底输入) */
+:root[data-theme='light'] {
+  --bg-page: #f0f2f5;
+  --bg-panel: #ffffff;
+  --bg-elevated: #ffffff;
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-strong: rgba(0, 0, 0, 0.12);
+  --text-primary: rgba(0, 0, 0, 0.88);
+  --text-secondary: rgba(0, 0, 0, 0.65);
+  --text-tertiary: rgba(0, 0, 0, 0.45);
+  --text-disabled: rgba(0, 0, 0, 0.3);
+  --primary: #1677ff;
+  --success: #389e0d;
+  --warning: #d46b08;
+  --error: #cf1322;
+  --primary-hover-bg: rgba(22, 119, 255, 0.08);
+  --row-hover-bg: rgba(22, 119, 255, 0.06);
+  --item-hover-bg: rgba(0, 0, 0, 0.04);
+  --divider-grip: rgba(0, 0, 0, 0.15);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.18);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.3);
+  --hl-bg: rgba(22, 119, 255, 0.15);
+  --hl-shadow: 0 0 0 1px rgba(22, 119, 255, 0.6), 0 0 6px rgba(22, 119, 255, 0.35);
+}
+
+/* 主题切换过渡:仅背景/文字/边框/阴影,快速且不影响输入与数据刷新 */
+body,
+.app,
+.topbar,
+.left,
+.right,
+.zone,
+.side-card,
+.report-bar,
+.right-action-bar,
+.console-toolbar,
+.console-list,
+.group-collapse .ant-collapse-item {
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.app {
+  height: 100%;
+  display: flex;
+  background: var(--bg-page);
+  overflow: hidden;
+}
+
+/* ============================================================
+   平台骨架:Header + (左侧导航 | 主内容)
+   ============================================================ */
+.page-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+/* 通用页面根容器:滚动型页面(解析/服务端/设置)使用;客户端页自管高度 */
+.page-root {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ============================================================
+   顶部 Header
+   ============================================================ */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  height: 48px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.brand {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.profile-select {
+  width: 300px;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* ============================================================
+   主布局:左(上/下 Panel + 拖拽条) + 右(卡片栈)
+   ============================================================ */
+.layout {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.left {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-subtle);
+  padding: 12px 16px;
+}
+
+.left-top {
+  flex-shrink: 0;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.left-bottom {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.right {
+  width: 320px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg-page);
+}
+
+/* 卡片是 flex 子项且 overflow:hidden → min-height 退化为 0,会被压缩;
+   必须禁止收缩,内容超出时由侧栏滚动条接管 */
+.right > * {
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   可拖拽分割条:常态轻量,Hover/Drag 出现主色反馈
+   ============================================================ */
+.resizable-divider {
+  position: relative;
+  flex-shrink: 0;
+  height: 9px;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 6;
+  transition: background 0.15s;
+}
+
+.resizable-divider:hover,
+.resizable-divider.dragging {
+  background: var(--primary-hover-bg);
+}
+
+.divider-grip {
+  width: 36px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--divider-grip);
+  transition: background 0.15s, width 0.15s;
+}
+
+.resizable-divider:hover .divider-grip,
+.resizable-divider.dragging .divider-grip {
+  width: 48px;
+  background: var(--primary);
+}
+
+.resizable-divider.dragging,
+.resizable-divider.dragging * {
+  user-select: none;
+}
+
+/* ============================================================
+   Panel 视觉盒(与外层留白形成层级)
+   ============================================================ */
+.zone {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.zone-tabs {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.zone-tabs .ant-tabs-nav {
+  margin: 0;
+  padding: 8px 16px 0;
+  align-items: center;
+}
+
+.zone-tabs .ant-tabs-extra-content {
+  display: flex;
+  align-items: center;
+}
+
+/* Header 右侧操作按钮(与 Tabs 同一横排) */
+.header-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.zone-tabs .ant-tabs-content-holder {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.zone-body {
+  padding: 16px;
+}
+
+/* ============================================================
+   报文分组(Collapse 卡片)
+   ============================================================ */
+.group-collapse {
+  background: transparent;
+}
+
+.group-collapse .ant-collapse-item {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+/* 分组标题:紧凑的"标题+分隔线"式,不占高层 Header */
+.group-collapse .ant-collapse-item .ant-collapse-header {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.group-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.row-tag {
+  margin-left: 8px;
+}
+
+.group-body {
+  padding: 6px 8px 8px;
+}
+
+.group-row {
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+
+.row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.row-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* 实时数据字段网格:横向紧凑行,自动适配 3~4 列,充分利用宽度 */
+.fields-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 6px 14px;
+}
+
+/* 单字段行:label 与控件同排(label 不换行,控件弹性占满剩余宽度) */
+.field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field-label {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 20px;
+}
+
+.field-label em {
+  font-style: normal;
+  opacity: 0.7;
+}
+
+/* 控件在紧凑行内弹性填满,避免各字段宽度参差 */
+.field .ant-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.field .ant-input-number {
+  flex: 1;
+  min-width: 0;
+}
+
+.field-bool {
+  justify-content: space-between;
+}
+
+/* 报警位/数组:占满整行,内部再按多列紧凑排列 */
+.field-bits {
+  grid-column: 1 / -1;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.bits-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 2px 10px;
+  align-self: stretch;
+  width: 100%;
+}
+
+.bits-group .ant-checkbox-wrapper {
+  margin-inline-start: 0;
+  font-size: 12px;
+}
+
+.field-array {
+  grid-column: 1 / -1;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.array-editor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+/* 周期上报:粘在实时数据滚动区顶部,始终可见的紧凑单行条 */
+.report-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-panel);
+  padding: 6px 0 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.report-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.report-label {
+  color: var(--text-secondary);
+}
+
+.preview-hex {
+  margin-top: 8px;
+  max-height: 45vh;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+/* ---------- 补发测试面板 ---------- */
+.reissue-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reissue-hint {
+  flex-shrink: 0;
+}
+
+.reissue-form .ant-form-item {
+  margin-bottom: 4px;
+}
+
+/* ============================================================
+   控制台(左下 Panel)
+   ============================================================ */
+.console-tabs {
+  flex-shrink: 0;
+}
+
+.console-tabs .ant-tabs-nav {
+  margin: 0;
+  padding: 12px 16px 0;
+}
+
+.console-tabs .ant-tabs-content-holder {
+  display: none;
+}
+
+.console-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.search-input {
+  width: 220px;
+}
+
+.toolbar-label {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.toolbar-count {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.console-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.console-row {
+  padding: 4px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-subtle);
+  transition: background 0.15s;
+}
+
+.console-row:hover {
+  background: var(--row-hover-bg);
+}
+
+.row-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.row-time {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.row-kind {
+  min-width: 44px;
+  text-align: center;
+  margin-inline-end: 0;
+}
+
+.row-cmd {
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.row-msg {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.row-bytes {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.row-detail {
+  margin-top: 6px;
+  padding: 10px 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+}
+
+.detail-title {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.detail-hex {
+  word-break: break-all;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.detail-json {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  max-height: 260px;
+  overflow-y: auto;
+  font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+.list-more {
+  padding: 10px 16px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ============================================================
+   右侧卡片栈(可折叠 Card)
+   ============================================================ */
+.side-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.collapsible-card .cc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+
+.collapsible-card .cc-head:hover {
+  background: var(--item-hover-bg);
+}
+
+.collapsible-card.open .cc-head {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.cc-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cc-extra {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.cc-chevron {
+  display: inline-flex;
+  font-size: 12px;
+  transition: color 0.15s;
+}
+
+.cc-head:hover .cc-chevron {
+  color: var(--primary);
+}
+
+/* 折叠动画:grid-template-rows 0fr/1fr,300ms 平滑收起 */
+.cc-body {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 0.3s ease;
+}
+
+.cc-body.collapsed {
+  grid-template-rows: 0fr;
+}
+
+.cc-body-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.cc-content {
+  padding: 8px 16px 16px;
+}
+
+/* 右侧底部操作栏:与左侧发送工具条一致,滚动时钉在侧栏底部 */
+.right-action-bar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 6;
+  background: var(--bg-page);
+  padding: 8px 0 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.state-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.state-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.state-label {
+  width: 76px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.state-item .ant-select {
+  flex: 1;
+}
+
+.alarm-bits {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 12px;
+}
+
+.alarm-bits .ant-checkbox-wrapper {
+  margin-inline-start: 0;
+  font-size: 13px;
+}
+
+.mini-form .ant-form-item {
+  margin-bottom: 8px;
+}
+
+.mini-form .ant-form-item-label {
+  padding-bottom: 2px;
+}
+
+.addr-compact {
+  width: 100%;
+}
+
+.switch-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.field-hint {
+  margin-left: 10px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.tls-collapse {
+  background: transparent;
+}
+
+.tls-field {
+  margin-top: 4px;
+}
+
+.track-file {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* ============================================================
+   滚动条
+   ============================================================ */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 拖拽分割条进行中:禁选中文字并锁定光标 */
+body.dragging-ns {
+  user-select: none;
+  cursor: row-resize;
+}
+
+body.dragging-ew {
+  user-select: none;
+  cursor: col-resize;
+}
