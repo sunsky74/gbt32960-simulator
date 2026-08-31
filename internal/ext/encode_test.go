@@ -2,6 +2,7 @@ package ext
 
 import (
 	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 
@@ -40,6 +41,8 @@ func TestEncodeNumericErrors(t *testing.T) {
 		{"负值进无符号", FieldSpec{Key: "v", Label: "v", Type: "u8"}, -1, "超出 u8 范围"},
 		{"值非数值", FieldSpec{Key: "v", Label: "v", Type: "u8"}, "abc", "不是数值"},
 		{"f32 带 scale 拒绝", FieldSpec{Key: "v", Label: "v", Type: "f32", Scale: ptrf(2)}, 1.5, "f32 不支持"},
+		{"NaN 拒绝", FieldSpec{Key: "v", Label: "v", Type: "u8"}, math.NaN(), "不是有限数值"},
+		{"Inf 拒绝", FieldSpec{Key: "v", Label: "v", Type: "u8"}, math.Inf(1), "不是有限数值"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -20,6 +20,15 @@ func TestValidateOK(t *testing.T) {
 	}
 }
 
+func TestValidate2025ReservedCommandOK(t *testing.T) {
+	p := validPack()
+	p.Meta.BaseVersion = "2025"
+	p.Commands[0].Code = 0x0C // 2025 上行预留区起点,应合法
+	if err := Validate(p); err != nil {
+		t.Fatalf("2025 + 0x0C 应合法: %v", err)
+	}
+}
+
 func TestValidateErrors(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -79,6 +88,8 @@ func TestValidateErrors(t *testing.T) {
 			p.Meta.BaseVersion = "2025"
 			p.Commands[0].Code = 0x0B
 		}, "commands[0].code"},
+		{"单元 key 为空", func(p *Pack) { p.Realtime.AppendUnits[0].Key = "" }, "realtime.appendUnits[0].key"},
+		{"命令 key 为空", func(p *Pack) { p.Commands[0].Key = " " }, "commands[0].key"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

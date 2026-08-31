@@ -59,6 +59,9 @@ func validateMeta(m Meta) error {
 }
 
 func validateUnit(path string, u AppendUnit, base string, keys map[string]bool, unitCodes map[int]bool) error {
+	if strings.TrimSpace(u.Key) == "" {
+		return verrf(path+".key", "不能为空")
+	}
 	if keys[u.Key] {
 		return verrf(path+".key", "键重复: %q", u.Key)
 	}
@@ -135,6 +138,9 @@ func validateFields(path string, fields []FieldSpec) error {
 }
 
 func validateCommand(path string, c Command, base string, keys map[string]bool, unitCodes map[int]bool) error {
+	if strings.TrimSpace(c.Key) == "" {
+		return verrf(path+".key", "不能为空")
+	}
 	if keys[c.Key] {
 		return verrf(path+".key", "键重复: %q", c.Key)
 	}
@@ -148,9 +154,6 @@ func validateCommand(path string, c Command, base string, keys map[string]bool, 
 		return verrf(path+".code", "0x%02X 与标准命令冲突(标准占用 0x%02X~0x%02X)", c.Code, lo, hi)
 	}
 	reservedLo := hi + 1 // 上行预留区起点:2016=0x09,2025=0x0C
-	if reservedLo < 0x09 {
-		reservedLo = 0x09
-	}
 	if c.Code < reservedLo || c.Code > 0x7F {
 		return verrf(path+".code", "本期仅支持上行预留区 0x%02X~0x7F: 0x%02X", reservedLo, c.Code)
 	}

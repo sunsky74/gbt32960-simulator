@@ -77,6 +77,9 @@ func encodeNumeric(f FieldSpec, row schema.RowValue) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("值不是数值: %v", v)
 	}
+	if math.IsNaN(phys) || math.IsInf(phys, 0) {
+		return nil, fmt.Errorf("值不是有限数值: %v", v)
+	}
 	scale, offset := scaleOf(f)
 	if f.Type == "f32" {
 		if scale != 1 || offset != 0 {
