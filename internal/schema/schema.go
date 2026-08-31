@@ -14,16 +14,17 @@ type GroupSchema struct {
 
 // FieldSchema 单个字段元数据。
 type FieldSchema struct {
-	Key       string     `json:"key"`
-	Label     string     `json:"label"`
-	Kind      string     `json:"kind"` // int|float|bool|enum|array_float
-	Unit      string     `json:"unit,omitempty"`
-	Min       *float64   `json:"min,omitempty"`
-	Max       *float64   `json:"max,omitempty"`
-	Enum      []EnumDef  `json:"enum,omitempty"`  // kind=enum
-	Bits      []BitDef   `json:"bits,omitempty"`  // 预留:位域展示
-	ItemLabel string     `json:"itemLabel,omitempty"` // kind=array_float 的元素名
-	ScaleNote string     `json:"scaleNote,omitempty"` // 换算说明,如 "×0.1 km/h"
+	Key       string    `json:"key"`
+	Label     string    `json:"label"`
+	Kind      string    `json:"kind"` // int|float|bool|enum|array_float
+	Unit      string    `json:"unit,omitempty"`
+	Min       *float64  `json:"min,omitempty"`
+	Max       *float64  `json:"max,omitempty"`
+	Enum      []EnumDef `json:"enum,omitempty"`      // kind=enum
+	Bits      []BitDef  `json:"bits,omitempty"`      // 预留:位域展示
+	ItemLabel string    `json:"itemLabel,omitempty"` // kind=array_float 的元素名
+	ScaleNote string    `json:"scaleNote,omitempty"` // 换算说明,如 "×0.1 km/h"
+	Length    int       `json:"length,omitempty"`    // bytes 字段字节长度(扩展包编译器使用)
 }
 
 // EnumDef 枚举选项。
