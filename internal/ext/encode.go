@@ -1,8 +1,10 @@
 package ext
 
 import (
+	"encoding/hex"
 	"fmt"
 	"math"
+	"strings"
 
 	"gbt32960-simulator/internal/schema"
 )
@@ -46,6 +48,10 @@ func encodeField(f FieldSpec, row schema.RowValue) ([]byte, error) {
 	switch f.Type {
 	case "u8", "u16", "u32", "i8", "i16", "i32", "f32":
 		return encodeNumeric(f, row)
+	case "bits":
+		return encodeBits(f, row)
+	case "bytes":
+		return encodeBytes(f, row)
 	default:
 		return nil, fmt.Errorf("未知字段类型 %q", f.Type)
 	}
@@ -100,4 +106,70 @@ func putInt(t string, v int64) []byte {
 		out[size-1-i] = byte(v >> (8 * i))
 	}
 	return out
+}
+
+func encodeBits(f FieldSpec, row schema.RowValue) ([]byte, error) {
+	v, ok := row[f.Key]
+	if !ok {
+		return nil, fmt.Errorf("缺少值")
+	}
+	flags, ok := v.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("值不是位组对象: %v", v)
+	}
+	maxIdx := 0
+	for _, b := range f.Bits {
+		if b.Index > maxIdx {
+			maxIdx = b.Index
+		}
+	}
+	size := 1
+	if maxIdx >= 16 {
+		size = 4
+	} else if maxIdx >= 8 {
+		size = 2
+	}
+	out := make([]byte, size)
+	for _, b := range f.Bits {
+		if on, _ := flags[fmt.Sprintf("bit%d", b.Index)].(bool); on {
+			out[b.Index/8] |= 1 << (b.Index % 8)
+		}
+	}
+	return out, nil
+}
+
+func encodeBytes(f FieldSpec, row schema.RowValue) ([]byte, error) {
+	v, ok := row[f.Key]
+	if !ok {
+		return nil, fmt.Errorf("缺少值")
+	}
+	s, ok := v.(string)
+	if !ok {
+		return nil, fmt.Errorf("值不是 hex 字符串: %v", v)
+	}
+	b, err := hex.DecodeString(strings.TrimSpace(s))
+	if err != nil {
+		return nil, fmt.Errorf("不是合法 hex: %w", err)
+	}
+	if len(b) != f.Length {
+		return nil, fmt.Errorf("长度须为 %d 字节,实际 %d", f.Length, len(b))
+	}
+	return b, nil
+}
+
+// EncodeUnit 编码完整 TLV 数据单元: unitCode(u8) + 长度(u16 大端) + 数据。
+// multiple 语义由调用方实现:每行调用一次,得到一个独立 TLV。
+func EncodeUnit(u AppendUnit, row schema.RowValue) ([]byte, error) {
+	data, err := EncodeFields(u.Fields, row)
+	if err != nil {
+		return nil, fmt.Errorf("单元 %s: %w", u.Key, err)
+	}
+	if len(data) > 0xFFFF {
+		return nil, fmt.Errorf("单元 %s 数据超长: %d 字节", u.Key, len(data))
+	}
+	out := make([]byte, 3, 3+len(data))
+	out[0] = byte(u.UnitCode)
+	out[1] = byte(len(data) >> 8)
+	out[2] = byte(len(data))
+	return append(out, data...), nil
 }
