@@ -332,6 +332,7 @@ export namespace schema {
 	    multiple: boolean;
 	    maxRows?: number;
 	    fields: FieldSchema[];
+	    source?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new GroupSchema(source);
@@ -345,6 +346,7 @@ export namespace schema {
 	        this.multiple = source["multiple"];
 	        this.maxRows = source["maxRows"];
 	        this.fields = this.convertValues(source["fields"], FieldSchema);
+	        this.source = source["source"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

@@ -17,6 +17,7 @@ export const store = reactive({
   config: null as ConnConfig | null,
   profiles: [] as bridge.ProfileSummary[],
   schema: [] as GroupSchema[],
+  extSchema: [] as GroupSchema[],
   groups: {} as GroupsState,
   consoleEvents: [] as ConsoleEvent[],
   consolePaused: false,
@@ -24,6 +25,11 @@ export const store = reactive({
 })
 
 const MAX_CONSOLE_EVENTS = 10000
+
+export function applySchema(list: GroupSchema[]) {
+  store.schema = list.filter((g) => g.source !== 'command')
+  store.extSchema = list.filter((g) => g.source === 'command')
+}
 
 export function pushConsoleEvents(batch: ConsoleEvent[]) {
   if (store.consolePaused) return
@@ -57,7 +63,7 @@ export async function loadInitialData() {
   try {
     store.config = await ConnectionService.GetConfig()
     syncSavedBinding(store.config ?? {})
-    store.schema = await MessageService.GetSchema(store.config?.version ?? '2016')
+    applySchema(await MessageService.GetSchema(store.config?.version ?? '2016'))
     const payload = await MessageService.GetGroups()
     store.groups = payloadToState(payload)
     await loadProfiles()
@@ -67,13 +73,13 @@ export async function loadInitialData() {
 }
 
 export async function reloadSchemaForVersion(version: string) {
-  store.schema = await MessageService.GetSchema(version)
+  applySchema(await MessageService.GetSchema(version))
   const payload = await MessageService.DefaultGroups(version)
   store.groups = payloadToState(payload)
 }
 
 export async function reloadSchemaPreservingGroups(version: string) {
-  store.schema = await MessageService.GetSchema(version)
+  applySchema(await MessageService.GetSchema(version))
   const payload = await MessageService.GetGroups()
   store.groups = payloadToState(payload)
 }

@@ -20,8 +20,12 @@ export function RespondParamQuery(arg1:Array<engine.ParamResponseRow>,arg2:numbe
 
 export function SaveGroups(arg1:schema.GroupsPayload):Promise<void>;
 
+export function SendExtension(arg1:string):Promise<void>;
+
 export function SendRealtime():Promise<void>;
 
 export function SendReissue(arg1:number,arg2:number,arg3:number):Promise<void>;
 
 export function SetAutoReport(arg1:boolean,arg2:number):Promise<void>;
+
+export function SetExtAutoReport(arg1:string,arg2:boolean,arg3:number):Promise<void>;

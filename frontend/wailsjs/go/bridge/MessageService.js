@@ -34,6 +34,10 @@ export function SaveGroups(arg1) {
   return window['go']['bridge']['MessageService']['SaveGroups'](arg1);
 }
 
+export function SendExtension(arg1) {
+  return window['go']['bridge']['MessageService']['SendExtension'](arg1);
+}
+
 export function SendRealtime() {
   return window['go']['bridge']['MessageService']['SendRealtime']();
 }
@@ -44,4 +48,8 @@ export function SendReissue(arg1, arg2, arg3) {
 
 export function SetAutoReport(arg1, arg2) {
   return window['go']['bridge']['MessageService']['SetAutoReport'](arg1, arg2);
+}
+
+export function SetExtAutoReport(arg1, arg2, arg3) {
+  return window['go']['bridge']['MessageService']['SetExtAutoReport'](arg1, arg2, arg3);
 }

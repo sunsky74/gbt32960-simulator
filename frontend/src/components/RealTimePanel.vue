@@ -5,6 +5,10 @@ import type { FieldSchema, GroupSchema } from '../api/backend'
 import { stateToPayload } from '../api/backend'
 import * as MessageService from '../../wailsjs/go/bridge/MessageService'
 import { store } from '../state'
+import {
+  addArrayItem, arrayValues, bitOptions, bitsArrayOf, bitsObjOf, boolOf, defaultFor,
+  hexOf, numOf, setArrayValue, setBitsArray, setBool, setEnum, setHex, setNum,
+} from '../composables/useFieldHelpers'
 
 const activeKeys = ref<string[]>([])
 
@@ -41,28 +45,6 @@ function ensureGroup(g: GroupSchema) {
   return store.groups[g.key]
 }
 
-function defaultFor(f: FieldSchema): unknown {
-  switch (f.kind) {
-    case 'enum':
-      return f.enum?.[0]?.value ?? 1
-    case 'bool':
-      return false
-    case 'bitgroup': {
-      const bits: Record<string, boolean> = {}
-      for (const b of f.bits ?? []) bits[`bit${b.index}`] = false
-      return bits
-    }
-    case 'array_float':
-      return []
-    case 'bytes':
-      return f.length ? '00'.repeat(f.length) : ''
-    case 'int':
-      return f.min ?? 0
-    default:
-      return f.min ?? 0
-  }
-}
-
 function addRow(g: GroupSchema) {
   const grp = ensureGroup(g)
   if (!g.multiple || (g.maxRows && grp.rows.length >= g.maxRows)) return
@@ -82,86 +64,10 @@ function removeRow(g: GroupSchema, idx: number) {
 
 // ---------- 字段取值/设值 ----------
 
-function numOf(row: Record<string, unknown>, key: string): number {
-  const v = row[key]
-  return typeof v === 'number' ? v : Number(v) || 0
-}
-
-function setNum(row: Record<string, unknown>, key: string, v: number | string | null | undefined) {
-  row[key] = typeof v === 'number' ? v : Number(v) || 0
-}
-
-function hexOf(row: Record<string, unknown>, key: string): string {
-  const v = row[key]
-  return typeof v === 'string' ? v : ''
-}
-
-function setHex(row: Record<string, unknown>, key: string, f: FieldSchema, v: string) {
-  const s = v.trim().toLowerCase().replace(/\s+/g, '')
-  if (s === '') {
-    row[key] = ''
-    return
-  }
-  if (!/^[0-9a-f]*$/.test(s)) return // 非法字符不写入
-  if (f.length && s.length > f.length * 2) return // 超长不写入
-  row[key] = s
-}
-
-function boolOf(row: Record<string, unknown>, key: string): boolean {
-  return row[key] === true
-}
-
-function setBool(row: Record<string, unknown>, key: string, v: unknown) {
-  row[key] = v === true
-}
-
-function setEnum(row: Record<string, unknown>, key: string, v: unknown) {
-  row[key] = typeof v === 'number' ? v : Number(v) || 0
-}
-
-function arrayValues(row: Record<string, unknown>, key: string): number[] {
-  const v = row[key]
-  return Array.isArray(v) ? v.map(Number) : []
-}
-
-function setArrayValue(row: Record<string, unknown>, key: string, idx: number, v: number | string | null | undefined) {
-  const arr = arrayValues(row, key).slice()
-  arr[idx] = typeof v === 'number' ? v : Number(v) || 0
-  row[key] = arr
-}
-
-function addArrayItem(row: Record<string, unknown>, key: string) {
-  const arr = arrayValues(row, key)
-  arr.push(0)
-  row[key] = arr
-}
-
 function removeArrayItem(row: Record<string, unknown>, key: string, idx: number) {
   const arr = arrayValues(row, key)
   arr.splice(idx, 1)
   row[key] = arr
-}
-
-function bitsObjOf(row: Record<string, unknown>, field: FieldSchema): Record<string, boolean> {
-  const v = row[field.key]
-  return (v && typeof v === 'object' ? v : {}) as Record<string, boolean>
-}
-
-function bitsArrayOf(row: Record<string, unknown>, field: FieldSchema): string[] {
-  return Object.entries(bitsObjOf(row, field))
-    .filter(([, on]) => on)
-    .map(([k]) => k)
-}
-
-function setBitsArray(row: Record<string, unknown>, field: FieldSchema, vals: Array<string | number | boolean>) {
-  const picked = new Set(vals.map(String))
-  const bits: Record<string, boolean> = {}
-  for (const b of field.bits ?? []) bits[`bit${b.index}`] = picked.has(`bit${b.index}`)
-  row[field.key] = bits
-}
-
-function bitOptions(field: FieldSchema) {
-  return (field.bits ?? []).map((b) => ({ label: b.label, value: `bit${b.index}` }))
 }
 
 function enumOptions(field: FieldSchema) {
