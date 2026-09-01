@@ -111,3 +111,52 @@ func TestValidateErrors(t *testing.T) {
 		})
 	}
 }
+
+// TestValidateNewGuardErrors 评审 A/B 新增门禁:命令码同包唯一、key 禁冒号、标准组键保留。
+func TestValidateNewGuardErrors(t *testing.T) {
+	cases := []struct {
+		name     string
+		mutate   func(*Pack)
+		wantPath string
+		wantSub  string
+	}{
+		{"命令码同包重复", func(p *Pack) {
+			dup := p.Commands[0]
+			dup.Key = "extData2"
+			p.Commands = append(p.Commands, dup)
+		}, "commands[1].code", "命令码重复"},
+		{"命令 key 含冒号", func(p *Pack) { p.Commands[0].Key = "ext:data" }, "commands[0].key", "冒号"},
+		{"单元 key 含冒号", func(p *Pack) { p.Realtime.AppendUnits[0].Key = "tele:metry" }, "realtime.appendUnits[0].key", "冒号"},
+		{"命令 key 撞标准组保留键", func(p *Pack) { p.Commands[0].Key = "vehicle" }, "commands[0].key", "标准报文组"},
+		{"单元 key 撞标准组保留键", func(p *Pack) { p.Realtime.AppendUnits[0].Key = "vehicle" }, "realtime.appendUnits[0].key", "标准报文组"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := validPack()
+			tc.mutate(p)
+			err := Validate(p)
+			if err == nil {
+				t.Fatalf("期望报错,实际 nil")
+			}
+			if !strings.Contains(err.Error(), tc.wantPath) {
+				t.Fatalf("错误 %q 未包含路径 %q", err.Error(), tc.wantPath)
+			}
+			if !strings.Contains(err.Error(), tc.wantSub) {
+				t.Fatalf("错误 %q 未包含子串 %q", err.Error(), tc.wantSub)
+			}
+		})
+	}
+}
+
+// TestValidateMultiCommandDistinctCodes 命令码不同的多命令包应通过(extcmd 夹具同构)。
+func TestValidateMultiCommandDistinctCodes(t *testing.T) {
+	p := validPack()
+	p.Commands = append(p.Commands, Command{
+		Key: "extReport0A", Label: "扩展报表", Code: 0x0A,
+		Direction: "up", Trigger: "manual",
+		Body: CommandBody{Type: "fields", Fields: []FieldSpec{{Key: "seq", Label: "流水号", Type: "u16"}}},
+	})
+	if err := Validate(p); err != nil {
+		t.Fatalf("多命令不同码应通过: %v", err)
+	}
+}

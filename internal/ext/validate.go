@@ -9,6 +9,14 @@ import (
 
 var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,63}$`)
 
+// reservedGroupKeys 标准报文组键(与 internal/schema 的 V2016Groups/V2025Groups 同步,协议冻结不会变)。
+// 扩展命令/追加单元的组键若与之同名,会在 GetSchema 合并时与标准组冲突(键重叠导致配置错乱)。
+var reservedGroupKeys = map[string]bool{
+	"vehicle": true, "motor": true, "fuelcell": true, "engine": true, "location": true,
+	"extremum": true, "alarm": true, "voltage": true, "temperature": true,
+	"minparallel": true, "batterytemp": true, "fcstack": true, "supercap": true, "supercapextremum": true,
+}
+
 // 标准数据单元类型码(拒绝)。私有可用区两版本均为 0x80~0xFE(库的自定义 TLV 区)。
 // 2025 的 0x30/0x31/0x32 为 燃料电池电堆/超级电容/超容极值,0xFF 为签名数据。
 var standardUnitCodes = map[string]map[int]bool{
@@ -31,6 +39,7 @@ func Validate(p *Pack) error {
 	}
 	keys := map[string]bool{}
 	unitCodes := map[int]bool{}
+	cmdCodes := map[int]bool{}
 	for i, u := range p.Realtime.AppendUnits {
 		path := fmt.Sprintf("realtime.appendUnits[%d]", i)
 		if err := validateUnit(path, u, p.Meta.BaseVersion, keys, unitCodes); err != nil {
@@ -39,7 +48,7 @@ func Validate(p *Pack) error {
 	}
 	for i, c := range p.Commands {
 		path := fmt.Sprintf("commands[%d]", i)
-		if err := validateCommand(path, c, p.Meta.BaseVersion, keys, unitCodes); err != nil {
+		if err := validateCommand(path, c, p.Meta.BaseVersion, keys, unitCodes, cmdCodes); err != nil {
 			return err
 		}
 	}
@@ -62,6 +71,12 @@ func validateMeta(m Meta) error {
 func validateUnit(path string, u AppendUnit, base string, keys map[string]bool, unitCodes map[int]bool) error {
 	if strings.TrimSpace(u.Key) == "" {
 		return verrf(path+".key", "不能为空")
+	}
+	if strings.Contains(u.Key, ":") {
+		return verrf(path+".key", "键不能包含冒号(与命令组键命名空间冲突): %q", u.Key)
+	}
+	if reservedGroupKeys[u.Key] {
+		return verrf(path+".key", "键与标准报文组冲突(保留键): %q", u.Key)
 	}
 	if keys[u.Key] {
 		return verrf(path+".key", "键重复: %q", u.Key)
@@ -142,9 +157,15 @@ func validateFields(path string, fields []FieldSpec) error {
 	return nil
 }
 
-func validateCommand(path string, c Command, base string, keys map[string]bool, unitCodes map[int]bool) error {
+func validateCommand(path string, c Command, base string, keys map[string]bool, unitCodes map[int]bool, cmdCodes map[int]bool) error {
 	if strings.TrimSpace(c.Key) == "" {
 		return verrf(path+".key", "不能为空")
+	}
+	if strings.Contains(c.Key, ":") {
+		return verrf(path+".key", "键不能包含冒号(与命令组键命名空间冲突): %q", c.Key)
+	}
+	if reservedGroupKeys[c.Key] {
+		return verrf(path+".key", "键与标准报文组冲突(保留键): %q", c.Key)
 	}
 	if keys[c.Key] {
 		return verrf(path+".key", "键重复: %q", c.Key)
@@ -162,6 +183,10 @@ func validateCommand(path string, c Command, base string, keys map[string]bool, 
 	if c.Code < reservedLo || c.Code > 0x7F {
 		return verrf(path+".code", "本期仅支持上行预留区 0x%02X~0x7F: 0x%02X", reservedLo, c.Code)
 	}
+	if cmdCodes[c.Code] {
+		return verrf(path+".code", "命令码重复: 0x%02X 已被同包其他命令占用", c.Code)
+	}
+	cmdCodes[c.Code] = true
 	if c.Direction != "up" {
 		return verrf(path+".direction", "本期仅支持 up: %q", c.Direction)
 	}
