@@ -107,8 +107,8 @@
 | 命令码本期可用(上行预留区) | 0x09~0x7F | 0x0C~0x7F |
 | 其余命令区(0x80~0x82 / 0x83~0xBF / 0xC0~0xFF) | 本期全部拒绝(下行扩展后续版本) | 同左 |
 
-- **unitCode 仅允许 0x80~0xFE**:该区间与协议库的自定义 TLV 编解码区完全重合(`realtime_data_codec` 对 0x80~0xFE 按 `类型u8+长度u16+数据` 解码),扩展单元因此天然可被本仓库解析页/服务端模式解码;0x0A~0x7F 属标准预留且库解码直接报 `ErrUnknownTLVType`,0xFF 在 2016 同样不可解码——一律拒绝
-- 同包内 unitCode / key 不得重复(校验器强制);跨包不校验(同时仅激活一个包)
+- **unitCode 仅允许 0x80~0xFE**:该区间与协议库的自定义 TLV 编解码区完全重合(`realtime_data_codec` 对 0x80~0xFE 按 `类型u8+长度u16+数据` 解码),扩展单元因此天然可被本仓库解析页/服务端模式解码;0x0A~0x7F 属标准预留且库解码直接报 `ErrUnknownTLVType`,0xFF 在 2016 同样不可解码——一律拒绝。unitCode 即国标语境的"信息标识",真实项目中在 0x02 报文内唯一
+- 同包内 unitCode / key 不得重复(校验器强制;unitCode 包级唯一为有意设计,见 §9 G-2 裁决);跨包不校验(同时仅激活一个包)
 - `direction` 仅支持 `up`;`trigger ∈ {manual, periodic, manual+periodic}`;`maxRows ≥ 0`
 
 ### 4.5 四个接入点(现状 → 目标)
@@ -168,4 +168,4 @@ P2~P4 的差异化细节(如 golden 用例数据、前端组件结构、UI 文�
 | # | 缺口 | 现状 | 裁决时机 |
 |---|---|---|---|
 | G-1 | offset 非整数 × Kind=int:校验器不限制 offset 为整数,`offset: 0.5` 会编译出 Kind=int 且默认值 0.5,P2 前端 int 输入框不兼容;且与仓库既有"纯偏移字段为 float"约定不一致 | **已裁决并落地(2026-09-01,方案 A,commit 26f5f1c)**:validate.go 强制 offset 整数,错误信息提示改写路径(非整数偏移 → scale 表达,值域等价);编译规则保持 scale=1→int 不变 | ~~P2 开工前~~ 已关闭 |
-| G-2 | realtimeLike 命令体单元与 realtime.appendUnits 共享 unitCode 命名空间:命令体 TLV 与 0x02 追加单元分属不同帧、线序无歧义,Phase 1 按"同包唯一"字面实现会拒绝跨场景同码 | validate.go 已按共享命名空间实现(含注释) | **P3 开工前**:确认是否有意共享;若厂商确需同码分离,拆分两张 unitCode 表 |
+| G-2 | realtimeLike 命令体单元与 realtime.appendUnits 共享 unitCode 命名空间:命令体 TLV 与 0x02 追加单元分属不同帧、线序无歧义,Phase 1 按"同包唯一"字面实现会拒绝跨场景同码 | **已裁决(2026-09-01,维持现状)**:用户领域确认——真实对接项目中单元码(即国标"信息标识")在 0x02 扩展单元内唯一,不存在同码不同布局;包级唯一为有意设计,保证工具的 unitCode→布局 查表无歧义。若 P3 出现"跨帧复用同一布局"需求,以"声明一次、按键引用(ref)"机制支持,**不**通过放宽查重 | ~~P3 开工前~~ 已关闭 |
