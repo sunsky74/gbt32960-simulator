@@ -16,7 +16,9 @@ import {
   refreshState,
   reloadSchemaForVersion,
   reloadSchemaPreservingGroups,
+  savedBinding,
   store,
+  syncSavedBinding,
 } from '../state'
 import * as ConnectionService from '../../wailsjs/go/bridge/ConnectionService'
 import { onConsoleEvents } from '../api/backend'
@@ -46,15 +48,14 @@ const activeProfileName = computed(() => store.config?.name ?? '')
 
 async function onSwitchProfile(name: string) {
   try {
-    const prevVersion = store.config?.version
-    const prevPack = store.config?.extensionPack
     store.config = await ConnectionService.SwitchProfile(name)
     await loadProfiles()
-    if (store.config.version !== prevVersion) {
+    if (store.config.version !== savedBinding.version) {
       await reloadSchemaForVersion(store.config.version)
-    } else if (store.config.extensionPack !== prevPack) {
+    } else if (store.config.extensionPack !== savedBinding.pack) {
       await reloadSchemaPreservingGroups(store.config.version)
     }
+    syncSavedBinding(store.config)
   } catch (e) {
     console.error('切换档案失败', e)
   }

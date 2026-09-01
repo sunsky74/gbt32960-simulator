@@ -56,6 +56,7 @@ export async function loadProfiles() {
 export async function loadInitialData() {
   try {
     store.config = await ConnectionService.GetConfig()
+    syncSavedBinding(store.config ?? {})
     store.schema = await MessageService.GetSchema(store.config?.version ?? '2016')
     const payload = await MessageService.GetGroups()
     store.groups = payloadToState(payload)
@@ -93,4 +94,14 @@ export function connStateText(s: string): string {
     default:
       return '离线'
   }
+}
+
+// 最近一次已落盘/激活的连接绑定快照(版本 + 扩展包)。
+// store.config 在 saveOnly/connect 后与表单 cfg 同引用,保存时读它拿不到"变化前"值,
+// 版本/扩展包变化检测必须基于独立快照。
+export const savedBinding = { version: undefined as string | undefined, pack: undefined as string | undefined }
+
+export function syncSavedBinding(v: { version?: string; extensionPack?: string }) {
+  savedBinding.version = v.version
+  savedBinding.pack = v.extensionPack
 }
