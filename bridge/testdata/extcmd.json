@@ -1,0 +1,25 @@
+{
+  "meta": { "id": "extcmd", "label": "扩展命令包", "vendor": "Test", "baseVersion": "2016" },
+  "realtime": { "appendUnits": [] },
+  "commands": [
+    {
+      "key": "extData09", "label": "扩展数据上报", "code": 9,
+      "direction": "up", "trigger": "manual+periodic",
+      "body": { "type": "fields", "fields": [
+        { "key": "seq", "label": "流水号", "type": "u16" },
+        { "key": "volt", "label": "电压", "type": "u16", "scale": 0.1, "unit": "V" }
+      ] }
+    },
+    {
+      "key": "extReport0A", "label": "扩展报表", "code": 10,
+      "direction": "up", "trigger": "manual",
+      "body": { "type": "realtimeLike", "units": [{
+        "key": "telemetry", "title": "私有遥测", "unitCode": 128, "enabled": true,
+        "fields": [
+          { "key": "soc2", "label": "SOC2", "type": "u8", "unit": "%" },
+          { "key": "packVolt", "label": "包电压", "type": "u16", "scale": 0.1, "unit": "V" }
+        ]
+      }] }
+    }
+  ]
+}

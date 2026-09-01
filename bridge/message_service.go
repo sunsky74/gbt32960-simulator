@@ -3,6 +3,8 @@ package bridge
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"gbt32960-simulator/internal/engine"
@@ -26,28 +28,55 @@ type PreviewResult struct {
 
 // MessageService 报文配置与发送服务。
 type MessageService struct {
-	rt *Runtime
+	rt       *Runtime
+	extMu    sync.Mutex
+	extStops map[string]chan struct{}
 }
 
 // NewMessageService 创建服务。
 func NewMessageService(rt *Runtime) *MessageService {
-	ms := &MessageService{rt: rt}
+	ms := &MessageService{rt: rt, extStops: map[string]chan struct{}{}}
 	if g := ms.loadGroups(); g != nil {
 		rt.SetGroups(g)
 	}
 	return ms
 }
 
-// GetSchema 返回指定版本的组定义:标准组 + 激活扩展包的追加单元。
+// GetSchema 返回指定版本的组定义:标准组 + 激活扩展包的追加单元 + 扩展命令组。
 // 版本门禁:包的 baseVersion 与请求版本一致才合并。
+// 命令组 Source="command",前端据此分流到自定义数据 tab。
 func (s *MessageService) GetSchema(version string) []schema.GroupSchema {
 	groups := standardGroups(version)
 	if p := s.rt.Pack(); p != nil && p.Meta.BaseVersion == version {
 		for _, u := range p.Realtime.AppendUnits {
 			groups = append(groups, ext.CompileUnit(u))
 		}
+		groups = append(groups, s.compileCommandGroups(p)...)
 	}
 	return groups
+}
+
+// compileCommandGroups 编译扩展命令组:fields 体 → 单组(键=命令 key);
+// realtimeLike 体 → 每单元一组(键=命令key:单元key)。全部 Source="command"。
+func (s *MessageService) compileCommandGroups(p *ext.Pack) []schema.GroupSchema {
+	out := make([]schema.GroupSchema, 0, len(p.Commands))
+	for _, c := range p.Commands {
+		switch c.Body.Type {
+		case "fields":
+			g := ext.CompileUnit(ext.AppendUnit{Key: c.Key, Title: c.Label, Fields: c.Body.Fields, Enabled: true})
+			g.Source = "command"
+			out = append(out, g)
+		case "realtimeLike":
+			for _, u := range c.Body.Units {
+				g := ext.CompileUnit(u)
+				g.Key = c.Key + ":" + u.Key
+				g.Title = c.Label + " · " + u.Title
+				g.Source = "command"
+				out = append(out, g)
+			}
+		}
+	}
+	return out
 }
 
 func standardGroups(version string) []schema.GroupSchema {
@@ -82,6 +111,16 @@ func (s *MessageService) unitDefaults(version string) map[string]schema.RowValue
 	if p := s.rt.Pack(); p != nil && p.Meta.BaseVersion == version {
 		for _, u := range p.Realtime.AppendUnits {
 			out[u.Key] = ext.DefaultsFor(u)
+		}
+		for _, c := range p.Commands {
+			switch c.Body.Type {
+			case "fields":
+				out[c.Key] = ext.DefaultsFor(ext.AppendUnit{Fields: c.Body.Fields})
+			case "realtimeLike":
+				for _, u := range c.Body.Units {
+					out[c.Key+":"+u.Key] = ext.DefaultsFor(u)
+				}
+			}
 		}
 	}
 	return out
@@ -342,4 +381,139 @@ func (s *MessageService) stateText() string {
 		return string(c.State())
 	}
 	return string(engine.StateIdle)
+}
+
+// packCommand 按 key 查找激活包内的扩展命令;未绑定/不存在返回 nil。
+func packCommand(p *ext.Pack, key string) *ext.Command {
+	if p == nil {
+		return nil
+	}
+	for i := range p.Commands {
+		if p.Commands[i].Key == key {
+			return &p.Commands[i]
+		}
+	}
+	return nil
+}
+
+// assembleCommandBody 组装扩展命令报文体:
+// fields=平铺字段单行;realtimeLike=6B 十进制时间 + 单元 TLV×N。
+func (s *MessageService) assembleCommandBody(cmd ext.Command, at time.Time) ([]byte, error) {
+	groups := s.rt.Groups()
+	switch cmd.Body.Type {
+	case "fields":
+		grp, ok := groups[cmd.Key]
+		if !ok || !grp.Enabled || len(grp.Rows) == 0 {
+			return nil, fmt.Errorf("扩展命令 %s 未配置或未启用", cmd.Key)
+		}
+		return ext.EncodeFields(cmd.Body.Fields, grp.Rows[0])
+	case "realtimeLike":
+		t := ext.EncodeBeanTime(at)
+		out := append([]byte{}, t[:]...)
+		for _, u := range cmd.Body.Units {
+			grp, ok := groups[cmd.Key+":"+u.Key]
+			if !ok || !grp.Enabled || len(grp.Rows) == 0 {
+				continue
+			}
+			for _, row := range grp.Rows {
+				tlv, err := ext.EncodeUnit(u, row)
+				if err != nil {
+					return nil, fmt.Errorf("扩展命令 %s 单元 %s: %w", cmd.Key, u.Key, err)
+				}
+				out = append(out, tlv...)
+			}
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("扩展命令 %s: 未知体类型 %q", cmd.Key, cmd.Body.Type)
+	}
+}
+
+// SendExtension 手动发送一次扩展命令(须在线)。
+func (s *MessageService) SendExtension(key string) error {
+	p := s.rt.Pack()
+	if p == nil {
+		return fmt.Errorf("未绑定扩展包")
+	}
+	if p.Meta.BaseVersion != s.versionText() {
+		return fmt.Errorf("扩展包基准版本 %s 与当前协议版本 %s 不匹配", p.Meta.BaseVersion, s.versionText())
+	}
+	cmd := packCommand(p, key)
+	if cmd == nil {
+		return fmt.Errorf("扩展命令不存在: %s", key)
+	}
+	c := s.rt.CurrentClient()
+	if c == nil || c.State() != engine.StateOnline {
+		return fmt.Errorf("未连接或未登录")
+	}
+	payload, err := s.assembleCommandBody(*cmd, time.Now())
+	if err != nil {
+		return err
+	}
+	return c.Send(context.Background(), byte(cmd.Code), engine.NewRawBody(s.version(), payload))
+}
+
+// SetExtAutoReport 开关扩展命令的周期发送(每命令独立 ticker)。
+func (s *MessageService) SetExtAutoReport(key string, enabled bool, intervalSec int) error {
+	if !enabled {
+		s.stopExtReport(key)
+		return nil
+	}
+	if intervalSec <= 0 {
+		intervalSec = 10
+	}
+	p := s.rt.Pack()
+	if p == nil {
+		return fmt.Errorf("未绑定扩展包")
+	}
+	cmd := packCommand(p, key)
+	if cmd == nil {
+		return fmt.Errorf("扩展命令不存在: %s", key)
+	}
+	if cmd.Trigger == "manual" {
+		return fmt.Errorf("该命令不支持周期上报 (trigger=manual)") // 评审 P2-4:消费 trigger 语义
+	}
+	s.startExtReport(key, time.Duration(intervalSec)*time.Second)
+	return nil
+}
+
+func (s *MessageService) stopExtReport(key string) {
+	s.extMu.Lock()
+	stop, ok := s.extStops[key]
+	if ok {
+		delete(s.extStops, key)
+		close(stop)
+	}
+	s.extMu.Unlock()
+}
+
+func (s *MessageService) startExtReport(key string, interval time.Duration) {
+	s.stopExtReport(key)
+	stop := make(chan struct{})
+	s.extMu.Lock()
+	s.extStops[key] = stop
+	s.extMu.Unlock()
+	go func() {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-t.C:
+				// 包被解绑/命令消失 → 自停清理
+				p := s.rt.Pack()
+				if p == nil || packCommand(p, key) == nil {
+					s.stopExtReport(key)
+					return
+				}
+				if err := s.SendExtension(key); err != nil {
+					// 未连接属常态,静默跳过;其余错误进事件总线
+					if !strings.Contains(err.Error(), "未连接") {
+						s.rt.Bus().Emit(engine.Event{Kind: engine.EventError, Message: "扩展命令周期上报失败: " + err.Error()})
+					}
+				}
+			}
+		}
+	}()
 }

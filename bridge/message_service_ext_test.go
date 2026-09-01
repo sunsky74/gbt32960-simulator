@@ -10,6 +10,7 @@ import (
 
 	"github.com/sunsky74/gb32960/api"
 
+	"gbt32960-simulator/internal/engine"
 	"gbt32960-simulator/internal/ext"
 	"gbt32960-simulator/internal/schema"
 )
@@ -220,4 +221,175 @@ func TestAssembleBodyV2025VersionDispatch(t *testing.T) {
 	if !bytes.Equal(got, want) {
 		t.Fatalf("V2025 分发失败: got %x want %x", got, want)
 	}
+}
+
+// hexBytes hex 助手(P1-2:bridge 包内无现成助手,测试断言用)。
+func hexBytes(b []byte) string { return hex.EncodeToString(b) }
+
+func newExtCmdRT(t *testing.T, bound bool) *Runtime {
+	t.Helper()
+	p, err := ext.LoadFile(filepath.Join("testdata", "extcmd.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := NewRuntime()
+	rt.SetPacks([]*ext.Pack{p})
+	cfg := &ConnectionConfig{Version: "2016"}
+	if bound {
+		cfg.ExtensionPack = "extcmd"
+	}
+	rt.SetConnCfg(cfg)
+	return rt
+}
+
+func TestGetSchemaCommandGroups(t *testing.T) {
+	rt := newExtCmdRT(t, true)
+	ms := NewMessageService(rt)
+	merged := ms.GetSchema("2016")
+	var cmdGroups []schema.GroupSchema
+	for _, g := range merged {
+		if g.Source == "command" {
+			cmdGroups = append(cmdGroups, g)
+		}
+	}
+	// fields 体 1 组 + realtimeLike 1 单元 1 组
+	if len(cmdGroups) != 2 {
+		t.Fatalf("命令组数 = %d, want 2: %+v", len(cmdGroups), cmdGroups)
+	}
+	byKey := map[string]schema.GroupSchema{}
+	for _, g := range cmdGroups {
+		byKey[g.Key] = g
+	}
+	if g, ok := byKey["extData09"]; !ok || g.Title != "扩展数据上报" {
+		t.Fatalf("extData09 = %+v", g)
+	}
+	if g, ok := byKey["extReport0A:telemetry"]; !ok || g.Title != "扩展报表 · 私有遥测" {
+		t.Fatalf("extReport0A:telemetry = %+v", g)
+	}
+}
+
+func TestGetSchemaNoPackNoCommandGroups(t *testing.T) {
+	rt := newExtCmdRT(t, false)
+	ms := NewMessageService(rt)
+	for _, g := range ms.GetSchema("2016") {
+		if g.Source == "command" {
+			t.Fatalf("未绑包不应有命令组: %+v", g)
+		}
+	}
+}
+
+func TestAssembleCommandBodyFieldsGolden(t *testing.T) {
+	rt := newExtCmdRT(t, true)
+	ms := NewMessageService(rt)
+	rt.SetGroups(map[string]schema.GroupConfig{
+		"extData09": {Enabled: true, Rows: []map[string]any{{"seq": 1, "volt": 3.3}}},
+	})
+	cmd := rt.Pack().Commands[0]
+	b, err := ms.assembleCommandBody(cmd, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// seq u16=1 → 0001;volt 3.3/0.1=33 → 0021
+	if got := hexBytes(b); got != "00010021" {
+		t.Fatalf("fields 体 = %s, want 00010021", got)
+	}
+}
+
+func TestAssembleCommandBodyRealtimeLikeGolden(t *testing.T) {
+	rt := newExtCmdRT(t, true)
+	ms := NewMessageService(rt)
+	rt.SetGroups(map[string]schema.GroupConfig{
+		"extReport0A:telemetry": {Enabled: true, Rows: []map[string]any{{"soc2": 80, "packVolt": 3.3}}},
+	})
+	cmd := rt.Pack().Commands[1]
+	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	b, err := ms.assembleCommandBody(cmd, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 6B 十进制时间 + TLV(80 0003 50 0021)
+	if got := hexBytes(b); got != "1a0102030405800003500021" {
+		t.Fatalf("realtimeLike 体 = %s", got)
+	}
+}
+
+func TestSendFrameWireCommandByte(t *testing.T) {
+	rt := newExtCmdRT(t, true)
+	ms := NewMessageService(rt)
+	rt.SetGroups(map[string]schema.GroupConfig{
+		"extData09": {Enabled: true, Rows: []map[string]any{{"seq": 1, "volt": 3.3}}},
+	})
+	cmd := rt.Pack().Commands[0]
+	payload, err := ms.assembleCommandBody(cmd, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _, err := engine.BuildFrame(api.V2016, "LSV00000000000001", byte(cmd.Code), engine.NewRawBody(api.V2016, payload))
+	if err != nil {
+		t.Fatal(err)
+	}
+	hexStr := hexBytes(raw)
+	// 帧布局:2323(2B)+ 命令码(1B)+ 响应标志(1B)...;命令码即 hex[4:6]
+	if hexStr[4:6] != "09" {
+		t.Fatalf("wire command byte = %s, want 09(折叠回归!)", hexStr[4:6])
+	}
+	// 对照组:0x0A 命令码不能折叠成 0x09
+	cmdA := rt.Pack().Commands[1]
+	payloadA, err := ms.assembleCommandBody(cmdA, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawA, _, err := engine.BuildFrame(api.V2016, "LSV00000000000001", byte(cmdA.Code), engine.NewRawBody(api.V2016, payloadA))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h := hexBytes(rawA); h[4:6] != "0a" {
+		t.Fatalf("wire command byte = %s, want 0a(0x0A 不得折叠为 0x09)", h[4:6])
+	}
+}
+
+func TestDefaultGroupsCommandDefaults(t *testing.T) {
+	rt := newExtCmdRT(t, true)
+	ms := NewMessageService(rt)
+	payload := ms.DefaultGroups("2016")
+	m := payload.ToMap()
+	if g, ok := m["extData09"]; !ok || !g.Enabled || len(g.Rows) != 1 {
+		t.Fatalf("extData09 默认 = %+v", g)
+	}
+	if g, ok := m["extReport0A:telemetry"]; !ok || !g.Enabled {
+		t.Fatalf("extReport0A:telemetry 默认 = %+v", g)
+	}
+}
+
+func TestExtReportTickerLifecycle(t *testing.T) {
+	rt := newExtCmdRT(t, true)
+	ms := NewMessageService(rt)
+	if err := ms.SetExtAutoReport("extData09", true, 1); err != nil {
+		t.Fatal(err)
+	}
+	ms.extMu.Lock()
+	_, registered := ms.extStops["extData09"]
+	ms.extMu.Unlock()
+	if !registered {
+		t.Fatal("ticker 未注册")
+	}
+	// 解绑 → 自停(每次 tick 检查包与命令存在性)
+	rt.SetConnCfg(&ConnectionConfig{Version: "2016"})
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		ms.extMu.Lock()
+		_, ok := ms.extStops["extData09"]
+		ms.extMu.Unlock()
+		if !ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("解绑后 ticker 未自停")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	// 显式停止与重复启停无 panic
+	ms.SetExtAutoReport("extData09", true, 50)
+	ms.stopExtReport("extData09")
+	ms.SetExtAutoReport("extData09", false, 0)
 }

@@ -10,6 +10,7 @@ type GroupSchema struct {
 	Multiple bool          `json:"multiple"` // true=多行可增删(电机/储能电压/储能温度)
 	MaxRows  int           `json:"maxRows,omitempty"`
 	Fields   []FieldSchema `json:"fields"`
+	Source   string        `json:"source,omitempty"` // 空=标准实时; "command"=扩展命令组(前端分流到自定义数据 tab)
 }
 
 // FieldSchema 单个字段元数据。

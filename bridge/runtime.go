@@ -47,6 +47,7 @@ func (rt *Runtime) SetConnCfg(cfg *ConnectionConfig) {
 	defer rt.mu.Unlock()
 	rt.connCfg = cfg
 	rt.pack = resolvePack(rt.packs, cfg)
+	rt.syncExtCommands(rt.pack)
 }
 
 // ConnCfg 返回连接配置快照(可能为 nil)。
@@ -75,6 +76,20 @@ func (rt *Runtime) SetPacks(packs []*ext.Pack) {
 	defer rt.mu.Unlock()
 	rt.packs = packs
 	rt.pack = resolvePack(packs, rt.connCfg)
+	rt.syncExtCommands(rt.pack)
+}
+
+// syncExtCommands 按激活包同步引擎命令注册表:先重置(保留 私有远控 内置),再注册包内命令。
+// 挂接在 SetConnCfg/SetPacks——包激活的唯一入口,查询接口(GetSchema)不携带副作用。
+func (rt *Runtime) syncExtCommands(p *ext.Pack) {
+	engine.ResetExtCommands()
+	if p == nil {
+		return
+	}
+	v := parseVersion(p.Meta.BaseVersion)
+	for _, c := range p.Commands {
+		engine.RegisterCommand(v, byte(c.Code), c.Label)
+	}
 }
 
 // Packs 返回已加载扩展包集合。
