@@ -10,6 +10,7 @@ import (
 	"gbt32960-simulator/internal/schema"
 	"gbt32960-simulator/internal/store"
 	"github.com/sunsky74/gb32960/api"
+	"github.com/sunsky74/gb32960/model"
 	"github.com/sunsky74/gb32960/types"
 	"github.com/sunsky74/gb32960/utils"
 )
@@ -165,17 +166,52 @@ func (s *MessageService) loadGroups() map[string]schema.GroupConfig {
 	return g
 }
 
+// assembleBody 组装 0x02/0x03 报文体:标准体(typed)+ 激活扩展包的追加 TLV。
+// 未绑包/版本不符/无启用行 → 原样返回标准体(与既有行为逐字节一致)。
+func (s *MessageService) assembleBody(at time.Time) (model.MessageBody, error) {
+	groups := s.rt.Groups()
+	if groups == nil {
+		groups = s.DefaultGroups(s.versionText()).ToMap()
+	}
+	base, err := schema.Assemble(s.version(), groups, at)
+	if err != nil {
+		return nil, err
+	}
+	p := s.rt.Pack()
+	if p == nil || p.Meta.BaseVersion != s.versionText() {
+		return base, nil
+	}
+	tail := make([]byte, 0, 64)
+	for _, u := range p.Realtime.AppendUnits {
+		g, ok := groups[u.Key]
+		if !ok || !g.Enabled || len(g.Rows) == 0 {
+			continue
+		}
+		for _, row := range g.Rows { // multiple 语义:每行独立 TLV
+			tlv, err := ext.EncodeUnit(u, row)
+			if err != nil {
+				return nil, fmt.Errorf("扩展单元 %s: %w", u.Key, err)
+			}
+			tail = append(tail, tlv...)
+		}
+	}
+	if len(tail) == 0 {
+		return base, nil
+	}
+	baseBytes, err := base.Bytes()
+	if err != nil {
+		return nil, err
+	}
+	return engine.NewRawBody(s.version(), append(baseBytes, tail...)), nil
+}
+
 // Preview 用当前配置生成 0x02 报文 hex(不发送)。
 func (s *MessageService) Preview() (*PreviewResult, error) {
 	cfg := s.rt.ConnCfg()
 	if cfg == nil {
 		cfg = DefaultConnectionConfig()
 	}
-	groups := s.rt.Groups()
-	if groups == nil {
-		groups = s.DefaultGroups(cfg.Version).ToMap()
-	}
-	body, err := schema.Assemble(parseVersion(cfg.Version), groups, time.Now())
+	body, err := s.assembleBody(time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -192,11 +228,10 @@ func (s *MessageService) SendRealtime() error {
 	if c == nil || c.State() != engine.StateOnline {
 		return fmt.Errorf("未连接或未登录 (state=%s)", s.stateText())
 	}
-	groups := s.rt.Groups()
-	if groups == nil {
+	if s.rt.Groups() == nil {
 		return fmt.Errorf("报文配置为空,请先保存报文配置")
 	}
-	body, err := schema.Assemble(s.version(), groups, time.Now())
+	body, err := s.assembleBody(time.Now())
 	if err != nil {
 		return err
 	}
@@ -251,11 +286,10 @@ func (s *MessageService) SetAutoReport(enabled bool, intervalSec int) error {
 		intervalSec = 10
 	}
 	c.SetAutoReport(time.Duration(intervalSec)*time.Second, func() error {
-		groups := s.rt.Groups()
-		if groups == nil {
+		if s.rt.Groups() == nil {
 			return fmt.Errorf("报文配置为空")
 		}
-		body, err := schema.Assemble(s.version(), groups, time.Now())
+		body, err := s.assembleBody(time.Now())
 		if err != nil {
 			return err
 		}
