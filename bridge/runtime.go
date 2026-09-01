@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"gbt32960-simulator/internal/engine"
+	"gbt32960-simulator/internal/ext"
 	"gbt32960-simulator/internal/schema"
 )
 
@@ -16,6 +17,8 @@ type Runtime struct {
 	client  *engine.Client
 	connCfg *ConnectionConfig
 	groups  map[string]schema.GroupConfig
+	packs   []*ext.Pack
+	pack    *ext.Pack
 }
 
 // NewRuntime 创建运行时。Bus 全局共享:客户端重建不影响前端订阅。
@@ -38,11 +41,12 @@ func (rt *Runtime) replaceClient(c *engine.Client) {
 	rt.client = c
 }
 
-// SetConnCfg 保存连接配置快照。
+// SetConnCfg 保存连接配置快照,并按其 ExtensionPack 解析激活扩展包。
 func (rt *Runtime) SetConnCfg(cfg *ConnectionConfig) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 	rt.connCfg = cfg
+	rt.pack = resolvePack(rt.packs, cfg)
 }
 
 // ConnCfg 返回连接配置快照(可能为 nil)。
@@ -50,6 +54,41 @@ func (rt *Runtime) ConnCfg() *ConnectionConfig {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 	return rt.connCfg
+}
+
+// resolvePack 按连接配置的扩展包 id 在已加载集合中查找;未绑定或找不到返回 nil。
+func resolvePack(packs []*ext.Pack, cfg *ConnectionConfig) *ext.Pack {
+	if cfg == nil || cfg.ExtensionPack == "" {
+		return nil
+	}
+	for _, p := range packs {
+		if p.Meta.ID == cfg.ExtensionPack {
+			return p
+		}
+	}
+	return nil
+}
+
+// SetPacks 保存已加载的扩展包集合,并按当前连接配置重新解析激活包。
+func (rt *Runtime) SetPacks(packs []*ext.Pack) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.packs = packs
+	rt.pack = resolvePack(packs, rt.connCfg)
+}
+
+// Packs 返回已加载扩展包集合。
+func (rt *Runtime) Packs() []*ext.Pack {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return rt.packs
+}
+
+// Pack 返回当前激活的扩展包(可能为 nil)。
+func (rt *Runtime) Pack() *ext.Pack {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return rt.pack
 }
 
 // SetGroups 保存报文配置快照并返回副本。

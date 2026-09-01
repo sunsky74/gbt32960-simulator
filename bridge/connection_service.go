@@ -28,6 +28,7 @@ type ConnectionConfig struct {
 	AutoReconnect   bool          `json:"autoReconnect"`   // 断线重连
 	ReportInterval  int           `json:"reportInterval"`  // 周期上报间隔秒,0=不发,默认 10
 	ReissueOffsetSec int          `json:"reissueOffsetSec"` // 补发时间戳偏移(秒)
+	ExtensionPack   string        `json:"extensionPack,omitempty"` // 绑定的扩展包 id(空=不使用)
 	TLS             tlsconf.Config `json:"tls"`
 }
 
