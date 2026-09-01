@@ -501,7 +501,7 @@ func (c *Client) handleFrame(raw []byte) {
 		case *types.CommandV2025:
 			cmdLabel = v.Name
 		}
-		if alias, ok := remoteCommandNames[raw[2]]; ok {
+		if alias, ok := extCommandName(pm.Version, raw[2]); ok {
 			cmdLabel = alias
 		}
 		name = fmt.Sprintf("0x%02X %s", code, cmdLabel)
@@ -538,7 +538,7 @@ func (c *Client) handleFrame(raw []byte) {
 	}
 }
 
-// parseBeanTime 用注册的 BeanTime codec 解析 6 字节 BCD 时间。
+// parseBeanTime 用注册的 BeanTime codec 解析 6 字节十进制时间。
 func parseBeanTime(raw []byte) *model.BeanTime {
 	bt := reflect.TypeOf((*model.BeanTime)(nil)).Elem()
 	c := api.GetCodec(api.V2016, bt)
@@ -624,7 +624,7 @@ func (c *Client) Send(ctx context.Context, cmd byte, body model.MessageBody) err
 
 // ---------------------------------------------------------------- 工具
 
-// BeanTimeNow 当前时间的 BeanTime(Year 存 2000 偏移的十进制值,codec 负责 BCD)。
+// BeanTimeNow 当前时间的 BeanTime(Year 存 2000 偏移的十进制值,codec 按十进制原字节编码(非 BCD))。
 func BeanTimeNow() model.BeanTime {
 	n := time.Now()
 	return model.BeanTime{

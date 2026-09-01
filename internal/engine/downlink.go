@@ -118,16 +118,10 @@ type ParamResponseRow struct {
 	Hex string `json:"hex"` // 值字节(不含 ID),如 u16 的 3E8 → "0ee8"? 由前端按类型生成 hex
 }
 
-// remoteCommandNames 私有远控 私有扩展命令的显示名(0x83~0xBF 预留区间内的定制命令)。
-var remoteCommandNames = map[byte]string{
-	0x8A: "REMOTE_CONTROL",
-}
-
-// commandFor 取发送用命令对象。库内置枚举按区间查找,预留区间(如 0x83~0xBF)
-// 会折叠到区间起始码 —— 对 私有远控 0x8A 这类私有命令,必须构造精确 Code 的副本,
-// 否则线上命令字节错误。
+// commandFor 取发送用命令对象。优先查扩展命令注册表(构造 Min=Max=code 精确副本),
+// 未注册则回退库枚举区间查找(标准命令)。
 func commandFor(v api.GBTVersion, cmd byte) any {
-	if name, ok := remoteCommandNames[cmd]; ok {
+	if name, ok := extCommandName(v, cmd); ok {
 		switch v {
 		case api.V2025:
 			return &types.CommandV2025{Code: cmd, Name: name, Min: cmd, Max: cmd}
