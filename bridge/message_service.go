@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gbt32960-simulator/internal/engine"
+	"gbt32960-simulator/internal/ext"
 	"gbt32960-simulator/internal/schema"
 	"gbt32960-simulator/internal/store"
 	"github.com/sunsky74/gb32960/api"
@@ -36,8 +37,19 @@ func NewMessageService(rt *Runtime) *MessageService {
 	return ms
 }
 
-// GetSchema 返回指定版本的组定义。
+// GetSchema 返回指定版本的组定义:标准组 + 激活扩展包的追加单元。
+// 版本门禁:包的 baseVersion 与请求版本一致才合并。
 func (s *MessageService) GetSchema(version string) []schema.GroupSchema {
+	groups := standardGroups(version)
+	if p := s.rt.Pack(); p != nil && p.Meta.BaseVersion == version {
+		for _, u := range p.Realtime.AppendUnits {
+			groups = append(groups, ext.CompileUnit(u))
+		}
+	}
+	return groups
+}
+
+func standardGroups(version string) []schema.GroupSchema {
 	if version == "2025" {
 		return schema.V2025Groups()
 	}
@@ -45,10 +57,16 @@ func (s *MessageService) GetSchema(version string) []schema.GroupSchema {
 }
 
 // DefaultGroups 基于组定义生成带初始值的配置(每组一行)。
+// 扩展组的默认行值来自 ext.DefaultsFor(数值=offset、位=false、bytes=00 填充)。
 func (s *MessageService) DefaultGroups(version string) *schema.GroupsPayload {
 	groups := s.GetSchema(version)
+	unitDefaults := s.unitDefaults(version)
 	out := map[string]schema.GroupConfig{}
 	for _, g := range groups {
+		if d, ok := unitDefaults[g.Key]; ok {
+			out[g.Key] = schema.GroupConfig{Enabled: g.Enabled, Rows: []map[string]any{d}}
+			continue
+		}
 		row := schema.RowValue{}
 		for _, f := range g.Fields {
 			row[f.Key] = defaultFieldValue(f)
@@ -56,6 +74,45 @@ func (s *MessageService) DefaultGroups(version string) *schema.GroupsPayload {
 		out[g.Key] = schema.GroupConfig{Enabled: g.Enabled, Rows: []map[string]any{row}}
 	}
 	return schema.FromMap(out, groupOrder(groups))
+}
+
+func (s *MessageService) unitDefaults(version string) map[string]schema.RowValue {
+	out := map[string]schema.RowValue{}
+	if p := s.rt.Pack(); p != nil && p.Meta.BaseVersion == version {
+		for _, u := range p.Realtime.AppendUnits {
+			out[u.Key] = ext.DefaultsFor(u)
+		}
+	}
+	return out
+}
+
+// GetGroups 读取持久化的报文配置;无历史返回默认值。
+// 必须先按 order 过滤再 FromMap:schema.FromMap 的第二段循环会把 order 之外
+// 的键追加进 payload(不丢弃未知键),残留扩展键的过滤只能在调用前完成。
+func (s *MessageService) GetGroups() (*schema.GroupsPayload, error) {
+	order := groupOrder(s.GetSchema(s.versionText()))
+	src := s.rt.Groups()
+	if src == nil {
+		src = s.loadGroups()
+		if src == nil {
+			return s.DefaultGroups(s.versionText()), nil
+		}
+	}
+	filtered := make(map[string]schema.GroupConfig, len(order))
+	for _, k := range order {
+		if g, ok := src[k]; ok {
+			filtered[k] = g
+		}
+	}
+	return schema.FromMap(filtered, order), nil
+}
+
+// versionText 当前连接配置的版本字符串(修复既有硬编码 "2016")。
+func (s *MessageService) versionText() string {
+	if cfg := s.rt.ConnCfg(); cfg != nil {
+		return cfg.Version
+	}
+	return "2016"
 }
 
 func groupOrder(groups []schema.GroupSchema) []string {
@@ -98,18 +155,6 @@ func (s *MessageService) SaveGroups(payload schema.GroupsPayload) error {
 	}
 	s.rt.SetGroups(groups)
 	return store.Save(groupsFile, &groups)
-}
-
-// GetGroups 读取持久化的报文配置;无历史返回默认值。
-func (s *MessageService) GetGroups() (*schema.GroupsPayload, error) {
-	if g := s.rt.Groups(); g != nil {
-		return schema.FromMap(g, groupOrder(s.GetSchema("2016"))), nil
-	}
-	g := s.loadGroups()
-	if g == nil {
-		return s.DefaultGroups("2016"), nil
-	}
-	return schema.FromMap(g, groupOrder(s.GetSchema("2016"))), nil
 }
 
 func (s *MessageService) loadGroups() map[string]schema.GroupConfig {
