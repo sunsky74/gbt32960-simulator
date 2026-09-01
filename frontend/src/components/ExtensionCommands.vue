@@ -30,12 +30,8 @@ function reportOf(key: string) {
 }
 
 async function saveAll() {
-  try {
-    const order = [...store.schema.map((g) => g.key), ...store.extSchema.map((g) => g.key)]
-    await MessageService.SaveGroups(stateToPayload(store.groups, order))
-  } catch (e) {
-    message.error('保存失败: ' + String(e))
-  }
+  const order = [...store.schema.map((g) => g.key), ...store.extSchema.map((g) => g.key)]
+  await MessageService.SaveGroups(stateToPayload(store.groups, order))
 }
 
 async function send(g: GroupSchema) {
