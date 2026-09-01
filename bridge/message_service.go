@@ -446,6 +446,9 @@ func (s *MessageService) SendExtension(key string) error {
 	if c == nil || c.State() != engine.StateOnline {
 		return fmt.Errorf("未连接或未登录")
 	}
+	if s.version() != c.Version() {
+		return fmt.Errorf("连接档案版本已变更,请重新连接后再发送扩展命令")
+	}
 	payload, err := s.assembleCommandBody(*cmd, time.Now())
 	if err != nil {
 		return err
@@ -469,6 +472,9 @@ func (s *MessageService) SetExtAutoReport(key string, enabled bool, intervalSec 
 	cmd := packCommand(p, key)
 	if cmd == nil {
 		return fmt.Errorf("扩展命令不存在: %s", key)
+	}
+	if p.Meta.BaseVersion != s.versionText() {
+		return fmt.Errorf("扩展包基准版本 %s 与当前协议版本 %s 不匹配", p.Meta.BaseVersion, s.versionText())
 	}
 	if cmd.Trigger == "manual" {
 		return fmt.Errorf("该命令不支持周期上报 (trigger=manual)") // 评审 P2-4:消费 trigger 语义
@@ -511,13 +517,13 @@ func (s *MessageService) startExtReport(key string, interval time.Duration) {
 			select {
 			case <-stop:
 				return
-		case <-t.C:
-			// 包被解绑/命令消失 → 自停清理
-			p := s.rt.Pack()
-			if p == nil || packCommand(p, key) == nil {
-				s.stopExtReportIfOwn(key, stop)
-				return
-			}
+			case <-t.C:
+				// 包被解绑/命令消失/版本切换 → 自停清理
+				p := s.rt.Pack()
+				if p == nil || packCommand(p, key) == nil || p.Meta.BaseVersion != s.versionText() {
+					s.stopExtReportIfOwn(key, stop)
+					return
+				}
 				if err := s.SendExtension(key); err != nil {
 					// 未连接属常态,静默跳过;其余错误进事件总线
 					if !strings.Contains(err.Error(), "未连接") {

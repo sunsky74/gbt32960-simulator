@@ -107,6 +107,9 @@ func (c *Client) State() State {
 	return c.state
 }
 
+// Version 当前客户端实际使用的协议版本(连接建立时的快照)。
+func (c *Client) Version() api.GBTVersion { return c.opts.Version }
+
 func (c *Client) setState(s State) {
 	c.mu.Lock()
 	c.state = s

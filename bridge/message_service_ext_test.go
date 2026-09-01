@@ -398,3 +398,36 @@ func TestExtReportTickerLifecycle(t *testing.T) {
 		t.Fatalf("停止应成功: %v", err)
 	}
 }
+
+func TestExtTickerStopsOnVersionSwitch(t *testing.T) {
+	rt := newExtCmdRT(t, true)
+	ms := NewMessageService(rt)
+	if err := ms.SetExtAutoReport("extData09", true, 1); err != nil {
+		t.Fatal(err)
+	}
+	// 版本切换(包仍绑 extcmd,但 baseVersion 2016 ≠ 2025)→ 下次 tick 应自停
+	rt.SetConnCfg(&ConnectionConfig{Version: "2025", ExtensionPack: "extcmd"})
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		ms.extMu.Lock()
+		_, ok := ms.extStops["extData09"]
+		ms.extMu.Unlock()
+		if !ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("版本切换后 ticker 未自停")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestSetExtAutoReportVersionMismatch(t *testing.T) {
+	rt := newExtCmdRT(t, true)
+	rt.SetConnCfg(&ConnectionConfig{Version: "2025", ExtensionPack: "extcmd"})
+	ms := NewMessageService(rt)
+	err := ms.SetExtAutoReport("extData09", true, 10)
+	if err == nil || !strings.Contains(err.Error(), "不匹配") {
+		t.Fatalf("期望版本不匹配错误,实际: %v", err)
+	}
+}
