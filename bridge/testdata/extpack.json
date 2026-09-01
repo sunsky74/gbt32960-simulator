@@ -1,0 +1,10 @@
+{
+  "meta": { "id": "p2golden", "label": "P2 黄金包", "vendor": "Test", "baseVersion": "2016" },
+  "realtime": { "appendUnits": [{
+    "key": "telemetry", "title": "私有遥测", "unitCode": 128, "enabled": true,
+    "fields": [
+      { "key": "soc2", "label": "SOC2", "type": "u8", "unit": "%" },
+      { "key": "packVolt", "label": "包电压", "type": "u16", "scale": 0.1, "unit": "V" }
+    ]
+  }] }
+}

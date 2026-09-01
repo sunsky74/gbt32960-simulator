@@ -14,6 +14,7 @@ type App struct {
 	msg       *bridge.MessageService
 	console   *bridge.ConsoleService
 	parser    *bridge.ParserService
+	extsvc    *bridge.ExtService
 	forwarder *bridge.Forwarder
 }
 
@@ -27,6 +28,7 @@ func NewApp() *App {
 		msg:       bridge.NewMessageService(rt),
 		console:   bridge.NewConsoleService(fwd),
 		parser:    bridge.NewParserService(),
+		extsvc:    bridge.NewExtService(rt),
 		forwarder: fwd,
 	}
 }

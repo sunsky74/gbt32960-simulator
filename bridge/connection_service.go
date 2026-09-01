@@ -118,7 +118,8 @@ func (s *ConnectionService) GetProfiles() ([]ProfileSummary, error) {
 	return out, nil
 }
 
-// GetConfig 读取当前激活档案;无档案时返回默认值。
+// GetConfig 读取当前激活档案;无档案时返回默认值。命中即回填 Runtime
+// (启动链 loadInitialData → GetConfig 由此完成连接配置与扩展包激活)。
 func (s *ConnectionService) GetConfig() (*ConnectionConfig, error) {
 	pd, err := s.getProfiles()
 	if err != nil {
@@ -126,10 +127,13 @@ func (s *ConnectionService) GetConfig() (*ConnectionConfig, error) {
 	}
 	for i := range pd.Items {
 		if pd.Items[i].Name == pd.Active {
+			s.rt.SetConnCfg(&pd.Items[i])
 			return &pd.Items[i], nil
 		}
 	}
-	return DefaultConnectionConfig(), nil
+	def := DefaultConnectionConfig()
+	s.rt.SetConnCfg(def)
+	return def, nil
 }
 
 // SaveConfig 校验并按名称 upsert 档案,保存后即设为激活。

@@ -31,6 +31,7 @@ func main() {
 			app.msg,
 			app.console,
 			app.parser,
+			app.extsvc,
 		},
 	})
 
