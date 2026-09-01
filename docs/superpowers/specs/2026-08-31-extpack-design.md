@@ -167,5 +167,5 @@ P2~P4 的差异化细节(如 golden 用例数据、前端组件结构、UI 文�
 
 | # | 缺口 | 现状 | 裁决时机 |
 |---|---|---|---|
-| G-1 | offset 非整数 × Kind=int:校验器不限制 offset 为整数,`offset: 0.5` 会编译出 Kind=int 且默认值 0.5,P2 前端 int 输入框不兼容;且与仓库既有"纯偏移字段为 float"约定不一致 | Phase 1 按 PAC-3 冻结(scale=1→int)实现 | **P2 开工前**:二选一——校验 offset 整性,或 offset 非整数时 Kind=float |
+| G-1 | offset 非整数 × Kind=int:校验器不限制 offset 为整数,`offset: 0.5` 会编译出 Kind=int 且默认值 0.5,P2 前端 int 输入框不兼容;且与仓库既有"纯偏移字段为 float"约定不一致 | **已裁决并落地(2026-09-01,方案 A,commit 26f5f1c)**:validate.go 强制 offset 整数,错误信息提示改写路径(非整数偏移 → scale 表达,值域等价);编译规则保持 scale=1→int 不变 | ~~P2 开工前~~ 已关闭 |
 | G-2 | realtimeLike 命令体单元与 realtime.appendUnits 共享 unitCode 命名空间:命令体 TLV 与 0x02 追加单元分属不同帧、线序无歧义,Phase 1 按"同包唯一"字面实现会拒绝跨场景同码 | validate.go 已按共享命名空间实现(含注释) | **P3 开工前**:确认是否有意共享;若厂商确需同码分离,拆分两张 unitCode 表 |
