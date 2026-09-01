@@ -9,6 +9,7 @@ import {
   addArrayItem, arrayValues, bitOptions, bitsArrayOf, bitsObjOf, boolOf, defaultFor,
   hexOf, numOf, setArrayValue, setBitsArray, setBool, setEnum, setHex, setNum,
 } from '../composables/useFieldHelpers'
+import ExtensionCommands from './ExtensionCommands.vue'
 
 const activeKeys = ref<string[]>([])
 
@@ -309,7 +310,9 @@ async function onIntervalChange(v: number | string | null | undefined) {
         </div>
       </a-tab-pane>
 
-      <a-tab-pane key="custom" tab="自定义数据" disabled />
+      <a-tab-pane key="custom" tab="自定义数据" :disabled="store.extSchema.length === 0">
+        <ExtensionCommands />
+      </a-tab-pane>
     </a-tabs>
 
       <a-modal v-model:open="previewOpen" title="报文预览" :footer="null" width="760px">
