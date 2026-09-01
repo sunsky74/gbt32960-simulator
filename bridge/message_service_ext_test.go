@@ -191,3 +191,33 @@ func TestPreviewTailGolden(t *testing.T) {
 		t.Fatalf("载荷尾 = ...%s", payload[len(payload)-24:])
 	}
 }
+
+func TestAssembleBodyV2025VersionDispatch(t *testing.T) {
+	// 修复既有 bug:V2025 连接的补发/实时体必须走 2025 组装(此前硬编码 2016 形体)
+	rt := newExtRT(t, false)
+	rt.SetConnCfg(&ConnectionConfig{Version: "2025"})
+	ms := NewMessageService(rt)
+	groups := ms.DefaultGroups("2025").ToMap()
+	rt.SetGroups(groups)
+	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+
+	body, err := ms.assembleBody(at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := body.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantBody, err := schema.Assemble(api.V2025, groups, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := wantBody.Bytes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("V2025 分发失败: got %x want %x", got, want)
+	}
+}

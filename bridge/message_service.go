@@ -261,7 +261,7 @@ func (s *MessageService) SendReissue(count int, offsetSec int, intervalSec int) 
 	base := time.Now().Add(-time.Duration(offsetSec) * time.Second)
 	for i := 0; i < count; i++ {
 		at := base.Add(-time.Duration(i) * time.Duration(intervalSec) * time.Second)
-		body, err := schema.AssembleRealtime(groups, at)
+		body, err := s.assembleBody(at)
 		if err != nil {
 			return err
 		}
