@@ -2,6 +2,7 @@ package ext
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"strings"
 )
@@ -103,6 +104,10 @@ func validateFields(path string, fields []FieldSpec) error {
 		case "u8", "u16", "u32", "i8", "i16", "i32":
 			if f.Scale != nil && *f.Scale <= 0 {
 				return verrf(fp+".scale", "须大于 0")
+			}
+			// G-1 裁决(方案A):offset 限整数。半整数偏移改写为 scale 表达(如 offset:0.5 → scale:0.5),值域等价且 Kind=float 表单可用。
+			if f.Offset != nil && *f.Offset != math.Trunc(*f.Offset) {
+				return verrf(fp+".offset", "须为整数(非整数偏移请改写为 scale,如 offset:0.5 → scale:0.5)")
 			}
 		case "f32":
 			if f.Scale != nil || f.Offset != nil {

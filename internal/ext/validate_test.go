@@ -90,6 +90,12 @@ func TestValidateErrors(t *testing.T) {
 		}, "commands[0].code"},
 		{"单元 key 为空", func(p *Pack) { p.Realtime.AppendUnits[0].Key = "" }, "realtime.appendUnits[0].key"},
 		{"命令 key 为空", func(p *Pack) { p.Commands[0].Key = " " }, "commands[0].key"},
+		{"offset 非整数", func(p *Pack) {
+			p.Realtime.AppendUnits[0].Fields[2].Offset = ptrf(0.5)
+		}, "realtime.appendUnits[0].fields[2].offset"},
+		{"命令体 offset 非整数", func(p *Pack) {
+			p.Commands[0].Body.Fields[0].Offset = ptrf(0.5)
+		}, "commands[0].body.fields[0].offset"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
