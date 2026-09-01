@@ -54,10 +54,12 @@ function defaultFor(f: FieldSchema): unknown {
     }
     case 'array_float':
       return []
+    case 'bytes':
+      return f.length ? '00'.repeat(f.length) : ''
     case 'int':
-      return 0
+      return f.min ?? 0
     default:
-      return 0
+      return f.min ?? 0
   }
 }
 
@@ -87,6 +89,22 @@ function numOf(row: Record<string, unknown>, key: string): number {
 
 function setNum(row: Record<string, unknown>, key: string, v: number | string | null | undefined) {
   row[key] = typeof v === 'number' ? v : Number(v) || 0
+}
+
+function hexOf(row: Record<string, unknown>, key: string): string {
+  const v = row[key]
+  return typeof v === 'string' ? v : ''
+}
+
+function setHex(row: Record<string, unknown>, key: string, f: FieldSchema, v: string) {
+  const s = v.trim().toLowerCase().replace(/\s+/g, '')
+  if (s === '') {
+    row[key] = ''
+    return
+  }
+  if (!/^[0-9a-f]*$/.test(s)) return // 非法字符不写入
+  if (f.length && s.length > f.length * 2) return // 超长不写入
+  row[key] = s
 }
 
 function boolOf(row: Record<string, unknown>, key: string): boolean {
@@ -286,6 +304,17 @@ async function onIntervalChange(v: number | string | null | undefined) {
                         />
                       </div>
 
+                      <div v-else-if="f.kind === 'bytes'" class="field">
+                        <span class="field-label">{{ f.label }}<em v-if="f.length"> ({{ f.length }}B hex)</em></span>
+                        <a-input
+                          :value="hexOf(row, f.key)"
+                          class="hex-input"
+                          size="small"
+                          :placeholder="f.length ? `${f.length * 2} 个 hex 字符` : 'hex'"
+                          @update:value="(v: string) => setHex(row, f.key, f, v)"
+                        />
+                      </div>
+
                       <div v-else-if="f.kind === 'bool'" class="field field-bool">
                         <span class="field-label">{{ f.label }}</span>
                         <a-switch
@@ -377,9 +406,15 @@ async function onIntervalChange(v: number | string | null | undefined) {
       <a-tab-pane key="custom" tab="自定义数据" disabled />
     </a-tabs>
 
-    <a-modal v-model:open="previewOpen" title="报文预览" :footer="null" width="760px">
+      <a-modal v-model:open="previewOpen" title="报文预览" :footer="null" width="760px">
       <a-typography-text type="secondary">{{ previewCmd }} — 完整帧 HEX(点击即可复制)</a-typography-text>
       <a-typography-paragraph copyable code class="preview-hex">{{ previewHex }}</a-typography-paragraph>
     </a-modal>
   </div>
 </template>
+
+<style scoped>
+.hex-input :deep(input) {
+  font-family: var(--font-mono);
+}
+</style>

@@ -71,6 +71,12 @@ export async function reloadSchemaForVersion(version: string) {
   store.groups = payloadToState(payload)
 }
 
+export async function reloadSchemaPreservingGroups(version: string) {
+  store.schema = await MessageService.GetSchema(version)
+  const payload = await MessageService.GetGroups()
+  store.groups = payloadToState(payload)
+}
+
 export function filteredConsole(): ConsoleEvent[] {
   if (store.consoleFilter === 'all') return store.consoleEvents
   return store.consoleEvents.filter((e) => e.kind === store.consoleFilter)

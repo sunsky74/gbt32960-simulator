@@ -13,6 +13,7 @@ export namespace bridge {
 	    autoReconnect: boolean;
 	    reportInterval: number;
 	    reissueOffsetSec: number;
+	    extensionPack?: string;
 	    tls: tlsconf.Config;
 	
 	    static createFrom(source: any = {}) {
@@ -33,6 +34,7 @@ export namespace bridge {
 	        this.autoReconnect = source["autoReconnect"];
 	        this.reportInterval = source["reportInterval"];
 	        this.reissueOffsetSec = source["reissueOffsetSec"];
+	        this.extensionPack = source["extensionPack"];
 	        this.tls = this.convertValues(source["tls"], tlsconf.Config);
 	    }
 	
@@ -66,6 +68,26 @@ export namespace bridge {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
 	        this.count = source["count"];
+	    }
+	}
+	export class PackInfo {
+	    id: string;
+	    label: string;
+	    vendor?: string;
+	    baseVersion: string;
+	    unitCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PackInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.vendor = source["vendor"];
+	        this.baseVersion = source["baseVersion"];
+	        this.unitCount = source["unitCount"];
 	    }
 	}
 	export class PreviewResult {
@@ -264,6 +286,7 @@ export namespace schema {
 	    bits?: BitDef[];
 	    itemLabel?: string;
 	    scaleNote?: string;
+	    length?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new FieldSchema(source);
@@ -281,6 +304,7 @@ export namespace schema {
 	        this.bits = this.convertValues(source["bits"], BitDef);
 	        this.itemLabel = source["itemLabel"];
 	        this.scaleNote = source["scaleNote"];
+	        this.length = source["length"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

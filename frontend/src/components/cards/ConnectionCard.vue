@@ -1,7 +1,19 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue'
 import CollapsibleCard from '../layout/CollapsibleCard.vue'
 import { cfg } from '../../composables/useConnConfig'
 import { formRef, rules, saveOnly, onVersionChange } from '../../composables/useConnActions'
+import * as ExtService from '../../../wailsjs/go/bridge/ExtService'
+
+const packOptions = ref<{ value: string; label: string }[]>([])
+onMounted(async () => {
+  try {
+    const packs = await ExtService.ListPacks()
+    packOptions.value = packs.map((p) => ({ value: p.id, label: `${p.label} (${p.baseVersion})` }))
+  } catch {
+    packOptions.value = []
+  }
+})
 </script>
 
 <template>
@@ -27,6 +39,10 @@ import { formRef, rules, saveOnly, onVersionChange } from '../../composables/use
           <a-select-option value="2016">GB/T 32960-2016</a-select-option>
           <a-select-option value="2025">GB/T 32960-2025</a-select-option>
         </a-select>
+      </a-form-item>
+
+      <a-form-item label="扩展包" name="extensionPack">
+        <a-select v-model:value="cfg.extensionPack" :options="packOptions" allow-clear placeholder="不使用扩展包" />
       </a-form-item>
 
       <a-form-item label="心跳间隔" name="heartbeatSec">

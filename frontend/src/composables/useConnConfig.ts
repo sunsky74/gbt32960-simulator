@@ -47,6 +47,7 @@ export function resetToNewProfile(n: number) {
     autoReconnect: false,
     reportInterval: 10,
     reissueOffsetSec: 60,
+    extensionPack: '',
     tls: { enabled: false, ca: '', clientCert: '', clientKey: '', serverName: '', insecure: false },
   })
 }

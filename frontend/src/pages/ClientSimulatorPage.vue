@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { PlusOutlined } from '@ant-design/icons-vue'
 import RealTimePanel from '../components/RealTimePanel.vue'
 import ConsolePanel from '../components/ConsolePanel.vue'
 import ResizableDivider from '../components/layout/ResizableDivider.vue'
@@ -14,6 +15,7 @@ import {
   pushConsoleEvents,
   refreshState,
   reloadSchemaForVersion,
+  reloadSchemaPreservingGroups,
   store,
 } from '../state'
 import * as ConnectionService from '../../wailsjs/go/bridge/ConnectionService'
@@ -45,10 +47,13 @@ const activeProfileName = computed(() => store.config?.name ?? '')
 async function onSwitchProfile(name: string) {
   try {
     const prevVersion = store.config?.version
+    const prevPack = store.config?.extensionPack
     store.config = await ConnectionService.SwitchProfile(name)
     await loadProfiles()
-    if (store.config && store.config.version !== prevVersion) {
+    if (store.config.version !== prevVersion) {
       await reloadSchemaForVersion(store.config.version)
+    } else if (store.config.extensionPack !== prevPack) {
+      await reloadSchemaPreservingGroups(store.config.version)
     }
   } catch (e) {
     console.error('切换档案失败', e)
@@ -135,7 +140,7 @@ onUnmounted(() => {
         "
         @change="onSwitchProfile"
       />
-      <a-button size="small" @click="onNewProfile">＋ 新建连接</a-button>
+      <a-button size="small" @click="onNewProfile"><PlusOutlined /> 新建连接</a-button>
       <a-badge :status="statusBadge.status" :text="statusBadge.text" />
       <div class="spacer" />
       <a-button size="small" :loading="testing" @click="testConnect">测试连接</a-button>

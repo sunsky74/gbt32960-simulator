@@ -3,7 +3,7 @@ import { message } from 'ant-design-vue'
 import type { FormInstance, Rule } from 'ant-design-vue/es/form'
 import * as ConnectionService from '../../wailsjs/go/bridge/ConnectionService'
 import { cfg } from './useConnConfig'
-import { loadProfiles, refreshState, reloadSchemaForVersion, store } from '../state'
+import { loadProfiles, refreshState, reloadSchemaForVersion, reloadSchemaPreservingGroups, store } from '../state'
 
 // 连接表单实例(顶栏按钮与连接配置卡共用同一份校验)
 export const formRef = ref<FormInstance>()
@@ -46,12 +46,23 @@ export async function testConnect() {
   }
 }
 
+async function reloadSchemaOnBindingChange(prevVersion: string | undefined, prevPack: string | undefined) {
+  if (cfg.version !== prevVersion) {
+    await reloadSchemaForVersion(cfg.version)
+  } else if (cfg.extensionPack !== prevPack) {
+    await reloadSchemaPreservingGroups(cfg.version)
+  }
+}
+
 export async function connect() {
   if (!(await validateForm())) return
   store.connBusy = true
   try {
+    const prevVersion = store.config?.version
+    const prevPack = store.config?.extensionPack
     await ConnectionService.Connect(cfg)
     store.config = cfg
+    await reloadSchemaOnBindingChange(prevVersion, prevPack)
     await refreshState()
     await loadProfiles()
   } catch (e) {
@@ -64,7 +75,11 @@ export async function connect() {
 export async function saveOnly() {
   if (!(await validateForm())) return
   try {
+    const prevVersion = store.config?.version
+    const prevPack = store.config?.extensionPack
     await ConnectionService.SaveConfig(cfg)
+    store.config = cfg
+    await reloadSchemaOnBindingChange(prevVersion, prevPack)
     message.success(`配置「${cfg.name}」已保存`)
     await loadProfiles()
   } catch (e) {
