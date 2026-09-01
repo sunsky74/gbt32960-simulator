@@ -487,6 +487,17 @@ func (s *MessageService) stopExtReport(key string) {
 	s.extMu.Unlock()
 }
 
+// stopExtReportIfOwn 仅当注册表中 key 仍指向 own 时才删除并关闭它,
+// 防止在途 ticker 的自停路径误杀解绑→重绑后新注册的 ticker(TOCTOU)。
+func (s *MessageService) stopExtReportIfOwn(key string, own chan struct{}) {
+	s.extMu.Lock()
+	defer s.extMu.Unlock()
+	if s.extStops[key] == own {
+		delete(s.extStops, key)
+		close(own)
+	}
+}
+
 func (s *MessageService) startExtReport(key string, interval time.Duration) {
 	s.stopExtReport(key)
 	stop := make(chan struct{})
@@ -500,13 +511,13 @@ func (s *MessageService) startExtReport(key string, interval time.Duration) {
 			select {
 			case <-stop:
 				return
-			case <-t.C:
-				// 包被解绑/命令消失 → 自停清理
-				p := s.rt.Pack()
-				if p == nil || packCommand(p, key) == nil {
-					s.stopExtReport(key)
-					return
-				}
+		case <-t.C:
+			// 包被解绑/命令消失 → 自停清理
+			p := s.rt.Pack()
+			if p == nil || packCommand(p, key) == nil {
+				s.stopExtReportIfOwn(key, stop)
+				return
+			}
 				if err := s.SendExtension(key); err != nil {
 					// 未连接属常态,静默跳过;其余错误进事件总线
 					if !strings.Contains(err.Error(), "未连接") {

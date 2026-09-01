@@ -388,8 +388,13 @@ func TestExtReportTickerLifecycle(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	// 显式停止与重复启停无 panic
-	ms.SetExtAutoReport("extData09", true, 50)
+	// 重绑包后重启周期并显式停止(修复评审 Important#2:原解绑态下 start 静默失败,重启路径空转)
+	rt.SetConnCfg(&ConnectionConfig{Version: "2016", ExtensionPack: "extcmd"})
+	if err := ms.SetExtAutoReport("extData09", true, 50); err != nil {
+		t.Fatalf("重绑后重启应成功: %v", err)
+	}
 	ms.stopExtReport("extData09")
-	ms.SetExtAutoReport("extData09", false, 0)
+	if err := ms.SetExtAutoReport("extData09", false, 0); err != nil {
+		t.Fatalf("停止应成功: %v", err)
+	}
 }
