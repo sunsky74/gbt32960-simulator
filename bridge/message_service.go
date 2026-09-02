@@ -187,14 +187,62 @@ func defaultFieldValue(f schema.FieldSchema) any {
 	}
 }
 
-// SaveGroups 校验(组装一遍)、持久化并快照报文配置。
+// SaveGroups 校验(标准组装 + 扩展行干跑)、持久化并快照报文配置。
 func (s *MessageService) SaveGroups(payload schema.GroupsPayload) error {
 	groups := payload.ToMap()
 	if _, err := schema.Assemble(s.version(), groups, time.Now()); err != nil {
 		return err
 	}
+	if err := s.validateExtRows(groups); err != nil {
+		return err
+	}
 	s.rt.SetGroups(groups)
 	return store.Save(groupsFile, &groups)
+}
+
+// validateExtRows 对激活包的扩展组行值做字段级编码干跑:非法值在保存点拦截,不落盘。
+// 跳过语义与组装一致(assembleBody/assembleCommandBody):未配置或未启用的组不校验。
+func (s *MessageService) validateExtRows(groups map[string]schema.GroupConfig) error {
+	p := s.rt.Pack()
+	if p == nil {
+		return nil
+	}
+	for _, u := range p.Realtime.AppendUnits {
+		g, ok := groups[u.Key]
+		if !ok || !g.Enabled {
+			continue
+		}
+		for ri, row := range g.Rows {
+			if _, err := ext.EncodeUnit(u, row); err != nil {
+				return fmt.Errorf("扩展单元 %s 第 %d 行: %w", u.Key, ri+1, err)
+			}
+		}
+	}
+	for _, c := range p.Commands {
+		switch c.Body.Type {
+		case "fields":
+			g, ok := groups[c.Key]
+			if !ok || !g.Enabled || len(g.Rows) == 0 {
+				continue
+			}
+			if _, err := ext.EncodeFields(c.Body.Fields, g.Rows[0]); err != nil {
+				return fmt.Errorf("扩展命令 %s: %w", c.Key, err)
+			}
+		case "realtimeLike":
+			for _, u := range c.Body.Units {
+				g, ok := groups[c.Key+":"+u.Key]
+				if !ok || !g.Enabled {
+					continue
+				}
+				for ri, row := range g.Rows {
+					if _, err := ext.EncodeUnit(u, row); err != nil {
+						return fmt.Errorf("扩展命令 %s 单元 %s 第 %d 行: %w", c.Key, u.Key, ri+1, err)
+					}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (s *MessageService) loadGroups() map[string]schema.GroupConfig {

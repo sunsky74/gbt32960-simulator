@@ -431,3 +431,31 @@ func TestSetExtAutoReportVersionMismatch(t *testing.T) {
 		t.Fatalf("期望版本不匹配错误,实际: %v", err)
 	}
 }
+
+func TestSaveGroupsExtDryRunRejects(t *testing.T) {
+	t.Setenv("HOME", t.TempDir()) // 隔离真实用户 message.json
+	rt := newExtCmdRT(t, true)
+	ms := NewMessageService(rt)
+	payload := ms.DefaultGroups("2016")
+	m := payload.ToMap()
+	m["extData09"] = schema.GroupConfig{Enabled: true, Rows: []map[string]any{{"seq": 70000, "volt": 3.3}}}
+	err := ms.SaveGroups(*schema.FromMap(m, nil))
+	if err == nil || !strings.Contains(err.Error(), "扩展命令 extData09") {
+		t.Fatalf("超范围值应报扩展命令错误, got %v", err)
+	}
+	if rt.Groups() != nil {
+		t.Fatal("失败不得写入内存快照")
+	}
+}
+
+func TestSaveGroupsExtDryRunPasses(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	rt := newExtCmdRT(t, true)
+	ms := NewMessageService(rt)
+	payload := ms.DefaultGroups("2016")
+	m := payload.ToMap()
+	m["extData09"] = schema.GroupConfig{Enabled: true, Rows: []map[string]any{{"seq": 1, "volt": 3.3}}}
+	if err := ms.SaveGroups(*schema.FromMap(m, nil)); err != nil {
+		t.Fatal(err)
+	}
+}
