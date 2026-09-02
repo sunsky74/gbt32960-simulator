@@ -310,7 +310,7 @@ async function onIntervalChange(v: number | string | null | undefined) {
         </div>
       </a-tab-pane>
 
-      <a-tab-pane key="custom" tab="自定义数据" :disabled="store.extSchema.length === 0">
+      <a-tab-pane key="custom" tab="自定义数据" :disabled="!store.config?.extensionPack">
         <ExtensionCommands />
       </a-tab-pane>
     </a-tabs>

@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import * as ExtService from '../../wailsjs/go/bridge/ExtService'
+import { cfg } from '../composables/useConnConfig'
 import { reloadSchemaPreservingGroups, store } from '../state'
 
 const loading = ref(false)
@@ -41,6 +42,8 @@ function deletePack(id: string, label: string) {
         await ExtService.DeletePack(id)
         message.success('已删除')
         if (store.config?.extensionPack === id) {
+          store.config.extensionPack = ''
+          cfg.extensionPack = ''
           await reloadSchemaPreservingGroups(store.config?.version ?? '2016')
         }
         await refresh()

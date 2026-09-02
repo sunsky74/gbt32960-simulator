@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import type { GroupSchema } from '../api/backend'
 import { stateToPayload } from '../api/backend'
@@ -15,10 +15,36 @@ function ensureGroup(g: GroupSchema) {
   if (!store.groups[g.key]) {
     const row: Record<string, unknown> = {}
     for (const f of g.fields) row[f.key] = defaultFor(f)
-    store.groups[g.key] = { enabled: true, rows: [row] }
+    store.groups[g.key] = { enabled: g.enabled, rows: [row] }
   }
   return store.groups[g.key]
 }
+
+function addRow(g: GroupSchema) {
+  const grp = ensureGroup(g)
+  if (!g.multiple || (g.maxRows && grp.rows.length >= g.maxRows)) return
+  const row: Record<string, unknown> = {}
+  for (const f of g.fields) row[f.key] = defaultFor(f)
+  grp.rows.push(row)
+}
+
+function removeRow(g: GroupSchema, idx: number) {
+  const grp = store.groups[g.key]
+  if (!grp || (g.multiple && grp.rows.length <= 1)) return
+  grp.rows.splice(idx, 1)
+}
+
+// extHint 空态三态文案:未绑定 / 版本不匹配 / 未声明 commands(消化 oracle 审核 D 的静默问题)。
+const extHint = computed(() => {
+  const packId = store.config?.extensionPack
+  if (!packId) return '绑定含 commands 的扩展包后,在此配置与发送私有命令'
+  const info = store.packs.find((p) => p.id === packId)
+  if (!info) return `扩展包「${packId}」未找到,请在设置页重新导入`
+  if (info.baseVersion !== (store.config?.version ?? '2016')) {
+    return `扩展包「${info.label}」基准版本 ${info.baseVersion} 与当前档案版本 ${store.config?.version} 不匹配,请调整档案版本或换绑其他包`
+  }
+  return `扩展包「${info.label}」未声明 commands 段,无可配置的私有命令`
+})
 
 function cmdKeyOf(g: GroupSchema): string {
   return g.key.split(':')[0]
@@ -70,7 +96,7 @@ async function onReportIntervalChange(g: GroupSchema) {
 
 <template>
   <div class="zone-body">
-    <a-empty v-if="store.extSchema.length === 0" description="绑定含 commands 的扩展包后,在此配置与发送私有命令" />
+    <a-empty v-if="store.extSchema.length === 0" :description="extHint" />
     <a-collapse v-else ghost expand-icon-position="end" class="group-collapse">
       <a-collapse-panel v-for="g in store.extSchema" :key="g.key">
         <template #header>
@@ -80,52 +106,57 @@ async function onReportIntervalChange(g: GroupSchema) {
           <div class="extcmd-actions">
             <a-button size="small" type="primary" @click="send(g)">发送</a-button>
           </div>
-          <div class="group-row">
+          <div v-for="(row, ri) in ensureGroup(g).rows" :key="ri" class="group-row">
+            <div class="row-head">
+              <span v-if="g.multiple" class="row-label">第 {{ ri + 1 }} 行</span>
+              <a-button v-if="g.multiple && ensureGroup(g).rows.length > 1" size="small" type="text" danger @click="removeRow(g, ri)">删除行</a-button>
+            </div>
             <div class="fields-grid">
               <template v-for="f in g.fields" :key="f.key">
                 <div v-if="f.kind === 'enum'" class="field">
                   <span class="field-label">{{ f.label }}</span>
                   <a-select
-                    :value="numOf(ensureGroup(g).rows[0], f.key)"
+                    :value="numOf(row, f.key)"
                     size="small"
                     :options="f.enum?.map((e) => ({ value: e.value, label: e.label })) ?? []"
-                    @change="(v: unknown) => setEnum(ensureGroup(g).rows[0], f.key, v)"
+                    @change="(v: unknown) => setEnum(row, f.key, v)"
                   />
                 </div>
                 <div v-else-if="f.kind === 'int' || f.kind === 'float'" class="field">
                   <span class="field-label">{{ f.label }}<em v-if="f.unit"> ({{ f.unit }})</em></span>
                   <a-input-number
-                    :value="numOf(ensureGroup(g).rows[0], f.key)"
+                    :value="numOf(row, f.key)"
                     size="small"
                     :step="f.kind === 'int' ? 1 : 0.1"
                     :min="f.min"
                     :max="f.max"
                     style="width: 100%"
-                    @change="(v: number | string | null | undefined) => setNum(ensureGroup(g).rows[0], f.key, v)"
+                    @change="(v: number | string | null | undefined) => setNum(row, f.key, v)"
                   />
                 </div>
                 <div v-else-if="f.kind === 'bytes'" class="field">
                   <span class="field-label">{{ f.label }}<em v-if="f.length"> ({{ f.length }}B hex)</em></span>
                   <a-input
-                    :value="hexOf(ensureGroup(g).rows[0], f.key)"
+                    :value="hexOf(row, f.key)"
                     class="hex-input"
                     size="small"
                     :placeholder="f.length ? `${f.length * 2} 个 hex 字符` : 'hex'"
-                    @update:value="(v: string) => setHex(ensureGroup(g).rows[0], f.key, f, v)"
+                    @update:value="(v: string) => setHex(row, f.key, f, v)"
                   />
                 </div>
                 <div v-else-if="f.kind === 'bitgroup'" class="field field-bits">
                   <span class="field-label">{{ f.label }}</span>
                   <a-checkbox-group
-                    :value="bitsArrayOf(ensureGroup(g).rows[0], f)"
+                    :value="bitsArrayOf(row, f)"
                     :options="bitOptions(f)"
                     class="bits-group"
-                    @change="(vals: Array<string | number | boolean>) => setBitsArray(ensureGroup(g).rows[0], f, vals)"
+                    @change="(vals: Array<string | number | boolean>) => setBitsArray(row, f, vals)"
                   />
                 </div>
               </template>
             </div>
           </div>
+          <a-button v-if="g.multiple" size="small" type="dashed" block @click="addRow(g)">＋ 添加一行</a-button>
           <div class="extcmd-actions">
             <a-switch v-model:checked="reportOf(cmdKeyOf(g)).on" size="small" @change="(v: unknown) => toggleReport(g, v === true)" />
             <span class="report-label">周期上报</span>
@@ -146,6 +177,16 @@ async function onReportIntervalChange(g: GroupSchema) {
 </template>
 
 <style scoped>
+.row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.row-label {
+  font-size: 12px;
+  color: #888;
+}
 .extcmd-actions {
   display: flex;
   align-items: center;
