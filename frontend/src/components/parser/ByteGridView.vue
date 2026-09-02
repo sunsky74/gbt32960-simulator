@@ -1,86 +1,109 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { parser as parserNs } from '../../../wailsjs/go/models'
+import { computed, nextTick, ref, watch } from 'vue'
 
 export interface ByteRange {
   start: number
   end: number
 }
 
-const props = defineProps<{ normalizedHex: string; active: ByteRange | null }>()
+export interface ByteHover {
+  range: ByteRange
+  x: number
+  y: number
+}
+
+const props = defineProps<{
+  normalizedHex: string
+  active: ByteRange | null
+  activeSource: 'byte' | 'field' | null
+  activeByte: number | null
+}>()
+
 const emit = defineEmits<{
-  (e: 'hover', r: ByteRange | null): void
+  (e: 'hover', h: ByteHover | null): void
   (e: 'pin', r: ByteRange | null): void
 }>()
 
-// 单元格/地址列宽度常量,必须与下方 CSS 的 .byte-cell/.byte-offset 宽度一致
-const CELL_W = 26
-const OFFSET_W = 44
-const MIN_PER_ROW = 6
+// 固定每行 8 字节;offset 标号 0000/0008/0010...
+const PER_ROW = 8
 
-// 每行字节数响应式:由容器实际宽度推导,容器变化(拖拽/缩放)时实时重排
-const perRow = ref(16)
-const rows = ref<Array<{ offset: number; bytes: string[] }>>([])
-
-watch(
-  [() => props.normalizedHex, perRow],
-  ([hex, n]) => {
-    const total = hex.length / 2
-    const out: Array<{ offset: number; bytes: string[] }> = []
-    for (let off = 0; off < total; off += n) {
-      const row: string[] = []
-      for (let i = off; i < Math.min(off + n, total); i++) {
-        row.push(hex.slice(i * 2, i * 2 + 2).toUpperCase())
-      }
-      out.push({ offset: off, bytes: row })
+const rows = computed(() => {
+  const hex = props.normalizedHex
+  const total = hex.length / 2
+  const out: Array<{ offset: number; bytes: string[] }> = []
+  for (let off = 0; off < total; off += PER_ROW) {
+    const row: string[] = []
+    for (let i = off; i < Math.min(off + PER_ROW, total); i++) {
+      row.push(hex.slice(i * 2, i * 2 + 2).toUpperCase())
     }
-    rows.value = out
-  },
-  { immediate: true },
-)
-
-let ro: ResizeObserver | null = null
-
-onMounted(() => {
-  if (!gridEl.value) return
-  ro = new ResizeObserver((entries) => {
-    const w = (entries[0].target as HTMLElement).clientWidth
-    perRow.value = Math.max(MIN_PER_ROW, Math.floor((w - OFFSET_W - 2) / CELL_W))
-  })
-  ro.observe(gridEl.value)
-})
-
-onBeforeUnmount(() => {
-  ro?.disconnect()
-  ro = null
+    out.push({ offset: off, bytes: row })
+  }
+  return out
 })
 
 const gridEl = ref<HTMLElement | null>(null)
+// 网格内光标所在的字节(悬停期间持续有效;离开网格后回到 activeByte/无)
+const curIdx = ref<number | null>(null)
 
-// 高亮只切 DOM class,不进模板响应式(避免整片重渲染)
-let hlNodes: Element[] = []
+// 单元格元素缓存(按 data-idx 顺序与绝对字节索引一致),rows 重建后刷新
+let cellEls: HTMLElement[] = []
 watch(
-  () => props.active,
-  (r) => {
-    for (const el of hlNodes) el.classList.remove('byte-hl')
-    hlNodes = []
-    if (!r || !gridEl.value) return
-    const cells = gridEl.value.querySelectorAll('[data-idx]')
-    cells.forEach((el) => {
-      const i = Number((el as HTMLElement).dataset.idx)
-      if (i >= r.start && i < r.end) {
-        el.classList.add('byte-hl')
-        hlNodes.push(el)
-      }
-    })
+  rows,
+  async () => {
+    await nextTick()
+    cellEls = gridEl.value
+      ? Array.from(gridEl.value.querySelectorAll<HTMLElement>('[data-idx]'))
+      : []
+    applyHl()
   },
+  { immediate: true, flush: 'post' },
 )
+
+// 三态高亮:增量维护 —— 仅清除上次高亮的元素,新范围按缓存索引命中,避免全量重扫
+let prevHl: Element[] = []
+function applyHl() {
+  for (const el of prevHl) {
+    el.classList.remove('byte-hl', 'byte-cur', 'byte-field-hl', 'byte-dim')
+  }
+  prevHl = []
+  const active = props.active
+  if (!active || cellEls.length === 0) return
+  const source = props.activeSource
+  // 光标在网格内优先;否则(钉住字节后光标离开)用 activeByte
+  const cur = curIdx.value ?? (source === 'byte' ? props.activeByte : null)
+  const start = Math.max(0, active.start)
+  const end = Math.min(cellEls.length, active.end)
+  for (let i = start; i < end; i++) {
+    const el = cellEls[i]
+    if (el.dataset.idx !== String(i)) continue // 防御:缓存与索引不一致时跳过
+    if (i === cur) el.classList.add('byte-cur')
+    else if (source === 'field') el.classList.add('byte-field-hl')
+    else el.classList.add('byte-hl')
+    prevHl.push(el)
+  }
+  if (source === 'field') {
+    // 字段行悬停来源:区间外字节降低视觉权重
+    for (let i = 0; i < cellEls.length; i++) {
+      if (i >= start && i < end) continue
+      cellEls[i].classList.add('byte-dim')
+      prevHl.push(cellEls[i])
+    }
+  }
+}
+
+watch([() => props.active, () => props.activeSource, () => props.activeByte, curIdx], applyHl)
 
 function onMove(e: MouseEvent) {
   const cell = (e.target as HTMLElement).closest('[data-idx]')
   if (!cell) return
   const i = Number((cell as HTMLElement).dataset.idx)
-  emit('hover', { start: i, end: i + 1 })
+  curIdx.value = i
+  emit('hover', { range: { start: i, end: i + 1 }, x: e.clientX, y: e.clientY })
+}
+
+function onLeave() {
+  curIdx.value = null
+  emit('hover', null)
 }
 
 function onClick(e: MouseEvent) {
@@ -99,11 +122,11 @@ function onClick(e: MouseEvent) {
     ref="gridEl"
     class="byte-grid"
     @mouseover="onMove"
-    @mouseleave="emit('hover', null)"
+    @mouseleave="onLeave"
     @click="onClick"
   >
     <div v-for="row in rows" :key="row.offset" class="byte-row">
-      <span class="byte-offset">{{ row.offset.toString().padStart(4, '0') }}</span>
+      <span class="byte-offset">{{ row.offset.toString(16).padStart(4, '0') }}</span>
       <span
         v-for="(b, bi) in row.bytes"
         :key="bi"
@@ -116,11 +139,12 @@ function onClick(e: MouseEvent) {
 
 <style scoped>
 .byte-grid {
-  font-family: SFMono-Regular, Consolas, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
-  line-height: 2;
+  line-height: 2.1;
   overflow-y: auto;
   overflow-x: hidden;
+  padding: 6px 8px;
   cursor: default;
 }
 
@@ -134,17 +158,46 @@ function onClick(e: MouseEvent) {
   color: var(--text-tertiary);
 }
 
+/* 22px 内容 + 左右各 2px margin = 26px 槽位,scale(1.15) 放大后不挤压相邻字节 */
 .byte-cell {
   display: inline-block;
-  width: 26px;
+  width: 22px;
+  margin: 1px 2px;
   text-align: center;
   color: var(--text-primary);
-  border-radius: 3px;
-  transition: background-color 0.06s ease, box-shadow 0.06s ease;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 2px;
+  transform-origin: center;
+  transition:
+    transform 0.12s ease,
+    background-color 0.08s ease,
+    box-shadow 0.08s ease,
+    opacity 0.12s ease;
 }
 
+/* 同字段区间内字节:弱高亮 */
 .byte-hl {
   background: var(--hl-bg);
+}
+
+/* 当前字节:强高亮(边框 + 浅背景 + 放大) */
+.byte-cur {
+  background: var(--hl-bg);
   box-shadow: var(--hl-shadow);
+  transform: scale(1.15);
+  position: relative;
+  z-index: 2;
+}
+
+/* 字段行悬停来源:整个字段区间明显突出、轻微放大 */
+.byte-field-hl {
+  background: var(--hl-bg);
+  transform: scale(1.04);
+}
+
+/* 字段行悬停来源:区间外字节降低视觉权重 */
+.byte-dim {
+  opacity: 0.4;
 }
 </style>
