@@ -1,0 +1,33 @@
+{
+  "meta": { "id": "sample-private", "label": "示例·私有遥测包", "vendor": "示例", "baseVersion": "2016" },
+  "realtime": {
+    "appendUnits": [
+      {
+        "key": "customTelemetry", "title": "私有遥测单元", "unitCode": 128, "enabled": false, "multiple": false, "maxRows": 10,
+        "fields": [
+          { "key": "soc2", "label": "SOC2", "type": "u8", "unit": "%" },
+          { "key": "packVolt", "label": "包电压", "type": "u16", "scale": 0.1, "unit": "V" }
+        ]
+      }
+    ]
+  },
+  "commands": [
+    {
+      "key": "extData09", "label": "扩展数据上报", "code": 9, "direction": "up", "trigger": "manual+periodic",
+      "body": { "type": "fields", "fields": [
+        { "key": "seq", "label": "流水号", "type": "u16" },
+        { "key": "volt", "label": "电压", "type": "u16", "scale": 0.1, "unit": "V" }
+      ] }
+    },
+    {
+      "key": "extReport0A", "label": "扩展报表", "code": 10, "direction": "up", "trigger": "manual",
+      "body": { "type": "realtimeLike", "units": [{
+        "key": "telemetry", "title": "私有遥测", "unitCode": 129, "enabled": true, "multiple": true, "maxRows": 5,
+        "fields": [
+          { "key": "soc", "label": "SOC", "type": "u8", "unit": "%" },
+          { "key": "temp", "label": "温度", "type": "i8", "offset": 40, "unit": "°C" }
+        ]
+      }] }
+    }
+  ]
+}

@@ -95,6 +95,7 @@
 
 - **追加单元**:`TLV = unitCode(u8) + len(u16,大端) + EncodeFields(数据)`;unitCode 限于 0x80~0xFE(见 §4.4),恰与协议库的自定义数据 TLV 区重合(库可解码);拼接到标准 0x02 体字节之后,整体交 `rawBody` 走既有 `BuildFrame`(BCC 由帧层重算,协议库零改动)
 - **`multiple: true` 语义 = 每行独立一个完整 TLV**(同一 unitCode 重复);已确认默认
+  - 命令体 realtimeLike 单元同样支持 multiple(每行独立 TLV);P4 起前端命令表单提供加行/删行(此前仅单行)
 - **realtimeLike 命令体**:`6B 时间(十进制字节,与本库 BeanTime codec 一存,非 BCD——golden 已验证)+ TLV×N`(Phase 3 实现,须复用 BeanTime 语义)
 
 ### 4.4 码位合法性(导入校验规则;依协议库实际语义,经 Oracle 评审修正)
@@ -110,6 +111,7 @@
 - **unitCode 仅允许 0x80~0xFE**:该区间与协议库的自定义 TLV 编解码区完全重合(`realtime_data_codec` 对 0x80~0xFE 按 `类型u8+长度u16+数据` 解码),扩展单元因此天然可被本仓库解析页/服务端模式解码;0x0A~0x7F 属标准预留且库解码直接报 `ErrUnknownTLVType`,0xFF 在 2016 同样不可解码——一律拒绝。unitCode 即国标语境的"信息标识",真实项目中在 0x02 报文内唯一
 - 同包内 unitCode / key 不得重复(校验器强制;unitCode 包级唯一为有意设计,见 §9 G-2 裁决);跨包不校验(同时仅激活一个包)
 - `direction` 仅支持 `up`;`trigger ∈ {manual, periodic, manual+periodic}`;`maxRows ≥ 0`
+- **执行期补强(2026-09-01,修复批 A+B)**:命令码同包唯一(校验器强制);命令/单元 key 禁含冒号(与命令组键命名空间冲突);命令/单元 key 不得与标准报文组键同名(保留表:vehicle/motor/fuelcell/engine/location/extremum/alarm/voltage/temperature/minparallel/batterytemp/fcstack/supercap/supercapextremum)
 
 ### 4.5 四个接入点(现状 → 目标)
 
