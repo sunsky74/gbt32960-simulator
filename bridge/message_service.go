@@ -36,7 +36,7 @@ type MessageService struct {
 // NewMessageService 创建服务。
 func NewMessageService(rt *Runtime) *MessageService {
 	ms := &MessageService{rt: rt, extStops: map[string]chan struct{}{}}
-	if g := ms.loadGroups(); g != nil {
+	if g := ms.loadAllGroups(); g != nil {
 		rt.SetGroups(g)
 	}
 	return ms
@@ -133,10 +133,22 @@ func (s *MessageService) GetGroups() (*schema.GroupsPayload, error) {
 	order := groupOrder(s.GetSchema(s.versionText()))
 	src := s.rt.Groups()
 	if src == nil {
-		src = s.loadGroups()
+		src = s.loadAllGroups()
 		if src == nil {
 			return s.DefaultGroups(s.versionText()), nil
 		}
+	} else if ext := s.loadExtGroups(); len(ext) > 0 {
+		// 实时面板保存后内存快照缺命令组:叠加磁盘扩展组配置(内存优先)。
+		merged := make(map[string]schema.GroupConfig, len(src)+len(ext))
+		for k, v := range src {
+			merged[k] = v
+		}
+		for k, v := range ext {
+			if _, ok := merged[k]; !ok {
+				merged[k] = v
+			}
+		}
+		src = merged
 	}
 	filtered := make(map[string]schema.GroupConfig, len(order))
 	for _, k := range order {
@@ -196,6 +208,9 @@ func (s *MessageService) SaveGroups(payload schema.GroupsPayload) error {
 	if err := s.validateExtRows(groups); err != nil {
 		return err
 	}
+	if err := s.saveExtGroups(groups); err != nil {
+		return err
+	}
 	s.rt.SetGroups(groups)
 	return store.Save(groupsFile, &groups)
 }
@@ -245,12 +260,86 @@ func (s *MessageService) validateExtRows(groups map[string]schema.GroupConfig) e
 	return nil
 }
 
-func (s *MessageService) loadGroups() map[string]schema.GroupConfig {
+// extKeys 激活包的扩展组键集合(实时追加单元 + 命令组),与 GetSchema 的键命名一致。
+func (s *MessageService) extKeys(p *ext.Pack) map[string]bool {
+	if p == nil {
+		return nil
+	}
+	out := map[string]bool{}
+	for _, u := range p.Realtime.AppendUnits {
+		out[u.Key] = true
+	}
+	for _, c := range p.Commands {
+		switch c.Body.Type {
+		case "fields":
+			out[c.Key] = true
+		case "realtimeLike":
+			for _, u := range c.Body.Units {
+				out[c.Key+":"+u.Key] = true
+			}
+		}
+	}
+	return out
+}
+
+// saveExtGroups 把激活包的扩展组配置按包独立存储。
+// 未绑包时直接返回(解绑后的保存不触碰扩展组配置);绑包时以包 id 为键
+// **逐键合并**(评审 P0-1:禁止整体覆盖——实时面板保存的 payload 只含标准组与
+// 追加单元、不含命令组,整体覆盖会抹掉命令组配置),part 为空则不写。
+func (s *MessageService) saveExtGroups(groups map[string]schema.GroupConfig) error {
+	keys := s.extKeys(s.rt.Pack())
+	if len(keys) == 0 {
+		return nil
+	}
+	var all map[string]map[string]schema.GroupConfig
+	if err := store.Load(extGroupsFile, &all); err != nil || all == nil {
+		all = map[string]map[string]schema.GroupConfig{}
+	}
+	part := map[string]schema.GroupConfig{}
+	for k, g := range groups {
+		if keys[k] {
+			part[k] = g
+		}
+	}
+	if len(part) == 0 {
+		return nil
+	}
+	if all[s.rt.Pack().Meta.ID] == nil {
+		all[s.rt.Pack().Meta.ID] = map[string]schema.GroupConfig{}
+	}
+	for k, v := range part {
+		all[s.rt.Pack().Meta.ID][k] = v
+	}
+	return store.Save(extGroupsFile, &all)
+}
+
+// loadAllGroups 读标准组(message.json)并叠加激活包的扩展组配置(extgroups.json)。
+// 两个文件都无数据时返回 nil,触发 GetGroups 的默认值兜底。
+func (s *MessageService) loadAllGroups() map[string]schema.GroupConfig {
 	var g map[string]schema.GroupConfig
 	if err := store.Load(groupsFile, &g); err != nil || g == nil {
+		g = map[string]schema.GroupConfig{}
+	}
+	for k, v := range s.loadExtGroups() {
+		g[k] = v
+	}
+	if len(g) == 0 {
 		return nil
 	}
 	return g
+}
+
+// loadExtGroups 读取激活包的扩展组配置(extgroups.json 按包 id 取;未绑包/无数据返回 nil)。
+func (s *MessageService) loadExtGroups() map[string]schema.GroupConfig {
+	p := s.rt.Pack()
+	if p == nil {
+		return nil
+	}
+	var all map[string]map[string]schema.GroupConfig
+	if err := store.Load(extGroupsFile, &all); err != nil || all == nil {
+		return nil
+	}
+	return all[p.Meta.ID]
 }
 
 // assembleBody 组装 0x02/0x03 报文体:标准体(typed)+ 激活扩展包的追加 TLV。

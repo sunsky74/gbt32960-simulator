@@ -42,12 +42,17 @@ func (rt *Runtime) replaceClient(c *engine.Client) {
 }
 
 // SetConnCfg 保存连接配置快照,并按其 ExtensionPack 解析激活扩展包。
+// 换绑/换版本时内存组快照失效:后续 GetGroups 回读磁盘并按包合并扩展组配置。
 func (rt *Runtime) SetConnCfg(cfg *ConnectionConfig) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
+	prev := rt.connCfg
 	rt.connCfg = cfg
 	rt.pack = resolvePack(rt.packs, cfg)
 	rt.syncExtCommands(rt.pack)
+	if prev == nil || cfg == nil || prev.Version != cfg.Version || prev.ExtensionPack != cfg.ExtensionPack {
+		rt.groups = nil
+	}
 }
 
 // ConnCfg 返回连接配置快照(可能为 nil)。

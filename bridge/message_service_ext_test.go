@@ -459,3 +459,64 @@ func TestSaveGroupsExtDryRunPasses(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestExtGroupsPersistAcrossUnbind(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	rt := newExtCmdRT(t, true)
+	ms := NewMessageService(rt)
+	payload := ms.DefaultGroups("2016")
+	m := payload.ToMap()
+	m["extData09"] = schema.GroupConfig{Enabled: true, Rows: []map[string]any{{"seq": 42, "volt": 3.3}}}
+	if err := ms.SaveGroups(*schema.FromMap(m, nil)); err != nil {
+		t.Fatal(err)
+	}
+	// 解绑:前端此时只提交标准组载荷
+	rt.SetConnCfg(&ConnectionConfig{Version: "2016"})
+	std := schema.FromMap(map[string]schema.GroupConfig{
+		"vehicle": {Enabled: true, Rows: m["vehicle"].Rows},
+	}, []string{"vehicle"})
+	if err := ms.SaveGroups(*std); err != nil {
+		t.Fatal(err)
+	}
+	// 重绑:命令组配置应从 extgroups.json 恢复,而非默认值
+	rt.SetConnCfg(&ConnectionConfig{Version: "2016", ExtensionPack: "extcmd"})
+	got, err := ms.GetGroups()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gm := got.ToMap()
+	g, ok := gm["extData09"]
+	if !ok || g.Rows[0]["seq"] != float64(42) {
+		t.Fatalf("重绑后命令组配置应恢复, got %+v", gm["extData09"])
+	}
+	if v, ok := gm["vehicle"]; !ok || !v.Enabled {
+		t.Fatal("标准组配置应保持")
+	}
+}
+
+func TestExtGroupsSurviveStandardOnlySave(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	rt := newExtCmdRT(t, true)
+	ms := NewMessageService(rt)
+	payload := ms.DefaultGroups("2016")
+	m := payload.ToMap()
+	m["extData09"] = schema.GroupConfig{Enabled: true, Rows: []map[string]any{{"seq": 42, "volt": 3.3}}}
+	if err := ms.SaveGroups(*schema.FromMap(m, nil)); err != nil {
+		t.Fatal(err)
+	}
+	// 实时面板保存:order 仅标准组键,payload 不含命令组——不得覆盖命令组配置
+	std := schema.FromMap(map[string]schema.GroupConfig{
+		"vehicle": {Enabled: true, Rows: m["vehicle"].Rows},
+	}, []string{"vehicle"})
+	if err := ms.SaveGroups(*std); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ms.GetGroups()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gm := got.ToMap()
+	if g, ok := gm["extData09"]; !ok || g.Rows[0]["seq"] != float64(42) {
+		t.Fatalf("标准组保存不得覆盖命令组配置, got %+v", gm["extData09"])
+	}
+}
