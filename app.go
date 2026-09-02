@@ -37,6 +37,7 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.console.SetContext(ctx)
+	a.extsvc.SetContext(ctx)
 	go a.forwarder.Start(ctx)
 }
 

@@ -1,19 +1,24 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted } from 'vue'
 import CollapsibleCard from '../layout/CollapsibleCard.vue'
 import { cfg } from '../../composables/useConnConfig'
 import { formRef, rules, saveOnly, onVersionChange } from '../../composables/useConnActions'
 import * as ExtService from '../../../wailsjs/go/bridge/ExtService'
+import { store } from '../../state'
 
-const packOptions = ref<{ value: string; label: string }[]>([])
-onMounted(async () => {
+async function refreshPacks() {
   try {
-    const packs = await ExtService.ListPacks()
-    packOptions.value = packs.map((p) => ({ value: p.id, label: `${p.label} (${p.baseVersion})` }))
+    store.packs = await ExtService.ListPacks()
   } catch {
-    packOptions.value = []
+    store.packs = []
   }
-})
+}
+
+const packOptions = computed(() =>
+  store.packs.map((p) => ({ value: p.id, label: `${p.label} (${p.baseVersion})` })),
+)
+
+onMounted(refreshPacks)
 </script>
 
 <template>
@@ -42,7 +47,13 @@ onMounted(async () => {
       </a-form-item>
 
       <a-form-item label="扩展包" name="extensionPack">
-        <a-select v-model:value="cfg.extensionPack" :options="packOptions" allow-clear placeholder="不使用扩展包" />
+        <a-select
+          v-model:value="cfg.extensionPack"
+          :options="packOptions"
+          allow-clear
+          placeholder="不使用扩展包"
+          @dropdown-visible-change="(open: boolean) => open && refreshPacks()"
+        />
       </a-form-item>
 
       <a-form-item label="心跳间隔" name="heartbeatSec">

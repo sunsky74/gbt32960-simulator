@@ -1,10 +1,13 @@
 package bridge
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"gbt32960-simulator/internal/ext"
 	"gbt32960-simulator/internal/schema"
@@ -27,8 +30,12 @@ const extGroupsFile = "extgroups.json"
 
 // ExtService 扩展包管理:扫描 packs 目录并提供列表/重载。
 type ExtService struct {
-	rt *Runtime
+	rt  *Runtime
+	ctx context.Context
 }
+
+// SetContext 注入 wails 上下文(原生文件对话框需要)。
+func (s *ExtService) SetContext(ctx context.Context) { s.ctx = ctx }
 
 // NewExtService 创建服务并预加载一次包集合。
 // 绑定激活发生在 GetConfig 回填 connCfg 时(见本任务 GetConfig 修改):
@@ -118,6 +125,17 @@ func clearExtGroupsFor(packID string) error {
 	}
 	delete(all, packID)
 	return store.Save(extGroupsFile, &all)
+}
+
+// PickPackFile 打开文件选择对话框,返回所选 JSON 扩展包路径(取消返回空串)。
+// 前端 wailsjs runtime 无对话框导出(v2.15 注入层不含 dialog),故由 bridge 侧提供。
+func (s *ExtService) PickPackFile() (string, error) {
+	return runtime.OpenFileDialog(s.ctx, runtime.OpenDialogOptions{
+		Title: "选择扩展包",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "JSON", Pattern: "*.json"},
+		},
+	})
 }
 
 // ImportPack 校验并导入一个扩展包文件到 packs 目录(同 id 覆盖,绑定自动跟随新内容)。

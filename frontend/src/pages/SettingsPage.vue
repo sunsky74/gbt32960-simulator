@@ -1,17 +1,27 @@
+<script setup lang="ts">
+import PackManager from '../components/PackManager.vue'
+</script>
+
 <template>
-  <div class="page-root">
-    <div class="zone">
-      <div class="zone-body settings-empty">
-        <div class="console-empty-title">设置</div>
-        <div class="console-empty-sub">预留入口(主题切换已在顶栏);更多设置项随功能模块逐步提供</div>
-      </div>
-    </div>
+  <div class="page">
+    <div class="section-title">扩展包管理</div>
+    <p class="section-hint">导入 JSON 扩展包(实时私有数据单元 / 私有命令字),在连接配置中绑定后即可使用。</p>
+    <PackManager />
   </div>
 </template>
 
 <style scoped>
-.settings-empty {
-  padding: 64px 16px;
-  text-align: center;
+.page {
+  padding: 16px;
+}
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.section-hint {
+  color: #888;
+  font-size: 12px;
+  margin-bottom: 12px;
 }
 </style>

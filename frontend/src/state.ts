@@ -10,12 +10,14 @@ import {
   type GroupsState,
 } from './api/backend'
 import type { bridge } from '../wailsjs/go/models'
+import * as ExtService from '../wailsjs/go/bridge/ExtService'
 
 export const store = reactive({
   connState: 'idle',
   connBusy: false,
   config: null as ConnConfig | null,
   profiles: [] as bridge.ProfileSummary[],
+  packs: [] as bridge.PackInfo[],
   schema: [] as GroupSchema[],
   extSchema: [] as GroupSchema[],
   groups: {} as GroupsState,
@@ -63,6 +65,11 @@ export async function loadInitialData() {
   try {
     store.config = await ConnectionService.GetConfig()
     syncSavedBinding(store.config ?? {})
+    try {
+      store.packs = await ExtService.ListPacks()
+    } catch {
+      store.packs = []
+    }
     applySchema(await MessageService.GetSchema(store.config?.version ?? '2016'))
     const payload = await MessageService.GetGroups()
     store.groups = payloadToState(payload)

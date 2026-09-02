@@ -76,6 +76,7 @@ export namespace bridge {
 	    vendor?: string;
 	    baseVersion: string;
 	    unitCount: number;
+	    commandCount: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new PackInfo(source);
@@ -88,6 +89,7 @@ export namespace bridge {
 	        this.vendor = source["vendor"];
 	        this.baseVersion = source["baseVersion"];
 	        this.unitCount = source["unitCount"];
+	        this.commandCount = source["commandCount"];
 	    }
 	}
 	export class PreviewResult {
