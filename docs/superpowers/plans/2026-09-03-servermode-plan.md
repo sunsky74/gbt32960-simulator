@@ -348,7 +348,7 @@ git commit -m "feat(servermode): 类型基座——Config/Hooks/事件载荷与�
 - Consumes: `codec.ProtocolCodec.Decode`(gb32960 库)、`frame.CommandCode/PayloadType`、`types.ResponseByCode`、Task 2 的 `FrameKind`
 - Produces:
   - `type Decoded struct { Raw []byte; PM *frame.ProtocolMessage; Version api.GBTVersion; Cmd byte; VIN string; Kind FrameKind; Encrypted bool; Err error }`
-  - `func decodeFrame(raw []byte) Decoded` — Err 仅表示帧结构/BCC 解码失败(PM=nil);Kind: 加密→KindEncrypted、PayloadType(v,cmd)==nil→KindUnknown、否则 KindNormal;2025 判定 `PM.Version == api.V2025`
+  - `func decodeFrame(raw []byte) Decoded` — Err 仅表示帧结构/BCC 解码失败(PM=nil);Kind: 加密(raw[21]≠0x01,Decode 前短路)→KindEncrypted、2016 命令不在白名单 knownCmds2016→KindUnknown、否则 KindNormal(白名单而非 PayloadType 判定,心跳/校时载荷类型为 nil 但属正常命令);2025 判定 `PM.Version == api.V2025`
 
 - [ ] **Step 1: 写失败测试**
 
@@ -420,6 +420,7 @@ func TestDecodeUnknownCommand(t *testing.T) {
 	// 0x30 在上行预留区但不在服务端已知命令白名单 → unknown
 	raw := loginFrame(t)
 	raw[2] = 0x30
+	raw[len(raw)-1] ^= 0x01 ^ 0x30 // 命令字节改动后同步修正 BCC(否则库 Decode 先报 BCC 错)
 	d := decodeFrame(raw)
 	if d.Err != nil {
 		t.Fatalf("预留区命令应可帧解码: %v", d.Err)
@@ -1542,7 +1543,9 @@ func (s *Server) removeConn(c *conn) {
 	delete(s.conns, c)
 	s.mu.Unlock()
 	_ = c.nc.Close()
-	if c.vin != "" {
+	// 仅已登入连接才注销会话:被拒的重复登入连接 vin 已置位但未 authed,
+	// 若按 vin 注销会误删原会话(评审 watch-out)
+	if c.authed {
 		if _, ok := s.registry.Remove(c.vin); ok {
 			s.hooks.OnSession(SessionEvent{VIN: c.vin, Peer: c.nc.RemoteAddr().String(), Online: false, LastSeen: s.hooks.Now()})
 		}
@@ -1971,7 +1974,7 @@ Expected: go 侧 PASS;`frontend/wailsjs/go/bridge/ServerService.js` 出现(手�
 
 - [ ] **Step 6: 任务级验收**
 
-AC-6:`go build ./...` 通过且绑定面五方法齐备(Start/Stop/Status/Sessions/ExportLog + LoadConfig);AC-9:非环回 force 测试 PASS。
+AC-6:`go build ./...` 通过且绑定面**六**方法齐备(Start/Stop/**UpdateIdle**/Status/Sessions/ExportLog + LoadConfig);AC-9:非环回 force 测试 PASS。
 
 - [ ] **Step 7: Commit**
 
