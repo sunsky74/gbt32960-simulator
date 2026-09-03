@@ -36,3 +36,9 @@ coverage.*
 .omo/
 .agents/
 .cache/
+
+# ---- SDD 执行台账(agent 产物) ----
+.superpowers/
+
+# ---- playwright-mcp 调试产物(截图/日志) ----
+.playwright-mcp/
