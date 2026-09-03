@@ -43,11 +43,11 @@ func NewMessageService(rt *Runtime) *MessageService {
 }
 
 // GetSchema 返回指定版本的组定义:标准组 + 激活扩展包的追加单元 + 扩展命令组。
-// 版本门禁:包的 baseVersion 与请求版本一致才合并。
+// 版本门禁:包的 baseVersion 与请求版本一致才合并;scope 门禁:包须声明 client 应用范围。
 // 命令组 Source="command",前端据此分流到自定义数据 tab。
 func (s *MessageService) GetSchema(version string) []schema.GroupSchema {
 	groups := standardGroups(version)
-	if p := s.rt.Pack(); p != nil && p.Meta.BaseVersion == version {
+	if p := s.rt.Pack(); p != nil && ext.ScopeHas(p, ext.ScopeClient) && p.Meta.BaseVersion == version {
 		for _, u := range p.Realtime.AppendUnits {
 			groups = append(groups, ext.CompileUnit(u))
 		}
@@ -108,7 +108,7 @@ func (s *MessageService) DefaultGroups(version string) *schema.GroupsPayload {
 
 func (s *MessageService) unitDefaults(version string) map[string]schema.RowValue {
 	out := map[string]schema.RowValue{}
-	if p := s.rt.Pack(); p != nil && p.Meta.BaseVersion == version {
+	if p := s.rt.Pack(); p != nil && ext.ScopeHas(p, ext.ScopeClient) && p.Meta.BaseVersion == version {
 		for _, u := range p.Realtime.AppendUnits {
 			out[u.Key] = ext.DefaultsFor(u)
 		}
@@ -534,9 +534,35 @@ func packCommand(p *ext.Pack, key string) *ext.Command {
 }
 
 // assembleCommandBody 组装扩展命令报文体:
-// fields=平铺字段单行;realtimeLike=6B 十进制时间 + 单元 TLV×N。
+// fields=平铺字段单行;realtimeLike=6B 十进制时间 + 单元 TLV×N;
+// 私有远控 0x8A 应答模板=表21头(命令时间6B+流水号2B+N=1+子指令码1B)+ 应答体平铺字段。
+// 0x8A 模板约定 fields 首字段 key="serialNumber"(u16),编码时提取填入表21头流水号(回显下行请求)。
 func (s *MessageService) assembleCommandBody(cmd ext.Command, at time.Time) ([]byte, error) {
 	groups := s.rt.Groups()
+	if cmd.RemoteSub > 0 {
+		grp, ok := groups[cmd.Key]
+		if !ok || !grp.Enabled || len(grp.Rows) == 0 {
+			return nil, fmt.Errorf("扩展命令 %s 未配置或未启用", cmd.Key)
+		}
+		row := grp.Rows[0]
+		if len(cmd.Body.Fields) == 0 || cmd.Body.Fields[0].Key != "serialNumber" || cmd.Body.Fields[0].Type != "u16" {
+			return nil, fmt.Errorf("0x8A 应答模板 %s 首字段须为 serialNumber(u16)", cmd.Key)
+		}
+		body, err := ext.EncodeFields(cmd.Body.Fields[1:], row)
+		if err != nil {
+			return nil, fmt.Errorf("扩展命令 %s: %w", cmd.Key, err)
+		}
+		serial, err := ext.EncodeFields([]ext.FieldSpec{{Key: "serialNumber", Type: "u16"}}, row)
+		if err != nil {
+			return nil, fmt.Errorf("扩展命令 %s 流水号: %w", cmd.Key, err)
+		}
+		t := ext.EncodeBeanTime(at)
+		out := make([]byte, 0, 10+len(body))
+		out = append(out, t[:]...)
+		out = append(out, serial[0], serial[1], 0x01, byte(cmd.RemoteSub))
+		out = append(out, body...)
+		return out, nil
+	}
 	switch cmd.Body.Type {
 	case "fields":
 		grp, ok := groups[cmd.Key]
@@ -589,6 +615,9 @@ func (s *MessageService) SendExtension(key string) error {
 	payload, err := s.assembleCommandBody(*cmd, time.Now())
 	if err != nil {
 		return err
+	}
+	if cmd.RemoteSub > 0 {
+		return c.RespondRemoteAck(payload)
 	}
 	return c.Send(context.Background(), byte(cmd.Code), engine.NewRawBody(s.version(), payload))
 }

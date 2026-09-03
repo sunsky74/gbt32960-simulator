@@ -57,10 +57,18 @@
 | `label` | 显示名 | 非空;在包列表、绑定下拉框中显示 |
 | `vendor` | 厂商名 | 可选,仅展示用 |
 | `baseVersion` | 协议版本 | 只能填 `"2016"` 或 `"2025"`,与连接档案的协议版本必须一致 |
+| `scope` | 应用范围 | 可选,数组,取值 `"client"`(客户端模拟)/ `"parser"`(报文解析);缺省视为 `["client"]` |
 
 ```json
-"meta": { "id": "sample-private", "label": "示例·私有遥测包", "vendor": "示例", "baseVersion": "2016" }
+"meta": { "id": "sample-private", "label": "示例·私有遥测包", "vendor": "示例", "baseVersion": "2016", "scope": ["client", "parser"] }
 ```
+
+**应用范围(scope)说明**:
+
+- `client`:包参与客户端模拟——实时追加单元、私有命令、私有远控 0x8A 应答模板(即原有全部行为)。
+- `parser`:包出现在**报文解析页**的"扩展包"下拉框中;选中后解析报文时,自定义数据单元(unitCode 0x80~0xFE)按包内字段 DSL 逐字段解码(字段名、类型、物理值 = 线值×scale+offset),与发送侧编码互逆。
+- 声明 `["parser"]`(不含 client)的包**只**用于解析页:不参与客户端模拟,连接档案也不会合并它的扩展组。
+- 解析时包的 `baseVersion` 与报文实际版本不一致,自定义单元退化为通用展示并给出告警。
 
 ### 3.2 realtime.appendUnits(实时追加单元,可多个)
 
@@ -100,10 +108,28 @@
 | `trigger` | 触发方式 | `"manual"`(仅手动)/ `"periodic"`(仅周期)/ `"manual+periodic"`(手动+周期) |
 | `body` | 命令体 | 见下 |
 
-`body.type` 两种:
+`body.type` 三种:
 
 - **`fields`**:平铺字段表,表单为**单行**。`body.fields` 至少一个字段。
 - **`realtimeLike`**:与实时报文同构(命令体 = 6 字节时间 + 若干 TLV)。`body.units` 至少一个单元,单元结构与 §3.2 完全一致;`multiple: true` 时**多行,每行一个 TLV**。
+- **`remoteAck`(0x8A 远程控制应答模板)**:命令 `code` 固定 `138`(0x8A)、`direction: "up"`,额外声明 `remoteSub`(子指令码 0x01~0x11,私有远控 私有远控协议)。发送时走**应答标志 0x01**,载荷 = 表21头(命令时间 6B + 流水号 2B + 命令总数 1 + 子指令码 1B)+ 应答体平铺字段。**约定**:`body.fields` 首字段必须为 `{"key": "serialNumber", "type": "u16"}`(编码时提取填入表21头流水号,用于回显下行请求);应答体尾部可用一个 `type: "tail"` 字段承载变长的故障列表(hex: 故障总数 N 1B + N×4B,无故障填 `00`)。仅 2016 版支持。
+
+```json
+{
+  "key": "ackRemoteLock", "label": "0x8A/0x09 锁车限速 应答", "code": 138,
+  "direction": "up", "trigger": "manual", "remoteSub": 9,
+  "body": { "type": "fields", "fields": [
+    { "key": "serialNumber", "label": "命令流水号(回显下行)", "type": "u16" },
+    { "key": "lockStatus", "label": "锁车状态", "type": "bits", "bits": [
+      { "index": 0, "label": "锁车状态(bit0)" }, { "index": 1, "label": "锁车状态(bit1)" },
+      { "index": 2, "label": "限速状态" }
+    ] },
+    { "key": "faultList", "label": "故障列表(hex: 总数N + N×4B,无故障 00)", "type": "tail" }
+  ] }
+}
+```
+
+完整示例见 `docs/extpack/local-pack-v16.json`(私有远控 2016 实时扩展 11 单元 + 0x8A 远控 16 个子指令应答模板)。
 
 ```json
 "commands": [
@@ -144,6 +170,7 @@
 | `f32` | 32 位浮点(IEEE 754) | 4 | — |
 | `bits` | 位段(开关位) | 1/2/4(按最大位号自动) | 每位一个开关 |
 | `bytes` | 原样字节 | 1~255(由 `length` 指定) | hex 字符串输入 |
+| `tail` | 变长尾部 | 任意(含 0) | hex 字符串输入,原样追加;用于按数量变化的尾部(如故障列表);不支持 scale/offset/length/bits,建议放字段表末尾 |
 
 ### 数值变换契约(scale / offset)
 

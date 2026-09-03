@@ -227,6 +227,12 @@ func (c *Client) RespondRemoteSecondLayer(headerHex, bodyHex string) error {
 	return c.writeFrameWithResponse(0x8A, types.ResponseCommand, payload)
 }
 
+// RespondRemoteAck 发送 私有远控 0x8A 单应答包(应答标志 0x01,载荷=表21头+应答体)。
+// 与 2026-09-02 真实车端回执模型对齐:一个应答包完成执行与应答。
+func (c *Client) RespondRemoteAck(payload []byte) error {
+	return c.writeFrameWithResponse(0x8A, types.ResponseSuccess, payload)
+}
+
 // writeFrameWithResponse 发送任意应答类型的帧;payload 为 nil 时为空载荷。
 func (c *Client) writeFrameWithResponse(cmd byte, respType types.ResponseType, payload []byte) error {
 	c.mu.Lock()

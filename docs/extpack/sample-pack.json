@@ -1,5 +1,5 @@
 {
-  "meta": { "id": "sample-private", "label": "示例·私有遥测包", "vendor": "示例", "baseVersion": "2016" },
+  "meta": { "id": "sample-private", "label": "示例·私有遥测包", "vendor": "示例", "baseVersion": "2016", "scope": ["client", "parser"] },
   "realtime": {
     "appendUnits": [
       {
