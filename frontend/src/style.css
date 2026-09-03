@@ -7,6 +7,11 @@
    Dark 为既有基准(视觉不变),Light 为新增主题。
    ============================================================ */
 
+/* 主题无关的字体 token:hex/JSON 等数据展示统一走 --font-mono */
+:root {
+  --font-mono: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
 /* Dark 主题变量(默认:首帧无闪烁兜底;未设置 data-theme 时即 Dark) */
 :root,
 :root[data-theme='dark'] {
@@ -513,6 +518,7 @@ body {
   margin-left: auto;
   color: var(--text-tertiary);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .console-list {
@@ -569,6 +575,7 @@ body {
 .row-bytes {
   color: var(--text-tertiary);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .row-detail {
@@ -586,6 +593,8 @@ body {
 }
 
 .detail-hex {
+  font-family: var(--font-mono);
+  letter-spacing: 0.3px;
   word-break: break-all;
   font-size: 12px;
   margin-bottom: 6px;
@@ -598,7 +607,7 @@ body {
   white-space: pre-wrap;
   max-height: 260px;
   overflow-y: auto;
-  font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+  font-family: var(--font-mono);
 }
 
 .list-more {
@@ -793,4 +802,23 @@ body.dragging-ns {
 body.dragging-ew {
   user-select: none;
   cursor: col-resize;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* 设置 → 外观 → 界面动画关闭:与系统 reduced-motion 同等力度的全局抑制 */
+html[data-no-anim] *,
+html[data-no-anim] *::before,
+html[data-no-anim] *::after {
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
 }
