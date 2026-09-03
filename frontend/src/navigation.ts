@@ -1,5 +1,6 @@
 import { ref, markRaw, type Component } from 'vue'
 import {
+  AppstoreOutlined,
   CarOutlined,
   SearchOutlined,
   DesktopOutlined,
@@ -8,6 +9,7 @@ import {
 import ClientSimulatorPage from './pages/ClientSimulatorPage.vue'
 import PacketParserPage from './pages/PacketParserPage.vue'
 import ServerModePage from './pages/ServerModePage.vue'
+import ExtensionsPage from './pages/ExtensionsPage.vue'
 import SettingsPage from './pages/SettingsPage.vue'
 
 export interface NavItem {
@@ -23,6 +25,7 @@ export const navItems: NavItem[] = [
   { key: 'client', title: '客户端模拟', icon: markRaw(CarOutlined), component: markRaw(ClientSimulatorPage) },
   { key: 'parser', title: '报文解析', icon: markRaw(SearchOutlined), component: markRaw(PacketParserPage) },
   { key: 'server', title: '服务端模式', icon: markRaw(DesktopOutlined), component: markRaw(ServerModePage) },
+  { key: 'extensions', title: '扩展包', icon: markRaw(AppstoreOutlined), component: markRaw(ExtensionsPage) },
 ]
 
 export const bottomNavItems: NavItem[] = [

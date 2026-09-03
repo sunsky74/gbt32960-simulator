@@ -15,7 +15,12 @@ async function refreshPacks() {
 }
 
 const packOptions = computed(() =>
-  store.packs.map((p) => ({ value: p.id, label: `${p.label} (${p.baseVersion})` })),
+  store.packs.map((p) => ({
+    value: p.id,
+    label: p.enabled ? `${p.label} (${p.baseVersion})` : `${p.label} (${p.baseVersion}) · 已停用`,
+    // 停用包不可新选;当前已绑定的停用包保持可选,便于在 UI 中看到并换绑
+    disabled: !p.enabled && p.id !== cfg.extensionPack,
+  })),
 )
 
 onMounted(refreshPacks)
@@ -51,7 +56,7 @@ onMounted(refreshPacks)
           v-model:value="cfg.extensionPack"
           :options="packOptions"
           allow-clear
-          placeholder="不使用扩展包"
+          placeholder="请选择协议扩展包"
           @dropdown-visible-change="(open: boolean) => open && refreshPacks()"
         />
       </a-form-item>
