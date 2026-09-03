@@ -16,6 +16,7 @@ type App struct {
 	parser    *bridge.ParserService
 	extsvc    *bridge.ExtService
 	sys       *bridge.SystemService
+	server    *bridge.ServerService
 	forwarder *bridge.Forwarder
 }
 
@@ -31,6 +32,7 @@ func NewApp() *App {
 		parser:    bridge.NewParserService(rt),
 		extsvc:    bridge.NewExtService(rt),
 		sys:       bridge.NewSystemService(),
+		server:    bridge.NewServerService(),
 		forwarder: fwd,
 	}
 }
@@ -41,6 +43,7 @@ func (a *App) startup(ctx context.Context) {
 	a.console.SetContext(ctx)
 	a.extsvc.SetContext(ctx)
 	a.sys.SetContext(ctx)
+	a.server.SetContext(ctx)
 	go a.forwarder.Start(ctx)
 }
 
@@ -49,4 +52,5 @@ func (a *App) shutdown(ctx context.Context) {
 	if c := a.rt.CurrentClient(); c != nil {
 		c.Disconnect()
 	}
+	_ = a.server.Stop()
 }
