@@ -822,3 +822,11 @@ html[data-no-anim] *::after {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
 }
+
+/* ---- 服务端模式:报文行特殊颜色(kind 区分,亮暗主题各自定义) ---- */
+.frame-unknown td { color: #d46b08; }          /* 橙:未知命令字 */
+.frame-encrypted td { color: #9254de; }        /* 紫:加密帧 */
+.frame-warn td { color: #cf1322; }             /* 红:服务端告警(空闲超时/超长/断开) */
+:root[data-theme='light'] .frame-unknown td { color: #ad4e00; }
+:root[data-theme='light'] .frame-encrypted td { color: #6424c2; }
+:root[data-theme='light'] .frame-warn td { color: #a8071a; }
