@@ -26,7 +26,7 @@
 
 ### Current Requirement Flow
 
-车端连接 → 服务端 accept(连接数上限内)→ 登录前 30s 读超时窗口内等待 0x01 车辆登入 → 全放行:注册会话(VIN 索引)+ 回成功应答 → 之后车端可发 0x02 实时 / 0x03 补发 / 0x07 心跳 / 0x08 校时,服务端逐帧解码、发事件、自动应答 → 0x04 登出回应答后延迟断开,或读超时 5min 剔除 → 会话注销、offline 事件。异常分支:BCC/长度校验失败丢帧重同步(不断连);未登入连接发受限命令丢弃并告警;2025($$)帧只读展示不应答;加密帧原样 hex 展示并提示不支持。所有收到 的帧进入 500 条环形缓冲,页面实时渲染最近 200 条,用户可手动导出全部缓冲。
+车端连接 → 服务端 accept(连接数上限内)→ 等待 0x01 车辆登入 → 全放行:注册会话(VIN 索引)+ 回成功应答 → 之后车端可发 0x02 实时 / 0x03 补发 / 0x07 心跳 / 0x08 校时,服务端逐帧解码、发事件、自动应答 → 0x04 登出回应答后延迟断开;空闲检测开关开启时,空闲超出配置时长的连接被关闭并在控制台输出 → 会话注销、offline 事件。异常分支:BCC/长度校验失败丢帧重同步(不断连);未登入连接发受限命令丢弃并告警;2025($$)帧只读展示不应答;加密帧原样 hex 展示并提示不支持。所有收到 的帧进入 500 条环形缓冲,页面实时渲染最近 200 条,用户可手动导出全部缓冲。
 
 ### Current Requirement Technical Architecture
 
@@ -38,7 +38,7 @@
 internal/servermode/
 ├── server.go      # Server:Start(ctx, addr)/Stop();accept loop、maxConns=64、
 │                  #   per-conn goroutine、WaitGroup 优雅停机
-├── conn.go        # 单连接帧循环:登录前读超时 30s、登入后 5min;
+├── conn.go        # 单连接帧循环 + 空闲检测(开关+时长可配,默认开/60s);
 │                  #   连接状态 {VIN, authed, version, loginAt, lastSeen}
 ├── registry.go    # SessionRegistry:RWMutex + map[VIN]*Conn;putIfAbsent 语义(重复登入后到者拒绝)
 ├── handlers.go    # 0x01~0x08 处理器矩阵 map[cmd]Handler
@@ -72,13 +72,14 @@ bridge/server_service.go   # ServerService:Start(addr)/Stop()/Status()/Sessions(
 
 - [AC-1] (Source: Overall Business Flow) 启动服务后,车端(本模拟器客户端引擎或真实设备)可完成 0x01 登入 → 0x02/0x07/0x08 → 0x04 登出全流程,页面实时展示会话上线/离线与每条报文
 - [AC-2] (Source: Current Requirement Flow) 0x01 自动回成功应答;同 VIN 第二连接登入回失败应答且原会话不受影响;0x08 校时应答体含当前系统时间(BeanTime)
-- [AC-3] (Source: Current Requirement Flow) 0x04 登出:车端收到应答后连接才被服务端关闭(延迟 ~200ms);5min 无读连接被剔除并发 offline 事件
+- [AC-3] (Source: Current Requirement Flow) 0x04 登出:车端收到应答后连接才被服务端关闭(延迟 ~200ms)
 - [AC-4] (Source: Current Requirement Flow) BCC 校验失败/垃圾字节流不断连,重新同步后可继续收帧并产生告警事件;2025($$)帧解析展示并标注"只读",不产生应答;加密帧原样展示并提示不支持
 - [AC-5] (Source: Current Requirement Flow) 手动导出生成文本日志(时间/VIN/命令/hex),内容与环形缓冲一致
 - [AC-6] (Source: Development Architecture) `internal/servermode` 不 import `internal/engine`;`bridge.ServerService` 提供 Start/Stop/Status/Sessions/ExportLog 绑定;重复 Start 幂等
 - [AC-7] (Source: Existing Architecture Fit) 复用 gb32960/parser/store/forwarder 现有资产,`go.mod` 零变化(零新依赖)
 - [AC-8] (Source: Existing Architecture Fit) 服务未启动时,现有功能逐字节不变(现有测试全绿,其他页面无任何 UI/行为变化)
 - [AC-9] (Source: New Architecture Enablement) 全部安全边界生效:默认 127.0.0.1(非环回绑定前端二次确认)、maxConns=64、单帧 8KB 上限、环形缓冲 500 条、停机 ≤2s
+- [AC-10] (Source: Current Requirement Flow) 空闲检测开关:开启时(默认 60s,可配置并即时生效)空闲超出时长的连接被关闭,产生 offline 事件与控制台「空闲超时关闭」输出;关闭时不做任何空闲剔除,连接可长期挂起
 
 ## 4. 端到端业务流
 
@@ -115,8 +116,8 @@ bridge/server_service.go   # ServerService:Start(addr)/Stop()/Status()/Sessions(
 
 | 场景 | 行为 |
 |---|---|
-| 登录前 30s 无有效帧 | close |
-| 登录后 5min 无读 | close + offline 事件 |
+| 空闲检测开关 ON(默认) | 空闲时长(默认 60s,可配 5~3600)内无任何帧的连接(登录前后统一)→ close + offline 事件 + 控制台输出(server:warn「空闲超时关闭」) |
+| 空闲检测开关 OFF | 不校验空闲连接(可无限期挂起;用于观察车端在无服务端干预下的重连/保活行为) |
 | BCC/长度校验失败 | 丢弃该帧重新同步(不断连)+ warn 事件 |
 | 单帧 > 8KB | 丢弃重同步 + warn |
 | 非法命令码 | 展示 + warn,不应答 |
@@ -133,7 +134,7 @@ bridge/server_service.go   # ServerService:Start(addr)/Stop()/Status()/Sessions(
 
 ### 5.4 前端契约
 
-- 启动表单:IP(默认 127.0.0.1)+ 端口(默认 32960),持久化 `store/server.json`;启动/停止按钮状态机;非环回地址二次确认
+- 启动表单:IP(默认 127.0.0.1)+ 端口(默认 32960)+ 空闲检测开关(默认开)+ 空闲时长秒数(默认 60,范围 5~3600),均持久化 `store/server.json`;启动/停止按钮状态机;非环回地址二次确认
 - 会话表:VIN / IP / 端口 / 状态 / 最后活跃;报文表:时间 / 来源 / 命令 / hex(前端渲染最近 200 条)
 - 报文行点击 → 详情抽屉:`ByteGridView` + `FieldTableView`(走 `ParseWithPack`,支持扩展包自定义单元解码)
 - 导出:wails 保存对话框 → 文本行 `[时间] [VIN] [命令] [hex]`
@@ -163,3 +164,4 @@ bridge/server_service.go   # ServerService:Start(addr)/Stop()/Status()/Sessions(
 | D7 | 标准库 net goroutine-per-conn(非 gnet/evio/ants) | 调研:golang/go#66956、CloudWeGo p99 实测、darkinno 10k 压测 |
 | D8 | 登出应答后延迟 ~200ms 断开 | SuperAlways 实践:车端须先收到应答 |
 | D9 | 集成测试以 internal/engine Client 为车端驱动 | 资产红利:现成 2016 客户端 |
+| D10 | 空闲检测:可配置开关(默认开,时长默认 60s/范围 5~3600,登录前后统一),关闭时完全不校验;替代原固定两级超时(登录前 30s/登录后 5min) | 用户裁决(2026-09-03 spec 评审) |
