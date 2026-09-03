@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"gbt32960-simulator/internal/ext"
 	"github.com/sunsky74/gb32960/api"
 	"github.com/sunsky74/gb32960/types"
 	"github.com/sunsky74/gb32960/utils"
@@ -26,18 +27,26 @@ type Field struct {
 	Note      string `json:"note,omitempty"`
 }
 
+// ByteIssue 报文中与协议定义不符的异常字节区间(前端字节视图微红高亮用)。
+type ByteIssue struct {
+	Start int    `json:"start"` // 区间起始 offset(含)
+	End   int    `json:"end"`   // 区间结束 offset(不含)
+	Note  string `json:"note"`
+}
+
 // Result 解析结果。
 type Result struct {
-	TotalBytes  int      `json:"totalBytes"`
-	Version     string   `json:"version"`   // V2016 / V2025
-	VersionByte string   `json:"versionByte"` // "##" / "$$"
-	Command     string   `json:"command"`    // 如 "0x01 车辆登入"
-	ResponseType string  `json:"responseType"` // 如 "0xFE 命令" / "0x01 成功"
-	VIN         string   `json:"vin"`
-	Encryption  string   `json:"encryption"`
-	PayloadLen  int      `json:"payloadLen"` // 数据单元长度字段
-	Fields      []Field  `json:"fields"`
-	Warnings    []string `json:"warnings"`
+	TotalBytes   int         `json:"totalBytes"`
+	Version      string      `json:"version"`     // V2016 / V2025
+	VersionByte  string      `json:"versionByte"` // "##" / "$$"
+	Command      string      `json:"command"`      // 如 "0x01 车辆登入"
+	ResponseType string      `json:"responseType"` // 如 "0xFE 命令" / "0x01 成功"
+	VIN          string      `json:"vin"`
+	Encryption   string      `json:"encryption"`
+	PayloadLen   int         `json:"payloadLen"` // 数据单元长度字段
+	Fields       []Field     `json:"fields"`
+	Warnings     []string    `json:"warnings"`
+	Issues       []ByteIssue `json:"issues,omitempty"`
 }
 
 // NormalizeHex 清洗输入:去掉空格/换行/逗号/冒号/0x 前缀,校验 hex 合法性与偶数长度。
@@ -66,8 +75,18 @@ func NormalizeHex(input string) ([]byte, error) {
 	return utils.HexToBytes(strings.ToLower(clean))
 }
 
-// Parse 解析一帧完整报文。
+// Parse 解析一帧完整报文(不使用扩展包)。
 func Parse(input string) (*Result, error) {
+	return parse(input, nil)
+}
+
+// ParseWithPack 解析一帧完整报文,并按扩展包的自定义单元定义解码私有 TLV(0x80~0xFE)。
+// 包基准版本与报文版本不一致时告警并退化为通用展示。
+func ParseWithPack(input string, pack *ext.Pack) (*Result, error) {
+	return parse(input, pack)
+}
+
+func parse(input string, pack *ext.Pack) (*Result, error) {
 	raw, err := NormalizeHex(input)
 	if err != nil {
 		return nil, err
@@ -147,7 +166,14 @@ func Parse(input string) (*Result, error) {
 			// 应答帧:数据单元多为空或时间,先整体展示
 			r.addField(24, len(payload), "数据单元(应答帧)", "bytes", payload, utils.BytesToHex(payload), "-", "", "")
 		} else {
-			frames := parsePayload(version, cmd, payload, func(w string) { r.Warnings = append(r.Warnings, w) })
+			if pack != nil && "V"+pack.Meta.BaseVersion != versionName {
+				r.Warnings = append(r.Warnings, fmt.Sprintf("扩展包「%s」基准版本 %s 与报文版本 %s 不一致,自定义单元按通用展示", pack.Meta.Label, pack.Meta.BaseVersion, versionName))
+				pack = nil
+			}
+			frames := parsePayload(version, cmd, payload, pack,
+				func(w string) { r.Warnings = append(r.Warnings, w) },
+				func(i ByteIssue) { r.Issues = append(r.Issues, i) },
+			)
 			r.Fields = append(r.Fields, frames...)
 		}
 	}

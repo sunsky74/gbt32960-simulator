@@ -27,7 +27,7 @@ func NewApp() *App {
 		conn:      bridge.NewConnectionService(rt),
 		msg:       bridge.NewMessageService(rt),
 		console:   bridge.NewConsoleService(fwd),
-		parser:    bridge.NewParserService(),
+		parser:    bridge.NewParserService(rt),
 		extsvc:    bridge.NewExtService(rt),
 		forwarder: fwd,
 	}

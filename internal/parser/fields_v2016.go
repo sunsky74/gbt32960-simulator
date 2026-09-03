@@ -4,13 +4,15 @@ import (
 	"fmt"
 	"strings"
 
+	"gbt32960-simulator/internal/ext"
 	"github.com/sunsky74/gb32960/api"
 	"github.com/sunsky74/gb32960/codec"
 	"github.com/sunsky74/gb32960/utils"
 )
 
-// parsePayload 按命令解析数据单元,产出逐字段行。
-func parsePayload(v api.GBTVersion, cmd byte, p []byte, warn warnFn) []Field {
+// parsePayload 按命令解析数据单元,产出逐字段行。pack 非 nil 时用于解码自定义 TLV 单元;
+// addIssue 记录与协议定义不符的异常字节区间。
+func parsePayload(v api.GBTVersion, cmd byte, p []byte, pack *ext.Pack, warn warnFn, addIssue func(ByteIssue)) []Field {
 	if v == api.V2025 {
 		return []Field{{
 			Offset: 24, Length: len(p), Name: "数据单元 (V2025)", Type: "bytes",
@@ -39,13 +41,26 @@ func parsePayload(v api.GBTVersion, cmd byte, p []byte, warn warnFn) []Field {
 			if flag == nil {
 				return w.out
 			}
-			tlvName := tlvName(flag[0])
+			trans := tlvName(flag[0])
+			var custom *ext.AppendUnit
+			if isCustomUnitCode(flag[0]) {
+				custom = packUnitByCode(pack, int(flag[0]))
+				if custom != nil {
+					trans = fmt.Sprintf("自定义·%s", custom.Title)
+				} else {
+					trans = "自定义数据单元"
+				}
+			}
 			w.out = append(w.out, Field{
 				Offset: 24 + w.pos - 1, Length: 1, Name: "数据类型标志 (TLV)", Type: "u8",
 				RawHex: utils.BytesToHex(flag), RawValue: fmt.Sprintf("0x%02X", flag[0]),
-				OffsetVal: "-", Translate: tlvName,
+				OffsetVal: "-", Translate: trans,
 			})
-			parseTLVGroup(w, flag[0])
+			if isCustomUnitCode(flag[0]) {
+				parseCustomUnitBody(w, flag[0], custom, addIssue)
+			} else {
+				parseTLVGroup(w, flag[0])
+			}
 		}
 	case 0x07, 0x08:
 		// 心跳/校时:数据单元为空
@@ -56,9 +71,11 @@ func parsePayload(v api.GBTVersion, cmd byte, p []byte, warn warnFn) []Field {
 }
 
 // walker 顺序走字节,自动记录 Offset/Length,越界告警不中断。
+// base 为本 walker 数据在所属 payload 中的起始偏移(子 walker 用于自定义单元区间)。
 type walker struct {
 	p    []byte
 	pos  int
+	base int
 	out  []Field
 	warn warnFn
 }
@@ -83,7 +100,7 @@ var pendingName string
 
 func (w *walker) emit(name, typ string, raw []byte, rawVal, offsetVal, translate, unit string) {
 	w.out = append(w.out, Field{
-		Offset: 24 + w.pos - len(raw), Length: len(raw), Name: name, Type: typ,
+		Offset: 24 + w.base + w.pos - len(raw), Length: len(raw), Name: name, Type: typ,
 		RawHex: utils.BytesToHex(raw), RawValue: rawVal,
 		OffsetVal: offsetVal, Translate: translate, Unit: unit,
 	})

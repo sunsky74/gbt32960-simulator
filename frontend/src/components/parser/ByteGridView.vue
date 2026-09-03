@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 export interface ByteRange {
   start: number
@@ -10,6 +10,14 @@ export interface ByteHover {
   range: ByteRange
   x: number
   y: number
+  issue?: string
+}
+
+// 与协议定义不符的异常字节区间(来源 parser.Result.Issues)
+export interface ByteIssueRange {
+  start: number
+  end: number
+  note: string
 }
 
 const props = defineProps<{
@@ -17,6 +25,7 @@ const props = defineProps<{
   active: ByteRange | null
   activeSource: 'byte' | 'field' | null
   activeByte: number | null
+  issues?: ByteIssueRange[]
 }>()
 
 const emit = defineEmits<{
@@ -24,16 +33,19 @@ const emit = defineEmits<{
   (e: 'pin', r: ByteRange | null): void
 }>()
 
-// 固定每行 8 字节;offset 标号 0000/0008/0010...
-const PER_ROW = 8
+const gridEl = ref<HTMLElement | null>(null)
+
+// 每行字节数随面板宽度自适应:窄面板 8 字节/行,宽面板 16 字节/行(紧凑 IDE 风格,消除横向空白)
+const perRow = ref(8)
 
 const rows = computed(() => {
   const hex = props.normalizedHex
   const total = hex.length / 2
+  const n = perRow.value
   const out: Array<{ offset: number; bytes: string[] }> = []
-  for (let off = 0; off < total; off += PER_ROW) {
+  for (let off = 0; off < total; off += n) {
     const row: string[] = []
-    for (let i = off; i < Math.min(off + PER_ROW, total); i++) {
+    for (let i = off; i < Math.min(off + n, total); i++) {
       row.push(hex.slice(i * 2, i * 2 + 2).toUpperCase())
     }
     out.push({ offset: off, bytes: row })
@@ -41,7 +53,24 @@ const rows = computed(() => {
   return out
 })
 
-const gridEl = ref<HTMLElement | null>(null)
+// 16 字节/行所需内容宽度:offset 40 + 16×24 单元格 + 17×4 间距 + 6 分组间隔 + 20 内边距 ≈ 516px
+function fitPerRow() {
+  perRow.value = (gridEl.value?.clientWidth ?? 0) >= 516 ? 16 : 8
+}
+
+let ro: ResizeObserver | null = null
+
+onMounted(() => {
+  fitPerRow()
+  ro = new ResizeObserver(fitPerRow)
+  if (gridEl.value) ro.observe(gridEl.value)
+})
+
+onBeforeUnmount(() => {
+  ro?.disconnect()
+  ro = null
+})
+
 // 网格内光标所在的字节(悬停期间持续有效;离开网格后回到 activeByte/无)
 const curIdx = ref<number | null>(null)
 
@@ -93,12 +122,25 @@ function applyHl() {
 
 watch([() => props.active, () => props.activeSource, () => props.activeByte, curIdx], applyHl)
 
+// 异常区间索引表:idx → issue 说明(hover 卡片透传)
+const issueMap = computed(() => {
+  const m = new Map<number, string>()
+  for (const iss of props.issues ?? []) {
+    for (let i = Math.max(0, iss.start); i < iss.end; i++) m.set(i, iss.note)
+  }
+  return m
+})
+
+function issueOf(idx: number): string | undefined {
+  return issueMap.value.get(idx)
+}
+
 function onMove(e: MouseEvent) {
   const cell = (e.target as HTMLElement).closest('[data-idx]')
   if (!cell) return
   const i = Number((cell as HTMLElement).dataset.idx)
   curIdx.value = i
-  emit('hover', { range: { start: i, end: i + 1 }, x: e.clientX, y: e.clientY })
+  emit('hover', { range: { start: i, end: i + 1 }, x: e.clientX, y: e.clientY, issue: issueOf(i) })
 }
 
 function onLeave() {
@@ -131,6 +173,7 @@ function onClick(e: MouseEvent) {
         v-for="(b, bi) in row.bytes"
         :key="bi"
         class="byte-cell"
+        :class="{ g8: bi === 8, 'byte-issue': issueOf(row.offset + bi) !== undefined }"
         :data-idx="row.offset + bi"
       >{{ b }}</span>
     </div>
@@ -141,28 +184,37 @@ function onClick(e: MouseEvent) {
 .byte-grid {
   font-family: var(--font-mono);
   font-size: 12px;
-  line-height: 2.1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 6px 8px;
+  padding: 8px 10px;
   cursor: default;
 }
 
+/* 紧凑行:24px 单元格 + 4px 间距 + 6px 行距 → 行高约 28px(IDE / Hex Editor 风格) */
 .byte-row {
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.byte-row:last-child {
+  margin-bottom: 0;
 }
 
 .byte-offset {
-  display: inline-block;
-  width: 44px;
+  width: 40px;
+  flex: none;
   color: var(--text-tertiary);
+  font-size: 11px;
 }
 
-/* 22px 内容 + 左右各 2px margin = 26px 槽位,scale(1.15) 放大后不挤压相邻字节 */
+/* 24px 内容 + 4px gap = 28px 槽位,scale(1.15) 放大后不挤压相邻字节 */
 .byte-cell {
-  display: inline-block;
-  width: 22px;
-  margin: 1px 2px;
+  width: 24px;
+  height: 22px;
+  line-height: 20px;
+  flex: none;
   text-align: center;
   color: var(--text-primary);
   background: var(--bg-elevated);
@@ -174,6 +226,22 @@ function onClick(e: MouseEvent) {
     background-color 0.08s ease,
     box-shadow 0.08s ease,
     opacity 0.12s ease;
+}
+
+/* 16 字节/行时,第 9 个字节前加分组间隔(8 + 8 视觉分组) */
+.byte-cell.g8 {
+  margin-left: 6px;
+}
+
+/* 异常区间:与协议定义不符的单元数据微红标记(高亮态仍可覆盖其上) */
+.byte-cell.byte-issue {
+  background: rgba(255, 77, 79, 0.14);
+  border-color: rgba(255, 77, 79, 0.4);
+}
+
+[data-theme='light'] .byte-cell.byte-issue {
+  background: rgba(207, 19, 34, 0.09);
+  border-color: rgba(207, 19, 34, 0.35);
 }
 
 /* 同字段区间内字节:弱高亮 */

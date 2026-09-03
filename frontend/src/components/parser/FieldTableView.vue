@@ -112,7 +112,7 @@ function rowClassName(record: { isGroup: boolean }) {
 }
 
 const emit = defineEmits<{
-  (e: 'hover', r: ByteRange | null): void
+  (e: 'hover', r: ByteRange | null, pos?: { x: number; y: number }): void
   (e: 'pin', r: ByteRange | null): void
 }>()
 
@@ -162,7 +162,8 @@ function rangeOfRow(tr: HTMLElement): ByteRange | null {
 function onMove(e: MouseEvent) {
   const tr = (e.target as HTMLElement).closest('tr[data-row-key]') as HTMLElement | null
   if (!tr) return
-  emit('hover', rangeOfRow(tr))
+  // 携带鼠标坐标:父级据此定位/跟随悬停信息卡片
+  emit('hover', rangeOfRow(tr), { x: e.clientX, y: e.clientY })
 }
 
 function onClick(e: MouseEvent) {
@@ -221,7 +222,7 @@ onBeforeUnmount(() => {
   <div
     ref="wrapEl"
     class="field-table"
-    @mouseover="onMove"
+    @mousemove="onMove"
     @mouseleave="emit('hover', null)"
     @click="onClick"
   >
