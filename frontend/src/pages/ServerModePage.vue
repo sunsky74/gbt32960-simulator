@@ -1,14 +1,9 @@
 <script setup lang="ts">
 import { reactive } from 'vue'
-import { message } from 'ant-design-vue'
 import { PlayCircleOutlined } from '@ant-design/icons-vue'
 
-const form = reactive({ ip: '0.0.0.0', port: 32960 })
-const running = false
-
-function startServer() {
-  message.info('服务端 TCP 功能规划在后续阶段实现,当前为界面框架')
-}
+// 默认绑定环回地址:桌面调试工具不应对外网暴露无认证监听(协议无带内认证)
+const form = reactive({ ip: '127.0.0.1', port: 32960 })
 
 const connColumns = [
   { title: 'IP', dataIndex: 'ip' },
@@ -36,13 +31,15 @@ const packets: unknown[] = []
         <p class="section-label">在本机启动 TCP Server,接收客户端连接与上报报文(第一阶段为界面框架)</p>
         <div class="listen-form">
           <span class="form-label">Listen IP</span>
-          <a-input v-model:value="form.ip" size="small" class="form-input" placeholder="0.0.0.0" />
+          <a-input v-model:value="form.ip" size="small" class="form-input" placeholder="127.0.0.1" />
           <span class="form-label">Listen Port</span>
           <a-input-number v-model:value="form.port" size="small" :min="1" :max="65535" class="form-input" />
-          <a-button type="primary" size="small" @click="startServer">
-            <template #icon><PlayCircleOutlined /></template>
-            启动服务
-          </a-button>
+          <a-tooltip title="服务端 TCP 功能规划中,当前为界面框架">
+            <a-button type="primary" size="small" disabled>
+              <template #icon><PlayCircleOutlined /></template>
+              启动服务
+            </a-button>
+          </a-tooltip>
         </div>
       </div>
     </div>
@@ -51,7 +48,7 @@ const packets: unknown[] = []
       <div class="zone-body status-bar">
         <span>服务状态:</span>
         <a-tag>未启动</a-tag>
-        <span class="status-hint">{{ running ? '' : '启动后此处展示运行状态与监听地址' }}</span>
+        <span class="status-hint">启动后此处展示运行状态与监听地址</span>
       </div>
     </div>
 
