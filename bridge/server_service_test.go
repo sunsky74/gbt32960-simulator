@@ -25,6 +25,28 @@ func TestServerServiceStartStopPersist(t *testing.T) {
 	}
 }
 
+func TestServerServiceRestartOnNewPort(t *testing.T) {
+	tempHome(t)
+	svc := NewServerService()
+	st1, err := svc.Start(ServerConfig{IP: "127.0.0.1", Port: 0, IdleEnabled: true, IdleSeconds: 60}, true)
+	if err != nil || !st1.Running {
+		t.Fatalf("首次启动: %v %+v", err, st1)
+	}
+	oldAddr := st1.ListenAddr
+	if err := svc.Stop(); err != nil {
+		t.Fatal(err)
+	}
+	// 再启动必须绑定新的临时端口(重建 Server,不残留旧 Addr)
+	st2, err := svc.Start(ServerConfig{IP: "127.0.0.1", Port: 0, IdleEnabled: true, IdleSeconds: 60}, true)
+	if err != nil || !st2.Running {
+		t.Fatalf("换端口重启: %v %+v", err, st2)
+	}
+	if st2.ListenAddr == oldAddr {
+		t.Fatalf("重启后仍绑定旧地址 %s(应绑定新临时端口)", oldAddr)
+	}
+	_ = svc.Stop()
+}
+
 func TestServerServiceNonLoopbackNeedsForce(t *testing.T) {
 	svc := NewServerService()
 	if _, err := svc.Start(ServerConfig{IP: "0.0.0.0", Port: 0}, false); err == nil {

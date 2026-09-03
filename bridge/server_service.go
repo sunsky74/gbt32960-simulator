@@ -68,18 +68,18 @@ func (s *ServerService) Start(cfg ServerConfig, force bool) (servermode.Status, 
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.srv == nil {
-		s.srv = servermode.New(servermode.DefaultConfig(fmt.Sprintf("%s:%d", cfg.IP, cfg.Port)), servermode.Hooks{
-			OnStatus:  func(st servermode.Status) { s.emit("server:status", st) },
-			OnSession: func(e servermode.SessionEvent) { s.emit("server:session", e) },
-			OnFrame:   func(e servermode.FrameEvent) { s.emit("server:frame", e) },
-			OnWarn:    func(e servermode.WarnEvent) { s.emit("server:warn", e) },
-		})
+	if s.srv != nil && s.srv.Status().Running {
+		return s.srv.Status(), nil // 幂等
 	}
-	st := s.srv.Status()
-	if st.Running {
-		return st, nil // 幂等
-	}
+	// 未运行时无条件按本次配置重建 Server:Stop 后换端口重启、首次绑定失败后
+	// 改端口重试都必须生效(旧实例的 Addr 已固化,复用会永久绑错地址)。
+	// 停机即清会话语义合理——Sessions/ExportLog 均要求运行中。
+	s.srv = servermode.New(servermode.DefaultConfig(fmt.Sprintf("%s:%d", cfg.IP, cfg.Port)), servermode.Hooks{
+		OnStatus:  func(st servermode.Status) { s.emit("server:status", st) },
+		OnSession: func(e servermode.SessionEvent) { s.emit("server:session", e) },
+		OnFrame:   func(e servermode.FrameEvent) { s.emit("server:frame", e) },
+		OnWarn:    func(e servermode.WarnEvent) { s.emit("server:warn", e) },
+	})
 	if err := s.srv.Start(context.Background()); err != nil {
 		return servermode.Status{}, err
 	}
