@@ -80,6 +80,7 @@ bridge/server_service.go   # ServerService:Start(addr)/Stop()/Status()/Sessions(
 - [AC-8] (Source: Existing Architecture Fit) 服务未启动时,现有功能逐字节不变(现有测试全绿,其他页面无任何 UI/行为变化)
 - [AC-9] (Source: New Architecture Enablement) 全部安全边界生效:默认 127.0.0.1(非环回绑定前端二次确认)、maxConns=64、单帧 8KB 上限、环形缓冲 500 条、停机 ≤2s
 - [AC-10] (Source: Current Requirement Flow) 空闲检测开关:开启时(默认 60s,可配置并即时生效)空闲超出时长的连接被关闭,产生 offline 事件与控制台「空闲超时关闭」输出;关闭时不做任何空闲剔除,连接可长期挂起
+- [AC-11] (Source: Current Requirement Flow) 未知命令字与加密报文在控制台以特殊颜色输出,两者色相相互区分且与普通帧可辨(亮暗两主题下均成立);`server:frame` 事件携带 `kind` 字段
 
 ## 4. 端到端业务流
 
@@ -120,7 +121,8 @@ bridge/server_service.go   # ServerService:Start(addr)/Stop()/Status()/Sessions(
 | 空闲检测开关 OFF | 不校验空闲连接(可无限期挂起;用于观察车端在无服务端干预下的重连/保活行为) |
 | BCC/长度校验失败 | 丢弃该帧重新同步(不断连)+ warn 事件 |
 | 单帧 > 8KB | 丢弃重同步 + warn |
-| 非法命令码 | 展示 + warn,不应答 |
+| 非法/未知命令码 | 控制台特殊颜色输出(标识「未知命令」)+ warn,不应答 |
+| 加密帧(加密标志 ≠ 0,2016/2025 通用) | 原样 hex + 控制台特殊颜色输出(标识「加密」)+ 提示不支持解密,不解析不应答 |
 | 连接数 > 64 | 新连接立即 close |
 
 ### 5.3 事件契约(server:*)
@@ -129,7 +131,7 @@ bridge/server_service.go   # ServerService:Start(addr)/Stop()/Status()/Sessions(
 |---|---|
 | `server:status` | `{running, listenAddr, error?}` |
 | `server:session` | `{vin, peer, state: online/offline, lastSeen}` |
-| `server:frame` | `{time, vin, cmd, hex, summary}` |
+| `server:frame` | `{time, vin, cmd, hex, summary, kind}`;`kind`: `normal` / `unknown`(未知命令字)/ `encrypted`(加密帧),前端据此着色 |
 | `server:warn` | `{note, hex?}` |
 
 ### 5.4 前端契约
@@ -137,6 +139,7 @@ bridge/server_service.go   # ServerService:Start(addr)/Stop()/Status()/Sessions(
 - 启动表单:IP(默认 127.0.0.1)+ 端口(默认 32960)+ 空闲检测开关(默认开)+ 空闲时长秒数(默认 60,范围 5~3600),均持久化 `store/server.json`;启动/停止按钮状态机;非环回地址二次确认
 - 会话表:VIN / IP / 端口 / 状态 / 最后活跃;报文表:时间 / 来源 / 命令 / hex(前端渲染最近 200 条)
 - 报文行点击 → 详情抽屉:`ByteGridView` + `FieldTableView`(走 `ParseWithPack`,支持扩展包自定义单元解码)
+- 控制台着色:报文行按 `kind` 区分——普通帧默认色;**未知命令字与加密帧特殊颜色**(各自独立色相,遵循主题 token,亮暗两主题下均与普通帧可辨)
 - 导出:wails 保存对话框 → 文本行 `[时间] [VIN] [命令] [hex]`
 
 ### 5.5 全局约束
@@ -165,3 +168,4 @@ bridge/server_service.go   # ServerService:Start(addr)/Stop()/Status()/Sessions(
 | D8 | 登出应答后延迟 ~200ms 断开 | SuperAlways 实践:车端须先收到应答 |
 | D9 | 集成测试以 internal/engine Client 为车端驱动 | 资产红利:现成 2016 客户端 |
 | D10 | 空闲检测:可配置开关(默认开,时长默认 60s/范围 5~3600,登录前后统一),关闭时完全不校验;替代原固定两级超时(登录前 30s/登录后 5min) | 用户裁决(2026-09-03 spec 评审) |
+| D11 | 未知命令字与加密帧:控制台特殊颜色输出(色相相互区分),事件载荷 `kind` 字段支撑;加密规则 2016/2025 通用(加密标志 ≠ 0) | 用户裁决(2026-09-03 spec 评审) |
