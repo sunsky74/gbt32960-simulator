@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import zhCN from 'ant-design-vue/es/locale/zh_CN'
 import SideNav from './components/layout/SideNav.vue'
 import { activeNavKey, bottomNavItems, navItems } from './navigation'
 import { antdThemes } from './theme'
 import { useTheme } from './theme/useTheme'
+import { rememberNavPage, restoreLastNavPage } from './composables/useAppSettings'
 
 // 左侧导航展开/收起(持久化到 localStorage)
 const NAV_COLLAPSED_KEY = 'app-nav-collapsed'
@@ -14,12 +15,21 @@ function onNavCollapse(v: boolean) {
   localStorage.setItem(NAV_COLLAPSED_KEY, v ? '1' : '0')
 }
 const allNavItems = computed(() => [...navItems, ...bottomNavItems])
+
+// 启动恢复上次工作区页面(设置「常用 → 启动时恢复上次页面」控制)
+onMounted(() => {
+  const keys = allNavItems.value.map((i) => i.key)
+  const restored = restoreLastNavPage(keys, activeNavKey.value)
+  if (restored !== activeNavKey.value) activeNavKey.value = restored
+})
+watch(activeNavKey, (k) => rememberNavPage(k))
+
 const activePage = computed(() => allNavItems.value.find((i) => i.key === activeNavKey.value) ?? allNavItems.value[0])
 
 // 统一设计 token:页面 → 面板 → 输入框 三级背景分层,柔和边框,统一状态色。
-// Dark 为现有基准(逐字保留),Light 为新增主题;随 themeMode 实时切换。
-const { themeMode } = useTheme()
-const antdTheme = computed(() => antdThemes[themeMode.value])
+// Dark 为现有基准(逐字保留),Light 为新增主题;auto 模式取系统偏好,随 themeMode 实时切换。
+const { resolvedMode } = useTheme()
+const antdTheme = computed(() => antdThemes[resolvedMode.value])
 
 </script>
 

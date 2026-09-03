@@ -32,6 +32,7 @@ func main() {
 			app.console,
 			app.parser,
 			app.extsvc,
+			app.sys,
 		},
 	})
 

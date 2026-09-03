@@ -15,6 +15,7 @@ type App struct {
 	console   *bridge.ConsoleService
 	parser    *bridge.ParserService
 	extsvc    *bridge.ExtService
+	sys       *bridge.SystemService
 	forwarder *bridge.Forwarder
 }
 
@@ -29,6 +30,7 @@ func NewApp() *App {
 		console:   bridge.NewConsoleService(fwd),
 		parser:    bridge.NewParserService(rt),
 		extsvc:    bridge.NewExtService(rt),
+		sys:       bridge.NewSystemService(),
 		forwarder: fwd,
 	}
 }
@@ -38,6 +40,7 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.console.SetContext(ctx)
 	a.extsvc.SetContext(ctx)
+	a.sys.SetContext(ctx)
 	go a.forwarder.Start(ctx)
 }
 

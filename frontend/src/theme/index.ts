@@ -1,13 +1,14 @@
 import { theme as antdTheme } from 'ant-design-vue'
 
-export type ThemeMode = 'dark' | 'light'
+export type ThemeMode = 'dark' | 'light' | 'auto'
 
 export const THEME_STORAGE_KEY = 'app-theme'
 
 // ----------------------------------------------------------------
 // Ant Design 组件主题(ConfigProvider 消费):Dark 为现有基准逐字保留。
+// 渲染层只区分实际主题(dark/light);auto 由 useTheme 解析后传入。
 // ----------------------------------------------------------------
-export const antdThemes: Record<ThemeMode, { algorithm: unknown; token: Record<string, unknown> }> = {
+export const antdThemes: Record<'dark' | 'light', { algorithm: unknown; token: Record<string, unknown> }> = {
   dark: {
     algorithm: antdTheme.darkAlgorithm,
     token: {
@@ -59,5 +60,6 @@ export const antdThemes: Record<ThemeMode, { algorithm: unknown; token: Record<s
 // ----------------------------------------------------------------
 export function resolveStoredTheme(): ThemeMode {
   const saved = localStorage.getItem(THEME_STORAGE_KEY)
-  return saved === 'light' ? 'light' : 'dark'
+  if (saved === 'light' || saved === 'auto') return saved
+  return 'dark'
 }
