@@ -52,9 +52,27 @@ func encodeField(f FieldSpec, row schema.RowValue) ([]byte, error) {
 		return encodeBits(f, row)
 	case "bytes":
 		return encodeBytes(f, row)
+	case "tail":
+		return encodeTail(f, row)
 	default:
 		return nil, fmt.Errorf("未知字段类型 %q", f.Type)
 	}
+}
+
+func encodeTail(f FieldSpec, row schema.RowValue) ([]byte, error) {
+	v, ok := row[f.Key]
+	if !ok {
+		return nil, fmt.Errorf("缺少值")
+	}
+	s, ok := v.(string)
+	if !ok {
+		return nil, fmt.Errorf("值不是 hex 字符串: %v", v)
+	}
+	b, err := hex.DecodeString(strings.TrimSpace(s))
+	if err != nil {
+		return nil, fmt.Errorf("不是合法 hex: %w", err)
+	}
+	return b, nil
 }
 
 func scaleOf(f FieldSpec) (scale, offset float64) {

@@ -65,6 +65,16 @@ func validateMeta(m Meta) error {
 	if m.BaseVersion != "2016" && m.BaseVersion != "2025" {
 		return verrf("meta.baseVersion", "须为 2016 或 2025: %q", m.BaseVersion)
 	}
+	seen := map[string]bool{}
+	for i, s := range m.Scope {
+		if s != ScopeClient && s != ScopeParser {
+			return verrf(fmt.Sprintf("meta.scope[%d]", i), "须为 %q 或 %q: %q", ScopeClient, ScopeParser, s)
+		}
+		if seen[s] {
+			return verrf(fmt.Sprintf("meta.scope[%d]", i), "重复的应用范围: %q", s)
+		}
+		seen[s] = true
+	}
 	return nil
 }
 
@@ -150,6 +160,10 @@ func validateFields(path string, fields []FieldSpec) error {
 			if f.Type == "bytes" && (f.Length < 1 || f.Length > 255) {
 				return verrf(fp+".length", "须在 1~255 字节: %d", f.Length)
 			}
+		case "tail":
+			if f.Scale != nil || f.Offset != nil || f.Length != 0 || len(f.Bits) > 0 {
+				return verrf(fp+".tail", "变长 hex 尾部不支持 scale/offset/length/bits")
+			}
 		default:
 			return verrf(fp+".type", "未知字段类型: %q", f.Type)
 		}
@@ -178,6 +192,22 @@ func validateCommand(path string, c Command, base string, keys map[string]bool, 
 	lo, hi := rng[0], rng[1]
 	if c.Code >= lo && c.Code <= hi {
 		return verrf(path+".code", "0x%02X 与标准命令冲突(标准占用 0x%02X~0x%02X)", c.Code, lo, hi)
+	}
+	// 私有远控 0x8A 应答模板:仅 2016 版放行(私有远控应答),RemoteSub 必填且子指令码 1~17
+	if c.Code == 0x8A {
+		if base != "2016" {
+			return verrf(path+".code", "0x8A 仅支持 baseVersion 2016")
+		}
+		if c.RemoteSub < 1 || c.RemoteSub > 0x11 {
+			return verrf(path+".remoteSub", "0x8A 应答模板须声明子指令码 0x01~0x11: %d", c.RemoteSub)
+		}
+		if c.Body.Type != "fields" {
+			return verrf(path+".body.type", "0x8A 应答模板仅支持平铺 fields 体: %q", c.Body.Type)
+		}
+		if len(c.Body.Fields) == 0 {
+			return verrf(path+".body.fields", "至少一个字段")
+		}
+		return validateFields(path+".body.fields", c.Body.Fields)
 	}
 	reservedLo := hi + 1 // 上行预留区起点:2016=0x09,2025=0x0C
 	if c.Code < reservedLo || c.Code > 0x7F {

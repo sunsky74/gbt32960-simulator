@@ -12,13 +12,14 @@ import (
 
 // Runtime 持有共享事件总线、当前引擎客户端与最新配置快照。
 type Runtime struct {
-	bus     *engine.Bus
-	mu      sync.Mutex
-	client  *engine.Client
-	connCfg *ConnectionConfig
-	groups  map[string]schema.GroupConfig
-	packs   []*ext.Pack
-	pack    *ext.Pack
+	bus      *engine.Bus
+	mu       sync.Mutex
+	client   *engine.Client
+	connCfg  *ConnectionConfig
+	groups   map[string]schema.GroupConfig
+	packs    []*ext.Pack
+	pack     *ext.Pack
+	disabled map[string]bool
 }
 
 // NewRuntime 创建运行时。Bus 全局共享:客户端重建不影响前端订阅。
@@ -48,7 +49,7 @@ func (rt *Runtime) SetConnCfg(cfg *ConnectionConfig) {
 	defer rt.mu.Unlock()
 	prev := rt.connCfg
 	rt.connCfg = cfg
-	rt.pack = resolvePack(rt.packs, cfg)
+	rt.pack = rt.resolvePackLocked(rt.packs, cfg)
 	rt.syncExtCommands(rt.pack)
 	if prev == nil || cfg == nil || prev.Version != cfg.Version || prev.ExtensionPack != cfg.ExtensionPack {
 		rt.groups = nil
@@ -62,13 +63,13 @@ func (rt *Runtime) ConnCfg() *ConnectionConfig {
 	return rt.connCfg
 }
 
-// resolvePack 按连接配置的扩展包 id 在已加载集合中查找;未绑定或找不到返回 nil。
-func resolvePack(packs []*ext.Pack, cfg *ConnectionConfig) *ext.Pack {
+// resolvePack 按连接配置的扩展包 id 在已加载集合中查找;未绑定、找不到或已停用返回 nil。
+func (rt *Runtime) resolvePackLocked(packs []*ext.Pack, cfg *ConnectionConfig) *ext.Pack {
 	if cfg == nil || cfg.ExtensionPack == "" {
 		return nil
 	}
 	for _, p := range packs {
-		if p.Meta.ID == cfg.ExtensionPack {
+		if p.Meta.ID == cfg.ExtensionPack && !rt.disabled[p.Meta.ID] {
 			return p
 		}
 	}
@@ -80,15 +81,26 @@ func (rt *Runtime) SetPacks(packs []*ext.Pack) {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 	rt.packs = packs
-	rt.pack = resolvePack(packs, rt.connCfg)
+	rt.pack = rt.resolvePackLocked(packs, rt.connCfg)
+	rt.syncExtCommands(rt.pack)
+}
+
+// SetPackStates 更新包级启用/停用状态并重新解析激活包。
+// 停用当前绑定包 = 运行时立即失效(命令注销、扩展组不合并),绑定关系保留,重新启用即恢复。
+func (rt *Runtime) SetPackStates(disabled map[string]bool) {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	rt.disabled = disabled
+	rt.pack = rt.resolvePackLocked(rt.packs, rt.connCfg)
 	rt.syncExtCommands(rt.pack)
 }
 
 // syncExtCommands 按激活包同步引擎命令注册表:先重置(保留 私有远控 内置),再注册包内命令。
 // 挂接在 SetConnCfg/SetPacks——包激活的唯一入口,查询接口(GetSchema)不携带副作用。
+// scope 未声明 client 的包不进入客户端链路(仅用于报文解析等场景)。
 func (rt *Runtime) syncExtCommands(p *ext.Pack) {
 	engine.ResetExtCommands()
-	if p == nil {
+	if p == nil || !ext.ScopeHas(p, ext.ScopeClient) {
 		return
 	}
 	v := parseVersion(p.Meta.BaseVersion)

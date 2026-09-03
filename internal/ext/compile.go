@@ -49,6 +49,10 @@ func CompileField(f FieldSpec) schema.FieldSchema {
 	case "bytes":
 		out.Kind = "bytes"
 		out.Length = f.Length
+	case "tail":
+		// 变长 hex 尾部:Length=0,前端据此放宽为任意长度 hex 输入
+		out.Kind = "bytes"
+		out.Length = 0
 	}
 	return out
 }
@@ -88,6 +92,8 @@ func defaultsForFields(fields []FieldSpec) schema.RowValue {
 			row[f.Key] = flags
 		case "bytes":
 			row[f.Key] = strings.Repeat("00", f.Length)
+		case "tail":
+			row[f.Key] = ""
 		default:
 			offset := 0.0
 			if f.Offset != nil {

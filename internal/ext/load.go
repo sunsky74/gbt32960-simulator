@@ -16,9 +16,14 @@ func LoadFile(path string) (*Pack, error) {
 	if err != nil {
 		return nil, fmt.Errorf("读取 %s: %w", path, err)
 	}
-	name := filepath.Base(path)
+	return LoadText(string(data), filepath.Base(path))
+}
+
+// LoadText 从 JSON 文本加载并完整校验一个扩展包(粘贴导入共用入口)。
+// name 仅用于错误前缀展示。
+func LoadText(text, name string) (*Pack, error) {
 	var p Pack
-	if err := json.Unmarshal(data, &p); err != nil {
+	if err := json.Unmarshal([]byte(text), &p); err != nil {
 		return nil, fmt.Errorf("%s: JSON 语法错误: %w", name, err)
 	}
 	if err := Validate(&p); err != nil {

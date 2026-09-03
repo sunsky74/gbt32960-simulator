@@ -77,6 +77,8 @@ export namespace bridge {
 	    baseVersion: string;
 	    unitCount: number;
 	    commandCount: number;
+	    enabled: boolean;
+	    scope?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new PackInfo(source);
@@ -90,6 +92,8 @@ export namespace bridge {
 	        this.baseVersion = source["baseVersion"];
 	        this.unitCount = source["unitCount"];
 	        this.commandCount = source["commandCount"];
+	        this.enabled = source["enabled"];
+	        this.scope = source["scope"];
 	    }
 	}
 	export class PreviewResult {
@@ -166,6 +170,22 @@ export namespace engine {
 
 export namespace parser {
 	
+	export class ByteIssue {
+	    start: number;
+	    end: number;
+	    note: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ByteIssue(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.start = source["start"];
+	        this.end = source["end"];
+	        this.note = source["note"];
+	    }
+	}
 	export class Field {
 	    offset: number;
 	    length: number;
@@ -207,6 +227,7 @@ export namespace parser {
 	    payloadLen: number;
 	    fields: Field[];
 	    warnings: string[];
+	    issues?: ByteIssue[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Result(source);
@@ -224,6 +245,7 @@ export namespace parser {
 	        this.payloadLen = source["payloadLen"];
 	        this.fields = this.convertValues(source["fields"], Field);
 	        this.warnings = source["warnings"];
+	        this.issues = this.convertValues(source["issues"], ByteIssue);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

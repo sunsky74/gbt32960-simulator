@@ -5,7 +5,11 @@ import {context} from '../models';
 
 export function DeletePack(arg1:string):Promise<void>;
 
+export function GetPackJSON(arg1:string):Promise<string>;
+
 export function ImportPack(arg1:string):Promise<bridge.PackInfo>;
+
+export function ImportPackJSON(arg1:string):Promise<bridge.PackInfo>;
 
 export function ListPacks():Promise<Array<bridge.PackInfo>>;
 
@@ -14,3 +18,5 @@ export function PickPackFile():Promise<string>;
 export function ReloadPacks():Promise<void>;
 
 export function SetContext(arg1:context.Context):Promise<void>;
+
+export function SetPackEnabled(arg1:string,arg2:boolean):Promise<void>;

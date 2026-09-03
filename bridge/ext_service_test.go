@@ -22,6 +22,7 @@ func copyExtFixture(t *testing.T, dir, name string) {
 }
 
 func TestExtServiceReloadDir(t *testing.T) {
+	tempHome(t)
 	rt := NewRuntime()
 	s := NewExtServiceForTest(rt)
 
@@ -48,6 +49,7 @@ func TestExtServiceReloadDir(t *testing.T) {
 }
 
 func TestExtServiceListPacksBadFileIgnored(t *testing.T) {
+	tempHome(t)
 	rt := NewRuntime()
 	s := NewExtServiceForTest(rt)
 	dir := t.TempDir()
@@ -60,6 +62,7 @@ func TestExtServiceListPacksBadFileIgnored(t *testing.T) {
 }
 
 func TestExtServiceListPacksShape(t *testing.T) {
+	tempHome(t)
 	rt := NewRuntime()
 	s := NewExtServiceForTest(rt)
 	dir := t.TempDir()
@@ -67,13 +70,16 @@ func TestExtServiceListPacksShape(t *testing.T) {
 	if err := s.reloadDir(dir); err != nil {
 		t.Fatal(err)
 	}
-	infos := packInfosOf(rt.Packs())
+	infos := packInfosOf(rt.Packs(), map[string]bool{})
 	if len(infos) != 1 {
 		t.Fatalf("infos = %+v", infos)
 	}
 	i := infos[0]
 	if i.ID != "p2golden" || i.BaseVersion != "2016" || i.UnitCount != 1 || i.Label != "P2 黄金包" {
 		t.Fatalf("info = %+v", i)
+	}
+	if !i.Enabled {
+		t.Fatalf("默认应启用: %+v", i)
 	}
 }
 
@@ -200,5 +206,138 @@ func TestImportPackOverwriteClearsExtGroups(t *testing.T) {
 	}
 	if _, ok := got["extcmd"]; ok {
 		t.Fatal("覆盖导入应清除该包扩展组配置")
+	}
+}
+
+func TestImportPackJSONValid(t *testing.T) {
+	tempHome(t)
+	rt := NewRuntime()
+	svc := NewExtServiceForTest(rt)
+	info, err := svc.ImportPackJSON(extcmdJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.ID != "extcmd" || !info.Enabled {
+		t.Fatalf("info = %+v", info)
+	}
+	dir, err := packsDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "extcmd.json")); err != nil {
+		t.Fatalf("粘贴导入应落盘 packs 目录: %v", err)
+	}
+}
+
+func TestImportPackJSONInvalidNotPersisted(t *testing.T) {
+	tempHome(t)
+	rt := NewRuntime()
+	svc := NewExtServiceForTest(rt)
+
+	if _, err := svc.ImportPackJSON("   "); err == nil {
+		t.Fatal("空内容应拒绝")
+	}
+	if _, err := svc.ImportPackJSON("{bad json"); err == nil {
+		t.Fatal("非法 JSON 应拒绝")
+	}
+	// 语法合法但校验失败(unitCode 占用标准 0x01)
+	bad := `{"meta": {"id": "x1", "label": "坏包", "baseVersion": "2016"},
+	         "realtime": {"appendUnits": [{"key": "u", "title": "单元", "unitCode": 1, "enabled": true,
+	           "fields": [{"key": "f", "label": "字段", "type": "u8"}]}]}}`
+	if _, err := svc.ImportPackJSON(bad); err == nil {
+		t.Fatal("校验失败应拒绝")
+	}
+	dir, _ := packsDir()
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 0 {
+		t.Fatalf("失败导入不得落盘: %v", entries)
+	}
+}
+
+func TestSetPackEnabled(t *testing.T) {
+	tempHome(t)
+	rt := NewRuntime()
+	svc := NewExtServiceForTest(rt)
+	if _, err := svc.ImportPackJSON(extcmdJSON); err != nil {
+		t.Fatal(err)
+	}
+	rt.SetConnCfg(&ConnectionConfig{Version: "2016", ExtensionPack: "extcmd"})
+	if rt.Pack() == nil {
+		t.Fatal("绑定后应激活")
+	}
+
+	if err := svc.SetPackEnabled("extcmd", false); err != nil {
+		t.Fatal(err)
+	}
+	if rt.Pack() != nil {
+		t.Fatal("停用后运行时不应激活")
+	}
+	if rt.ConnCfg().ExtensionPack != "extcmd" {
+		t.Fatal("停用不应改变连接档案绑定关系")
+	}
+	infos, _ := svc.ListPacks()
+	if len(infos) != 1 || infos[0].Enabled {
+		t.Fatalf("列表应显示已停用: %+v", infos)
+	}
+
+	if err := svc.SetPackEnabled("extcmd", true); err != nil {
+		t.Fatal(err)
+	}
+	if rt.Pack() == nil || rt.Pack().Meta.ID != "extcmd" {
+		t.Fatal("重新启用应恢复激活")
+	}
+}
+
+func TestSetPackEnabledMissing(t *testing.T) {
+	tempHome(t)
+	svc := NewExtServiceForTest(NewRuntime())
+	if err := svc.SetPackEnabled("nope", true); err == nil {
+		t.Fatal("不存在的包应拒绝")
+	}
+}
+
+func TestImportPackOverwriteResetsDisabled(t *testing.T) {
+	tempHome(t)
+	rt := NewRuntime()
+	svc := NewExtServiceForTest(rt)
+	if _, err := svc.ImportPackJSON(extcmdJSON); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SetPackEnabled("extcmd", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ImportPackJSON(extcmdJSON); err != nil {
+		t.Fatal(err)
+	}
+	infos, _ := svc.ListPacks()
+	if len(infos) != 1 || !infos[0].Enabled {
+		t.Fatalf("覆盖导入应重置为启用: %+v", infos)
+	}
+}
+
+// TestFindPackFileByID 热放置场景:文件名与 meta.id 不一致时,启停/删除/预览
+// 仍须按内容定位(修复"列表可见却无法操作"的不一致)。
+func TestFindPackFileByID(t *testing.T) {
+	dir := t.TempDir()
+	// 复制测试夹具为任意文件名(≠ id.json)
+	data, err := os.ReadFile("testdata/extpack.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "my-golden-pack.json"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := findPackFileByID(dir, "p2golden")
+	if err != nil {
+		t.Fatalf("按内容应找到热放置包: %v", err)
+	}
+	if filepath.Base(got) != "my-golden-pack.json" {
+		t.Fatalf("定位到 %s,want my-golden-pack.json", got)
+	}
+	if _, err := findPackFileByID(dir, "no-such-pack"); err == nil {
+		t.Fatal("不存在的 id 应报错")
+	}
+	if _, err := findPackFileByID(dir, "../escape"); err == nil {
+		t.Fatal("路径穿越 id 应被拒绝")
 	}
 }

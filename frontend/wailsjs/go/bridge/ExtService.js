@@ -6,8 +6,16 @@ export function DeletePack(arg1) {
   return window['go']['bridge']['ExtService']['DeletePack'](arg1);
 }
 
+export function GetPackJSON(arg1) {
+  return window['go']['bridge']['ExtService']['GetPackJSON'](arg1);
+}
+
 export function ImportPack(arg1) {
   return window['go']['bridge']['ExtService']['ImportPack'](arg1);
+}
+
+export function ImportPackJSON(arg1) {
+  return window['go']['bridge']['ExtService']['ImportPackJSON'](arg1);
 }
 
 export function ListPacks() {
@@ -24,4 +32,8 @@ export function ReloadPacks() {
 
 export function SetContext(arg1) {
   return window['go']['bridge']['ExtService']['SetContext'](arg1);
+}
+
+export function SetPackEnabled(arg1, arg2) {
+  return window['go']['bridge']['ExtService']['SetPackEnabled'](arg1, arg2);
 }

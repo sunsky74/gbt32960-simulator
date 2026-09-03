@@ -75,7 +75,8 @@ func TestValidateErrors(t *testing.T) {
 		}, "realtime.appendUnits[0].fields[3].bits[1].index"},
 		{"bytes 长度 0", func(p *Pack) { p.Realtime.AppendUnits[0].Fields[4].Length = 0 }, "realtime.appendUnits[0].fields[4].length"},
 		{"命令码撞 2016 标准", func(p *Pack) { p.Commands[0].Code = 2 }, "commands[0].code"},
-		{"命令码在下行区", func(p *Pack) { p.Commands[0].Code = 0x8A }, "commands[0].code"},
+		{"命令码在下行区", func(p *Pack) { p.Commands[0].Code = 0x83 }, "commands[0].code"},
+		{"0x8A 缺子指令码", func(p *Pack) { p.Commands[0].Code = 0x8A }, "commands[0].remoteSub"},
 		{"direction down", func(p *Pack) { p.Commands[0].Direction = "down" }, "commands[0].direction"},
 		{"trigger 非法", func(p *Pack) { p.Commands[0].Trigger = "auto" }, "commands[0].trigger"},
 		{"body.type 非法", func(p *Pack) { p.Commands[0].Body.Type = "raw" }, "commands[0].body.type"},
@@ -158,5 +159,40 @@ func TestValidateMultiCommandDistinctCodes(t *testing.T) {
 	})
 	if err := Validate(p); err != nil {
 		t.Fatalf("多命令不同码应通过: %v", err)
+	}
+}
+
+func TestValidateScope(t *testing.T) {
+	mk := func(scope []string) *Pack {
+		return &Pack{Meta: Meta{ID: "ok-pack", Label: "x", BaseVersion: "2016", Scope: scope}}
+	}
+	if err := Validate(mk(nil)); err != nil {
+		t.Errorf("缺省 scope 应合法: %v", err)
+	}
+	if err := Validate(mk([]string{"client", "parser"})); err != nil {
+		t.Errorf("client+parser 应合法: %v", err)
+	}
+	if err := Validate(mk([]string{"parser"})); err != nil {
+		t.Errorf("仅 parser 应合法: %v", err)
+	}
+	if err := Validate(mk([]string{"server"})); err == nil {
+		t.Error("非法 scope 值应报错")
+	}
+	if err := Validate(mk([]string{"client", "client"})); err == nil {
+		t.Error("重复 scope 应报错")
+	}
+}
+
+func TestScopeHas(t *testing.T) {
+	p := &Pack{Meta: Meta{Scope: []string{ScopeParser}}}
+	if !ScopeHas(p, ScopeParser) || ScopeHas(p, ScopeClient) {
+		t.Error("scope=[parser] 判定错误")
+	}
+	def := &Pack{}
+	if !ScopeHas(def, ScopeClient) || ScopeHas(def, ScopeParser) {
+		t.Error("缺省 scope 应视为仅 client")
+	}
+	if ScopeHas(nil, ScopeClient) {
+		t.Error("nil 包应返回 false")
 	}
 }
