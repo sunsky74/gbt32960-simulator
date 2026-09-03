@@ -35,7 +35,7 @@
 - [AC-3] (Source: Current Requirement Flow) 登出延迟断开
   Refinement: `go test ./internal/servermode/ -run TestIntegrationLogoutDelayedClose -v` — client 的 0x04 ack 先于连接关闭被收到(事件顺序断言)
 - [AC-4] (Source: Current Requirement Flow) 容错与 2025 只读
-  Refinement: `go test ./internal/servermode/ -run 'TestDecode|TestConnResync' -v` — 垃圾流重同步不断连;未知命令 kind=unknown;加密帧 kind=encrypted;V2025 帧产生事件但无应答字节写出
+  Refinement: `go test ./internal/framing/ ./internal/servermode/ -run 'TestFrameReaderResync|TestDecode|TestFrameTooLarge' -v` — 垃圾流重同步不断连(重同步用例已随 Task 1 迁至 framing 包);未知命令 kind=unknown;加密帧 kind=encrypted(Decode 前短路);V2025 帧产生事件但无应答字节写出
 - [AC-5] (Source: Current Requirement Flow) 手动导出
   Refinement: `go test ./internal/servermode/ -run TestRingBufferExport -v` — 导出行数=缓冲帧数,行格式 `[时间] [VIN] [命令] [hex]`
 - [AC-6] (Source: Development Architecture) 架构隔离与绑定面
@@ -84,7 +84,49 @@ git mv internal/engine/stream.go internal/framing/framing.go
 package framing
 ```
 
-同时把常量 `maxFrameLen` 导出为 `MaxFrameLen`(servermode 的 8KB 上限判定需要对照;其余标识符不变)。
+同时:
+1. 把常量 `maxFrameLen` 导出为 `MaxFrameLen`(=65535+24+1=65560,含头 24B+BCC 1B);
+2. **新增可配置上限(评审 B4)**:`NewFrameReader(r io.Reader)` 保持 64KB 缺省,新增
+
+```go
+// NewFrameReaderLimit 创建带帧总长上限的读取器:声明长度超限时丢弃该帧头
+// 并重同步(返回 ErrFrameTooLarge 一次),不阻塞等待超长帧体凑齐。
+// 服务端模式用 8KB 上限实现 spec §5.2 的超长防护。
+func NewFrameReaderLimit(r io.Reader, maxTotal int) *FrameReader {
+	return &FrameReader{r: r, maxTotal: maxTotal, buf: make([]byte, 0, 1024)}
+}
+```
+
+`FrameReader` 增加 `maxTotal int` 字段(0 = 用 MaxFrameLen);`tryParse` 中长度判定改为:
+
+```go
+total := frameHeaderLen + payloadLen + bccLen
+limit := fr.maxTotal
+if limit <= 0 {
+    limit = MaxFrameLen
+}
+if total > limit {
+    fr.buf = fr.buf[2:] // 跳过该伪起始头,重新同步
+    return nil, 0, ErrFrameTooLarge
+}
+```
+
+并在 `internal/framing/framing_test.go` 新增用例:
+
+```go
+func TestFrameReaderLimitRejectsOversize(t *testing.T) {
+	hdr := append([]byte{0x23, 0x23, 0x07, 0xFE}, []byte("LVBV3J7B0LY000001")...)
+	hdr = append(hdr, 0x00, 0x23, 0x28) // 声明 payload=9000
+	good := append([]byte{}, hdr...)     // 后续跟一帧合法帧(此处用伪帧仅验证跳过)
+	good = append(good, 0x23, 0x23)
+	fr := NewFrameReaderLimit(bytes.NewReader(append(hdr, good[24:]...)), 8192)
+	if _, err := fr.Next(); err != ErrFrameTooLarge {
+		t.Fatalf("超长声明应报 ErrFrameTooLarge, got %v", err)
+	}
+}
+```
+
+(断言目标:第一次 Next 返回 ErrFrameTooLarge 而非阻塞;实现后可再补一帧真实合法帧验证重同步成功。)
 
 - [ ] **Step 2: 修改 engine 引用**
 
@@ -319,22 +361,40 @@ import (
 	"testing"
 
 	"gbt32960-simulator/internal/engine"
-	"gbt32960-simulator/internal/schema"
 	"github.com/sunsky74/gb32960/api"
-	"github.com/sunsky74/gb32960/types"
+	"github.com/sunsky74/gb32960/model"
+	"github.com/sunsky74/gb32960/model/gbt2016"
 )
 
 const vin17 = "LVBV3J7B0LY000001"
 
+// emptyBody 0x07/0x08 等无载荷体的测试空体(自包含,不依赖 Task 4 的 rawBody)。
+type emptyBody struct{}
+
+func (emptyBody) Version() api.GBTVersion { return api.V2016 }
+func (emptyBody) Bytes() ([]byte, error)  { return nil, nil }
+
+// loginFrame 造一帧真实 2016 登入(载荷体与引擎 sendLogin 同构:
+// 库内 gbt2016.VehicleLogin,ICCID 定长 20,Codes 须与 Count×Length 匹配)。
 func loginFrame(t *testing.T) []byte {
 	t.Helper()
-	raw, _, err := engine.BuildFrame(api.V2016, vin17, 0x01, &schema.VehicleLogin{
-		LoginTime:  schema.BeanTime{Year: 26, Month: 9, Day: 3, Hour: 10, Minute: 0, Second: 0},
-		Serial:     1,
-		ICCID:      "12345678901234567890",
-		ChargerNum: 1,
-		Length:     1,
+	raw, _, err := engine.BuildFrame(api.V2016, vin17, 0x01, &gbt2016.VehicleLogin{
+		BeanTime:  model.BeanTime{Year: 26, Month: 9, Day: 3, Hour: 10, Minute: 0, Second: 0},
+		SerialNum: 1,
+		ICCID:     "12345678901234567890",
+		Count:     1,
+		Length:    1,
+		Codes:     []string{"1"},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+func heartbeatFrame(t *testing.T) []byte {
+	t.Helper()
+	raw, _, err := engine.BuildFrame(api.V2016, vin17, 0x07, emptyBody{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -348,8 +408,16 @@ func TestDecodeNormal(t *testing.T) {
 	}
 }
 
+func TestDecodeHeartbeatIsNormal(t *testing.T) {
+	// 心跳(0x07)载荷类型在库中为 nil("no decodable body"),但属正常命令——
+	// 必须判 normal,不得落入 unknown(评审 B3)
+	if d := decodeFrame(heartbeatFrame(t)); d.Kind != KindNormal {
+		t.Fatalf("心跳 kind = %s, want normal", d.Kind)
+	}
+}
+
 func TestDecodeUnknownCommand(t *testing.T) {
-	// 用原始字节改命令位造未知命令帧(0x30 在上行预留区但不在处理器矩阵)
+	// 0x30 在上行预留区但不在服务端已知命令白名单 → unknown
 	raw := loginFrame(t)
 	raw[2] = 0x30
 	d := decodeFrame(raw)
@@ -358,6 +426,20 @@ func TestDecodeUnknownCommand(t *testing.T) {
 	}
 	if d.Kind != KindUnknown {
 		t.Fatalf("kind = %s, want unknown", d.Kind)
+	}
+}
+
+func TestDecodeEncryptedShortCircuit(t *testing.T) {
+	// 加密帧(加密标志 ≠ 0x01)必须在进入 ProtocolCodec.Decode 前短路分类:
+	// 库对非 0x01 加密直接报 ErrEncryptionNotSupported(评审 B2)
+	raw := loginFrame(t)
+	raw[21] = 0x02 // 加密方式字节位于偏移 21(2 起始 + 1 cmd + 1 resp + 17 VIN)
+	d := decodeFrame(raw)
+	if d.Err != nil {
+		t.Fatalf("加密帧不应报解码错误: %v", d.Err)
+	}
+	if d.Kind != KindEncrypted || !d.Encrypted {
+		t.Fatalf("加密帧 kind = %s, want encrypted", d.Kind)
 	}
 }
 
@@ -371,7 +453,7 @@ func TestDecodeBCCFail(t *testing.T) {
 }
 ```
 
-注:字段名以 `internal/schema` 实际 2016 登入体为准——写测试前先 `grep -n "type VehicleLogin" internal/schema/*.go` 核对;若为 `map` 形态或字段不同,按实际调整构造(断言目标不变)。
+注:decode_test.go 末尾不再需要额外占位;`import "gbt32960-simulator/internal/engine"` 仅测试用(运行时隔离不破坏)。
 
 - [ ] **Step 2: 跑测试确认失败**
 
@@ -391,8 +473,21 @@ import (
 	"github.com/sunsky74/gb32960/api"
 	"github.com/sunsky74/gb32960/codec"
 	"github.com/sunsky74/gb32960/frame"
+	"github.com/sunsky74/gb32960/types"
 	"github.com/sunsky74/gb32960/utils"
 )
+
+// encryptByteOffset 加密方式字节在帧内的偏移:起始符2 + 命令1 + 应答1 + VIN17。
+const encryptByteOffset = 21
+
+// encryptionNone 协议规定"不加密"的线上值是 0x01(types.EncryptionNone),不是 0。
+const encryptionNone = 0x01
+
+// knownCmds2016 服务端已知(会正常处理/应答)的 2016 命令白名单。
+// 注意不能用 frame.PayloadType==nil 判未知:0x07/0x08 载荷类型即 nil(评审 B3)。
+var knownCmds2016 = map[byte]bool{
+	0x01: true, 0x02: true, 0x03: true, 0x04: true, 0x07: true, 0x08: true,
+}
 
 // Decoded 是单帧的解码与分类结果。
 type Decoded struct {
@@ -406,10 +501,19 @@ type Decoded struct {
 	Err       error
 }
 
-// decodeFrame 解码一帧并分类:加密→encrypted;帧可解析但无注册载荷类型→unknown;
-// 其余→normal。BCC/结构错误返回 Err(PM=nil),调用方丢弃该帧并告警。
+// decodeFrame 解码一帧并分类。加密判定在进入 ProtocolCodec.Decode 之前完成
+// (库对加密标志≠0x01 的帧直接报 ErrEncryptionNotSupported,事后分支不可达,评审 B2):
+// raw[21] ≠ 0x01 → KindEncrypted,不解析。BCC/结构错误返回 Err(PM=nil),
+// 调用方丢弃该帧并告警(重同步由 FrameReader 保证)。
 func decodeFrame(raw []byte) Decoded {
 	d := Decoded{Raw: raw}
+	if len(raw) > encryptByteOffset && raw[encryptByteOffset] != encryptionNone {
+		d.Encrypted = true
+		d.Kind = KindEncrypted
+		d.VIN = string(raw[4 : 4+17]) // 头部字段直接截取,足够展示用
+		d.Cmd = raw[2]
+		return d
+	}
 	msg, err := codec.ProtocolCodec.Decode(utils.NewByteReader(raw))
 	if err != nil {
 		d.Err = fmt.Errorf("帧解码失败: %w", err)
@@ -420,21 +524,18 @@ func decodeFrame(raw []byte) Decoded {
 	d.PM = pm
 	d.Version = pm.Version
 	d.VIN = pm.VIN
-	if pm.Encryption != 0 {
-		d.Encrypted = true
-		d.Kind = KindEncrypted
-		return d
-	}
 	if code, ok := frame.CommandCode(pm.RequestType); ok {
 		d.Cmd = code
 	}
-	if frame.PayloadType(pm.Version, d.Cmd) == nil {
+	if pm.Version == api.V2016 && !knownCmds2016[d.Cmd] {
 		d.Kind = KindUnknown
 		return d
 	}
-	d.Kind = KindNormal
+	d.Kind = KindNormal // 2025 全部只读展示,不再细分 unknown
 	return d
 }
+
+var _ = types.ResponseCommand // 若 types 未被他处使用则移除该行与 import
 ```
 
 - [ ] **Step 4: 跑测试确认通过**
@@ -442,7 +543,7 @@ func decodeFrame(raw []byte) Decoded {
 ```bash
 go test ./internal/servermode/ -run TestDecode -v
 ```
-Expected: 3 个 PASS。
+Expected: 5 个 PASS(Normal/Heartbeat/Unknown/Encrypted/BCC)。
 
 - [ ] **Step 5: Commit**
 
@@ -484,17 +585,27 @@ import (
 
 	"gbt32960-simulator/internal/ext"
 	"github.com/sunsky74/gb32960/api"
+	"github.com/sunsky74/gb32960/codec"
+	"github.com/sunsky74/gb32960/frame"
 	"github.com/sunsky74/gb32960/types"
 	"github.com/sunsky74/gb32960/utils"
 )
 
-// xorBCC 与生产路径解耦:BCC = 帧去掉起始符 2B 与末位 BCC 后逐字节异或。
-func xorBCC(b []byte) byte { return utils.CalcBCC(b) }
+// xorBCC 测试内手写异或(不走 utils.CalcBCC,保证 golden 独立于生产路径,评审 m6):
+// BCC = 帧去掉起始符 2B 与末位 BCC 后逐字节异或。
+func xorBCC(b []byte) byte {
+	var x byte
+	for _, v := range b {
+		x ^= v
+	}
+	return x
+}
 
+// assemble 独立拼装期望帧。加密字节 = 0x01(协议"不加密"线上值,评审 B1)。
 func assemble(cmd byte, resp types.ResponseType, vin string, body []byte) []byte {
 	out := []byte{0x23, 0x23, cmd, resp.Code()}
 	out = append(out, []byte(vin)...)
-	out = append(out, 0x00, byte(len(body)>>8), byte(len(body)))
+	out = append(out, 0x01, byte(len(body)>>8), byte(len(body)))
 	out = append(out, body...)
 	return append(out, xorBCC(out[2:]))
 }
@@ -506,6 +617,15 @@ func TestBuildReplyLoginSuccess(t *testing.T) {
 	}
 	if want := assemble(0x01, types.ResponseSuccess, vin17, nil); !bytes.Equal(got, want) {
 		t.Fatalf("login success reply:\n got %x\nwant %x", got, want)
+	}
+	// 双保险(评审 B1 回归锚):应答帧必须能被协议库自身 Decode 接受——
+	// 车端引擎 readLoop 用的正是这个解码器,解不了等于应答无效。
+	msg, err := codec.ProtocolCodec.Decode(utils.NewByteReader(got))
+	if err != nil {
+		t.Fatalf("应答帧被协议库拒收(加密字节/BCC 错误): %v", err)
+	}
+	if pm := msg.(*frame.ProtocolMessage); pm.ResponseType != types.ResponseSuccess {
+		t.Fatalf("回读应答标志 = 0x%02X", pm.ResponseType)
 	}
 }
 
@@ -577,13 +697,14 @@ func (r rawBody) Version() api.GBTVersion { return r.v }
 func (r rawBody) Bytes() ([]byte, error)  { return r.b, nil }
 
 // buildReply 构造平台应答帧:同命令码 + 应答标志(0x01 成功/0x02 失败)+ body。
-// BCC 与封帧由协议库完成。
+// 加密方式必须显式置 EncryptionNone(0x01)——零值 0x00 会被协议库 Decode 拒收(评审 B1)。
 func buildReply(v api.GBTVersion, vin string, cmd byte, resp types.ResponseType, body []byte) ([]byte, error) {
 	msg := frame.ProtocolMessage{
 		Version:     v,
 		RequestType: &types.CommandV2016{Code: cmd},
 		ResponseType: resp,
 		VIN:         vin,
+		Encryption:  types.EncryptionNone,
 		Payload:     rawBody{v: v, b: body},
 	}
 	return msg.Bytes()
@@ -815,31 +936,47 @@ git commit -m "feat(servermode): VIN 会话注册表——putIfAbsent 重复登�
 package servermode
 
 import (
-	"bufio"
 	"context"
 	"net"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
-// 采集 Hooks:把事件收进切片供断言。
+// 采集 Hooks:事件收进切片供断言。回调运行在连接 goroutine、断言运行在测试
+// goroutine——必须加锁(评审 M5,-race 门禁)。
 type collector struct {
-	status  []Status
+	mu       sync.Mutex
+	status   []Status
 	sessions []SessionEvent
-	frames  []FrameEvent
-	warns   []WarnEvent
-	now     time.Time
+	frames   []FrameEvent
+	warns    []WarnEvent
+	now      time.Time
 }
 
 func newCollector(fixed time.Time) (Hooks, *collector) {
 	c := &collector{now: fixed}
 	return normalizeHooks(Hooks{
-		OnStatus:  func(s Status) { c.status = append(c.status, s) },
-		OnSession: func(e SessionEvent) { c.sessions = append(c.sessions, e) },
-		OnFrame:   func(e FrameEvent) { c.frames = append(c.frames, e) },
-		OnWarn:    func(e WarnEvent) { c.warns = append(c.warns, e) },
+		OnStatus:  func(s Status) { c.mu.Lock(); c.status = append(c.status, s); c.mu.Unlock() },
+		OnSession: func(e SessionEvent) { c.mu.Lock(); c.sessions = append(c.sessions, e); c.mu.Unlock() },
+		OnFrame:   func(e FrameEvent) { c.mu.Lock(); c.frames = append(c.frames, e); c.mu.Unlock() },
+		OnWarn:    func(e WarnEvent) { c.mu.Lock(); c.warns = append(c.warns, e); c.mu.Unlock() },
 		Now:       func() time.Time { return c.now },
 	}), c
+}
+
+// waitFor 轮询断言辅助:fn 返回 true 前最多等 timeout(fn 自行持锁)。
+func waitFor(t *testing.T, timeout time.Duration, fn func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if fn() {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("条件在 %v 内未满足", timeout)
 }
 
 func startTestServer(t *testing.T, cfg Config, hooks Hooks) *Server {
@@ -886,30 +1023,34 @@ func TestFrameTooLargeDroppedConnAlive(t *testing.T) {
 	srv := startTestServer(t, DefaultConfig("127.0.0.1:0"), h)
 	conn := dial(t, srv)
 	defer conn.Close()
-	// 伪造长度字段 = 9000(>8KB 上限):合法起始头 + 超长声明
+	// 声明 payload=9000(>8KB)的伪帧头 + 紧随一帧合法登入。
+	// framing 层限长立即丢弃伪头并重同步(不阻塞等 9025 字节凑齐,评审 B4)
 	hdr := append([]byte{0x23, 0x23, 0x07, 0xFE}, []byte(vin17)...)
 	hdr = append(hdr, 0x00, 0x23, 0x28) // len=9000
-	if _, err := conn.Write(hdr); err != nil {
+	if _, err := conn.Write(append(hdr, loginFrame(t)...)); err != nil {
 		t.Fatal(err)
 	}
-	// 随后写一个合法帧应仍被处理(连接未断)
-	time.Sleep(100 * time.Millisecond)
-	if _, err := conn.Write(loginFrame(t)); err != nil {
-		t.Fatalf("超长帧后连接应存活: %v", err)
-	}
-	dead := conn.SetReadDeadline(time.Now().Add(1500 * time.Millisecond))
-	_ = dead
-	// 断言:产生超长 warn,且后续登录帧有事件
-	time.Sleep(300 * time.Millisecond)
-	found := false
-	for _, w := range c.warns {
-		if w.Note == "帧超长丢弃(>8KB)" {
-			found = true
+	waitFor(t, time.Second, func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		for _, w := range c.warns {
+			if w.Note == "帧超长丢弃(>8KB)" {
+				return true
+			}
 		}
-	}
-	if !found {
-		t.Fatalf("缺少超长 warn: %+v", c.warns)
-	}
+		return false
+	})
+	// 重同步成功:伪帧后的合法登入仍被处理(帧事件含 0x01)
+	waitFor(t, time.Second, func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		for _, f := range c.frames {
+			if f.Cmd == "0x01" {
+				return true
+			}
+		}
+		return false
+	})
 }
 
 func TestIdleEnabledCloses(t *testing.T) {
@@ -919,19 +1060,16 @@ func TestIdleEnabledCloses(t *testing.T) {
 	srv := startTestServer(t, cfg, h)
 	conn := dial(t, srv)
 	defer conn.Close()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if len(c.sessions) > 0 && !c.sessions[len(c.sessions)-1].Online {
-			break // offline 事件已到
+	waitFor(t, 2*time.Second, func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		for _, w := range c.warns {
+			if strings.HasPrefix(w.Note, "空闲超时关闭") {
+				return true
+			}
 		}
-		if _, err := conn.Write(nil); err != nil {
-			break // 连接已被关
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if len(c.warns) == 0 {
-		t.Fatal("空闲关闭应有 warn 事件")
-	}
+		return false
+	})
 }
 
 func TestIdleDisabledKeeps(t *testing.T) {
@@ -949,20 +1087,37 @@ func TestIdleDisabledKeeps(t *testing.T) {
 }
 
 func TestIdleUpdateRuntime(t *testing.T) {
-	h, _ := newCollector(time.Now())
+	h, c := newCollector(time.Now())
 	cfg := DefaultConfig("127.0.0.1:0")
 	cfg.IdleEnabled = false // 初始关闭:连接挂 150ms 不被剔
 	srv := startTestServer(t, cfg, h)
 	conn := dial(t, srv)
 	defer conn.Close()
 	time.Sleep(150 * time.Millisecond)
-	// 运行中开启(200ms)→ 读超时生效,连接应被关闭(未登入无 session 事件,直接断言 EOF)
+	// 运行中开启(200ms)→ UpdateIdle 逐连接重设 deadline,静默连接在 ~200ms 后
+	// 被服务端关闭(评审 M1:靠 poke 生效,不再依赖帧到达)。断言关闭发生在
+	// 客户端 2s 读超时**之前**(即确系服务端关闭,非本地超时)。
 	srv.UpdateIdle(true, 200*time.Millisecond)
+	start := time.Now()
 	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	buf := make([]byte, 1)
-	if _, err := conn.Read(buf); err == nil {
+	_, err := conn.Read(buf)
+	if err == nil {
 		t.Fatal("运行中开启空闲检测后连接应被关闭")
 	}
+	if elapsed := time.Since(start); elapsed > 1500*time.Millisecond {
+		t.Fatalf("连接由客户端读超时关闭而非服务端空闲剔除(耗时 %v)", elapsed)
+	}
+	waitFor(t, time.Second, func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		for _, w := range c.warns {
+			if strings.HasPrefix(w.Note, "空闲超时关闭") {
+				return true
+			}
+		}
+		return false
+	})
 }
 
 func TestMaxConns(t *testing.T) {
@@ -1021,11 +1176,8 @@ func TestRingBufferExport(t *testing.T) {
 	if !found {
 		t.Fatalf("导出行缺少 VIN: %q", lines)
 	}
-	_ = bufio.NewReader // 保留 import 占位(如无其他使用则删除)
 }
 ```
-
-注:末行 `_ = bufio.NewReader` 若无必要请删除并移除 import。
 
 - [ ] **Step 2: 跑测试确认失败**
 
@@ -1094,10 +1246,8 @@ type conn struct {
 }
 
 func (c *conn) handleRaw(ctx context.Context, raw []byte) {
-	if len(raw) > c.srv.cfg.MaxFrameBytes {
-		c.srv.hooks.OnWarn(WarnEvent{Note: "帧超长丢弃(>8KB)", Hex: fmt.Sprintf("%x", raw[:32])})
-		return
-	}
+	// 超长防护在 framing 层完成(NewFrameReaderLimit + ErrFrameTooLarge,见 serve);
+	// 此处不再重复判长。
 	d := decodeFrame(raw)
 	if d.Err != nil {
 		c.srv.hooks.OnWarn(WarnEvent{Note: d.Err.Error(), Hex: fmt.Sprintf("%x", raw)})
@@ -1178,10 +1328,8 @@ func (c *conn) handleData(d Decoded, now time.Time) {
 }
 
 func (c *conn) handleLogout(d Decoded, now time.Time) {
-	if c.authed {
-		c.srv.registry.Remove(c.vin)
-		c.srv.hooks.OnSession(SessionEvent{VIN: c.vin, Peer: c.nc.RemoteAddr().String(), Online: false, LastSeen: now})
-	}
+	// 只回应答;会话注销与 offline 事件由 removeConn 在连接真正关闭后发出
+	// (车端先收到 ack、后观察到掉线——与 Task 7 集成断言一致,评审 M2)。
 	c.reply(0x04, types.ResponseSuccess, nil)
 	time.AfterFunc(200*time.Millisecond, func() { _ = c.nc.Close() }) // 等 ack flush(D8)
 }
@@ -1204,11 +1352,12 @@ func (c *conn) handleClock(d Decoded, now time.Time) {
 }
 ```
 
-`conn.go` 的 import 含 `"github.com/sunsky74/gb32960/types"`。`serve` 的空闲判定改为每轮读取快照(支持运行中 `UpdateIdle` 即时生效):
+`conn.go` 的 import 含 `"github.com/sunsky74/gb32960/types"`。`serve` 循环(空闲判定走 cfgSnapshot 支持运行中更新;超长帧经 framing 层限长直接告警续读,评审 B4;读超时以 net.Error.Timeout() 识别并输出 spec 指定文案,评审 m2):
 
 ```go
 func (c *conn) serve(ctx context.Context) {
 	defer c.srv.removeConn(c)
+	c.fr = framing.NewFrameReaderLimit(c.nc, c.srv.cfgSnapshot().MaxFrameBytes)
 	for {
 		if ctx.Err() != nil {
 			return
@@ -1218,27 +1367,29 @@ func (c *conn) serve(ctx context.Context) {
 		} else {
 			_ = c.nc.SetReadDeadline(time.Time{})
 		}
-		raw, err := c.nextFrame(ctx)
+		raw, err := c.fr.Next()
 		if err != nil {
-			if ctx.Err() == nil {
-				c.srv.hooks.OnWarn(WarnEvent{Note: "连接断开: " + err.Error(), Hex: c.vin})
+			if ctx.Err() != nil {
+				return // 主动停机
 			}
+			if errors.Is(err, framing.ErrFrameTooLarge) {
+				c.srv.hooks.OnWarn(WarnEvent{Note: "帧超长丢弃(>8KB)"})
+				continue // 已重同步,继续读后续帧
+			}
+			var ne net.Error
+			if errors.As(err, &ne) && ne.Timeout() && c.srv.cfgSnapshot().IdleEnabled {
+				c.srv.hooks.OnWarn(WarnEvent{Note: "空闲超时关闭: " + c.vin}) // spec §5.2 指定文案
+				return
+			}
+			c.srv.hooks.OnWarn(WarnEvent{Note: "连接断开: " + err.Error(), Hex: c.vin})
 			return
 		}
 		c.handleRaw(ctx, raw)
 	}
 }
-
-// nextFrame 包一层 FrameReader(生命周期与连接一致)。
-func (c *conn) nextFrame(ctx context.Context) ([]byte, error) {
-	if c.fr == nil {
-		c.fr = framing.NewFrameReader(c.nc)
-	}
-	return c.fr.Next()
-}
 ```
 
-`conn` 结构体相应增加 `fr *framing.FrameReader` 字段。
+`conn` 结构体字段:`nc net.Conn; fr *framing.FrameReader; srv *Server; authed bool; vin string`;import 增加 `"errors"`。
 
 - [ ] **Step 5: 实现 server.go**
 
@@ -1260,12 +1411,11 @@ type Server struct {
 	registry *Registry
 	buf      *ring
 
-	mu       sync.Mutex
-	ln       net.Listener
-	conns    map[*conn]struct{}
-	running  bool
-	cancel   context.CancelFunc
-	stopOnce sync.Once
+	mu      sync.Mutex
+	ln      net.Listener
+	conns   map[*conn]struct{}
+	running bool
+	cancel  context.CancelFunc
 }
 
 // New 创建服务(未启动)。/hooks 经 normalizeHooks 填充默认值。
@@ -1325,42 +1475,48 @@ func (s *Server) acceptLoop(ctx context.Context) {
 	}
 }
 
-// Stop 停止监听并等待连接退出(≤2s)。
+// Stop 停止监听、主动关闭全部连接(阻塞读被唤醒 → removeConn 发 offline)并等待
+// 退出(≤2s)。幂等:未运行时直接返回 nil(评审 M4:去掉 stopOnce,支持 停止→再启动→再停止)。
 func (s *Server) Stop() error {
-	var err error
-	s.stopOnce.Do(func() {
-		s.mu.Lock()
-		ln, cancel, running := s.ln, s.cancel, s.running
-		s.running = false
+	s.mu.Lock()
+	if !s.running {
 		s.mu.Unlock()
-		if !running {
-			return
+		return nil
+	}
+	ln, cancel := s.ln, s.cancel
+	s.running = false
+	conns := make([]*conn, 0, len(s.conns))
+	for c := range s.conns {
+		conns = append(conns, c)
+	}
+	s.mu.Unlock()
+
+	var err error
+	if ln != nil {
+		err = ln.Close()
+	}
+	if cancel != nil {
+		cancel()
+	}
+	for _, c := range conns {
+		_ = c.nc.Close() // 唤醒阻塞读;authed 连接经 removeConn 发 offline + 注销
+	}
+	deadline := time.After(2 * time.Second) // 停机上限(AC-9)
+	for {
+		s.mu.Lock()
+		n := len(s.conns)
+		s.mu.Unlock()
+		if n == 0 {
+			break
 		}
-		if ln != nil {
-			err = ln.Close()
-		}
-		if cancel != nil {
-			cancel()
-		}
-		done := make(chan struct{})
-		go func() {
-			for {
-				s.mu.Lock()
-				n := len(s.conns)
-				s.mu.Unlock()
-				if n == 0 {
-					close(done)
-					return
-				}
-				time.Sleep(20 * time.Millisecond)
-			}
-		}()
 		select {
-		case <-done:
-		case <-time.After(2 * time.Second): // 停机上限(AC-9)
+		case <-deadline:
+			s.hooks.OnStatus(Status{Running: false})
+			return err
+		case <-time.After(20 * time.Millisecond):
 		}
-		s.hooks.OnStatus(Status{Running: false})
-	})
+	}
+	s.hooks.OnStatus(Status{Running: false})
 	return err
 }
 
@@ -1400,15 +1556,27 @@ func (s *Server) cfgSnapshot() Config {
 	return s.cfg
 }
 
-// UpdateIdle 运行中更新空闲检测(AC-10「即时生效」):改配置即可,
-// serve 循环下一轮按新值设置读超时;开启→关闭时旧 deadline 被清零。
+// UpdateIdle 运行中更新空闲检测(AC-10「即时生效」,评审 M1):改配置后逐连接
+// 主动重设读超时——阻塞在 Next() 的静默连接立即被唤醒:OFF→ON 时超时倒计时开始;
+// ON→OFF 时 deadline 清零。serve 循环下一轮按新配置继续。
 func (s *Server) UpdateIdle(enabled bool, d time.Duration) {
 	s.mu.Lock()
 	s.cfg.IdleEnabled = enabled
 	if enabled {
 		s.cfg.IdleTimeout = d
 	}
+	conns := make([]*conn, 0, len(s.conns))
+	for c := range s.conns {
+		conns = append(conns, c)
+	}
 	s.mu.Unlock()
+	for _, c := range conns {
+		if enabled {
+			_ = c.nc.SetReadDeadline(s.hooks.Now().Add(d))
+		} else {
+			_ = c.nc.SetReadDeadline(time.Time{})
+		}
+	}
 }
 ```
 
@@ -1523,7 +1691,7 @@ func TestIntegrationLogoutDelayedClose(t *testing.T) {
 ```bash
 go test ./internal/servermode/ -run TestIntegration -v -count=1
 ```
-Expected: PASS。失败时优先核对新 collector 的并发访问(integration 与 Task 6 共用时加锁或各自新建)。
+Expected: PASS。collector 已内置互斥锁(Task 6),integration 直接复用 newCollector 即可。
 
 - [ ] **Step 3: 任务级验收**
 
@@ -1560,6 +1728,7 @@ git commit -m "test(servermode): 引擎客户端驱动集成测试——登入/�
   - `(*ServerService) LoadConfig() ServerConfig`
   - `(*ServerService) Start(cfg ServerConfig) (servermode.Status, error)` — IP 非环回时返回需确认错误(`ErrLoopbackConfirm`,前端二次确认后带 `Force bool` 的 StartRequest 重试;简化:签名改 `Start(cfg ServerConfig, force bool)`)
   - `(*ServerService) Stop() error`
+  - `(*ServerService) UpdateIdle(enabled bool, idleSeconds int) error`(运行中即时生效,AC-10;**wailsjs 手写绑定时此方法不得遗漏**,评审 m7)
   - `(*ServerService) Status() servermode.Status`
   - `(*ServerService) Sessions() []servermode.Session`
   - `(*ServerService) ExportLog() (string, error)` — wails 保存对话框选路径,写 ExportLines 文本,返回路径
@@ -1677,7 +1846,8 @@ func (s *ServerService) Start(cfg ServerConfig, force bool) (servermode.Status, 
 	if !force && cfg.IP != "127.0.0.1" && cfg.IP != "localhost" {
 		return servermode.Status{}, fmt.Errorf("监听地址 %s 非环回,需在页面二次确认", cfg.IP)
 	}
-	if cfg.Port < 1 || cfg.Port > 65535 {
+	// 端口 0 = 系统分配临时端口(集成/桥接测试用);UI 层由 a-input-number min=1 挡住(评审 M3)
+	if cfg.Port < 0 || cfg.Port > 65535 {
 		return servermode.Status{}, fmt.Errorf("端口非法: %d", cfg.Port)
 	}
 	if cfg.IdleSeconds < 5 || cfg.IdleSeconds > 3600 {
@@ -1847,7 +2017,7 @@ interface ServerFrame {
   cmd: string
   hex: string
   summary: string
-  kind: 'normal' | 'unknown' | 'encrypted'
+  kind: 'normal' | 'unknown' | 'encrypted' | 'warn'
 }
 interface ServerSession {
   vin: string
@@ -1882,7 +2052,8 @@ function subscribe() {
       frames.value = [e, ...frames.value].slice(0, RENDER_CAP)
     }),
     EventsOn('server:warn', (e: { note: string }) => {
-      frames.value = [{ time: new Date().toISOString(), vin: '', cmd: 'WARN', hex: '', summary: e.note, kind: 'unknown' }, ...frames.value].slice(0, RENDER_CAP)
+      // 告警行独立样式(评审 m3):不冒充 unknown,避免与未知命令橙色混淆
+      frames.value = [{ time: new Date().toISOString(), vin: '', cmd: 'WARN', hex: '', summary: e.note, kind: 'warn' }, ...frames.value].slice(0, RENDER_CAP)
     }),
   ]
 }
@@ -1934,7 +2105,10 @@ async function exportLog() {
 }
 
 function kindClass(kind: string) {
-  return kind === 'unknown' ? 'frame-unknown' : kind === 'encrypted' ? 'frame-encrypted' : ''
+  if (kind === 'unknown') return 'frame-unknown'
+  if (kind === 'encrypted') return 'frame-encrypted'
+  if (kind === 'warn') return 'frame-warn'
+  return ''
 }
 
 onMounted(async () => {
@@ -1945,7 +2119,9 @@ onMounted(async () => {
     running.value = true
     listenAddr.value = st.listenAddr
   }
-  sessions.value = (await ServerService.Sessions().catch(() => [])) ?? []
+  // 快照行全部是活会话(注册表只存在线会话),补 online: true 供状态列渲染(评审 m3)
+  const snap = (await ServerService.Sessions().catch(() => [])) ?? []
+  sessions.value = snap.map((s: Omit<ServerSession, 'online'>) => ({ ...s, online: true }))
 })
 onUnmounted(() => offs.forEach((off) => off()))
 </script>
@@ -1955,8 +2131,8 @@ onUnmounted(() => offs.forEach((off) => off()))
 
 - 监听表单:IP/端口/空闲开关(a-switch)/空闲秒数(a-input-number 5~3600,开关关闭时禁用);`running ? 停止按钮(StopOutlined, danger) : 启动按钮(CaretRightOutlined, primary)`;导出按钮(running 时可用)
 - 状态条:`running ? <a-tag color="success">运行中 {{ listenAddr }}</a-tag> : <a-tag>未启动</a-tag>`
-- 会话表:dataSource=sessions,列 VIN/IP:端口/最后活跃;空态文案保留现有
-- 报文表:dataSource=frames,行 `:class="kindClass(record.kind)"`,列 时间/VIN/命令/HEX(hex 列 monospace);点击行 `detail = record`
+- 会话表:dataSource=sessions,列 **VIN / IP:端口 / 状态 / 最后活跃**(spec §5.4 状态列必须有);快照接口 `Sessions()` 返回的行全部是活会话,前端映射时 `online: true`(评审 m3);空态文案保留现有
+- 报文表:dataSource=frames,行 `:class="kindClass(record.kind)"`,列 时间/VIN/命令/HEX(hex 列 monospace);点击行 `detail = record`;**`server:warn` 事件单独渲染为 `.frame-warn` 样式行(不冒充 unknown,避免与未知命令色混淆,评审 m3)**
 - 详情抽屉:`<a-drawer v-model:open="detailVisible" :title="detail?.cmd">` 内嵌 ByteGridView(normalized-hex=detail.hex)与 FieldTableView;顶部一个扩展包下拉(选项 = `ParserService.ParserPacks()` + 默认「不使用扩展包」),字段表数据 = `ParserService.ParsePacket(detail.hex, packId)` 结果(spec §5.4:支持扩展包自定义单元解码);kind≠normal 时仅展示 hex 与说明(加密/未知不解析)
 - 空闲开关/时长变更且 running 时,`watch` 调 `ServerService.UpdateIdle(cfg.idleEnabled, cfg.idleSeconds)`(AC-10 即时生效;失败 message.error)
 
@@ -1966,8 +2142,10 @@ onUnmounted(() => offs.forEach((off) => off()))
 /* ---- 服务端模式:报文行特殊颜色(kind 区分,亮暗主题各自定义) ---- */
 .frame-unknown td { color: #d46b08; }          /* 橙:未知命令字 */
 .frame-encrypted td { color: #9254de; }        /* 紫:加密帧 */
+.frame-warn td { color: #cf1322; }             /* 红:服务端告警(空闲超时/超长/断开) */
 :root[data-theme='light'] .frame-unknown td { color: #ad4e00; }
 :root[data-theme='light'] .frame-encrypted td { color: #6424c2; }
+:root[data-theme='light'] .frame-warn td { color: #a8071a; }
 ```
 
 - [ ] **Step 3: 类型检查与构建**
