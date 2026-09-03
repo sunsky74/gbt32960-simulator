@@ -20,6 +20,8 @@ import (
 	mdl25 "github.com/sunsky74/gb32960/model/gbt2025"
 	"github.com/sunsky74/gb32960/types"
 	"github.com/sunsky74/gb32960/utils"
+
+	"gbt32960-simulator/internal/framing"
 )
 
 // State 客户端状态机取值。
@@ -428,7 +430,7 @@ func (c *Client) readLoop(ctx context.Context) {
 		if conn == nil || ctx.Err() != nil {
 			return
 		}
-		fr := NewFrameReader(conn)
+		fr := framing.NewFrameReader(conn)
 		for {
 			raw, err := fr.Next()
 			if err != nil {

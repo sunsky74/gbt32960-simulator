@@ -1,6 +1,6 @@
-// Package engine 实现模拟器的运行时:TCP/TLS 客户端、自动登录登出、
-// 心跳、周期上报与控制台事件总线。本包为纯 Go,不依赖 wails。
-package engine
+// Package framing 提供 GB/T 32960 帧流式拆包(半包/粘包/重同步),
+// 供客户端引擎与服务端模式共用,不含业务语义。
+package framing
 
 import (
 	"errors"
@@ -12,7 +12,9 @@ import (
 const (
 	frameHeaderLen = 24
 	bccLen         = 1
-	maxFrameLen    = 65535 + frameHeaderLen + bccLen
+
+	// MaxFrameLen 单帧总长硬上限:payload 最大 65535 + 头 24B + BCC 1B。
+	MaxFrameLen = 65535 + frameHeaderLen + bccLen
 )
 
 var validHeaders = map[[2]byte]bool{
@@ -26,13 +28,21 @@ var ErrFrameTooLarge = errors.New("gbt32960-sim: frame length exceeds 64KB limit
 // FrameReader 从 io.Reader 中流式拆出完整的 GB/T 32960 帧。
 // 半包时阻塞读满;粘包时逐帧返回;遇到非法起始符逐字节重同步。
 type FrameReader struct {
-	r   io.Reader
-	buf []byte
+	r        io.Reader
+	buf      []byte
+	maxTotal int // 帧总长上限,0 = 用 MaxFrameLen
 }
 
 // NewFrameReader 创建帧读取器。
 func NewFrameReader(r io.Reader) *FrameReader {
 	return &FrameReader{r: r, buf: make([]byte, 0, 1024)}
+}
+
+// NewFrameReaderLimit 创建带帧总长上限的读取器:声明长度超限时丢弃该帧头
+// 并重同步(返回 ErrFrameTooLarge 一次),不阻塞等待超长帧体凑齐。
+// 服务端模式用 8KB 上限实现 spec §5.2 的超长防护。
+func NewFrameReaderLimit(r io.Reader, maxTotal int) *FrameReader {
+	return &FrameReader{r: r, maxTotal: maxTotal, buf: make([]byte, 0, 1024)}
 }
 
 // readMore 从底层连接读一段数据追加到缓冲区。EOF 时若仍有残包返回 io.ErrUnexpectedEOF。
@@ -69,7 +79,12 @@ func (fr *FrameReader) tryParse() (frame []byte, total int, err error) {
 		// 3. 计算整帧长度:payloadLen 位于偏移 22,大端
 		payloadLen := int(fr.buf[22])<<8 | int(fr.buf[23])
 		total := frameHeaderLen + payloadLen + bccLen
-		if total > maxFrameLen {
+		limit := fr.maxTotal
+		if limit <= 0 {
+			limit = MaxFrameLen
+		}
+		if total > limit {
+			fr.buf = fr.buf[2:] // 跳过该伪起始头,重新同步
 			return nil, 0, ErrFrameTooLarge
 		}
 		if len(fr.buf) < total {
