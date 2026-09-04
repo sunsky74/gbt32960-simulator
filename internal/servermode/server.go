@@ -50,13 +50,15 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mu.Unlock()
 
 	s.hooks.OnStatus(Status{Running: true, ListenAddr: ln.Addr().String()})
-	go s.acceptLoop(ctx)
+	go s.acceptLoop(ln, ctx)
 	return nil
 }
 
-func (s *Server) acceptLoop(ctx context.Context) {
+// acceptLoop 参数化捕获 ln:避免无锁读 s.ln 在 Stop→快速 Start 换新 listener 时
+// 构成数据 race(评审 minor-1)。
+func (s *Server) acceptLoop(ln net.Listener, ctx context.Context) {
 	for {
-		nc, err := s.ln.Accept()
+		nc, err := ln.Accept()
 		if err != nil {
 			select {
 			case <-ctx.Done():
