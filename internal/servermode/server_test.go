@@ -244,3 +244,80 @@ func TestRingBufferExport(t *testing.T) {
 		t.Fatalf("导出行缺少 VIN: %q", lines)
 	}
 }
+
+func TestUnauthedFrameMarked(t *testing.T) {
+	h, c := newCollector(time.Now())
+	srv := startTestServer(t, DefaultConfig("127.0.0.1:0"), h)
+	conn := dial(t, srv)
+	defer conn.Close()
+
+	// 登入前发心跳:帧事件必须带未登入标记(0x07 应答被 authed 门禁拦截)
+	if _, err := conn.Write(heartbeatFrame(t)); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, time.Second, func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		for _, f := range c.frames {
+			if f.Cmd == "0x07" && f.Unauthed {
+				return true
+			}
+		}
+		return false
+	})
+
+	// 登入成功后同连接再发心跳:不再标记
+	if _, err := conn.Write(loginFrame(t)); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, time.Second, func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		for _, s := range c.sessions {
+			if s.Online {
+				return true
+			}
+		}
+		return false
+	})
+	if _, err := conn.Write(heartbeatFrame(t)); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, time.Second, func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		count := 0
+		for _, f := range c.frames {
+			if f.Cmd == "0x07" {
+				count++
+			}
+		}
+		return count >= 2
+	})
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// 按时间序断言:第 1 条心跳(登入前)带标记,其后(登入后)不带
+	var hb []FrameEvent
+	for _, f := range c.frames {
+		if f.Cmd == "0x07" {
+			hb = append(hb, f)
+		}
+	}
+	if len(hb) < 2 {
+		t.Fatalf("心跳帧不足 2 条: %d", len(hb))
+	}
+	if !hb[0].Unauthed {
+		t.Fatal("登入前的心跳应带未登入标记")
+	}
+	for _, f := range hb[1:] {
+		if f.Unauthed {
+			t.Fatalf("登入后的心跳不应带未登入标记: %+v", f)
+		}
+	}
+	// 登入帧本身(0x01)永不标记
+	for _, f := range c.frames {
+		if f.Cmd == "0x01" && f.Unauthed {
+			t.Fatal("登入帧是合法鉴权流程,不应标记未登入")
+		}
+	}
+}

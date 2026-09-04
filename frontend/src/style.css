@@ -830,3 +830,19 @@ html[data-no-anim] *::after {
 :root[data-theme='light'] .frame-unknown td { color: #ad4e00; }
 :root[data-theme='light'] .frame-encrypted td { color: #6424c2; }
 :root[data-theme='light'] .frame-warn td { color: #a8071a; }
+
+/* 未登入连接的报文:命令列灰色小标记(与 kind 颜色可叠加,不整行着色) */
+.unauthed-tag {
+  margin-inline-start: 6px;
+  margin-inline-end: 0;
+  padding: 0 4px;
+  font-size: 11px;
+  line-height: 16px;
+  color: #8c8c8c;
+  border-color: #434343;
+  background: transparent;
+}
+:root[data-theme='light'] .unauthed-tag {
+  color: #595959;
+  border-color: #d9d9d9;
+}

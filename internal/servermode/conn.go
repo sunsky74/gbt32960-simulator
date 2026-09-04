@@ -41,7 +41,10 @@ func (c *conn) handleRaw(ctx context.Context, raw []byte) {
 	if d.Version == api.V2025 {
 		sum = "2025 只读,应答未支持"
 	}
-	c.srv.hooks.OnFrame(FrameEvent{Time: now, VIN: d.VIN, Cmd: cmdName, Hex: fmt.Sprintf("%x", raw), Summary: sum, Kind: d.Kind})
+	c.srv.hooks.OnFrame(FrameEvent{
+		Time: now, VIN: d.VIN, Cmd: cmdName, Hex: fmt.Sprintf("%x", raw), Summary: sum, Kind: d.Kind,
+		Unauthed: d.Version == api.V2016 && !c.authed && d.Cmd != 0x01,
+	})
 	if c.vin == "" && d.VIN != "" {
 		c.vin = d.VIN
 	}

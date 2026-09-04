@@ -18,6 +18,7 @@ interface ServerFrame {
   hex: string
   summary: string
   kind: 'normal' | 'unknown' | 'encrypted' | 'warn'
+  unauthed?: boolean
 }
 interface ServerSession {
   vin: string
@@ -176,7 +177,7 @@ const sessionColumns = [
 const frameColumns = [
   { title: '时间', key: 'time', width: 90 },
   { title: 'VIN', dataIndex: 'vin', width: 180 },
-  { title: '命令', dataIndex: 'cmd', width: 90 },
+  { title: '命令', dataIndex: 'cmd', width: 130 },
   { title: 'HEX', key: 'hex' },
 ]
 
@@ -276,6 +277,10 @@ onUnmounted(() => offs.forEach((off) => off()))
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'time'">{{ fmtTime(record.time) }}</template>
             <span v-else-if="column.key === 'hex'" class="hex-cell">{{ record.hex }}</span>
+            <template v-else-if="column.key === 'cmd'">
+              {{ record.cmd }}
+              <a-tag v-if="record.unauthed" class="unauthed-tag">未登入</a-tag>
+            </template>
           </template>
           <template #emptyText>
             <div class="console-empty-title">暂无报文</div>

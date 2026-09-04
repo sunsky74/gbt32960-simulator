@@ -32,6 +32,9 @@ type FrameEvent struct {
 	Hex     string    `json:"hex"`
 	Summary string    `json:"summary"`
 	Kind    FrameKind `json:"kind"`
+	// Unauthed: 2016 帧来自未登入连接且非登入命令本身(0x01 是合法的鉴权流程,
+	// 不标)。前端据此在控制台加「未登入」标记。
+	Unauthed bool `json:"unauthed,omitempty"`
 }
 
 type WarnEvent struct {
