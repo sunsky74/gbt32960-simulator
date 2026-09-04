@@ -467,6 +467,8 @@ export namespace servermode {
 	    loginAt: any;
 	    // Go type: time
 	    lastSeen: any;
+	    rxCount: number;
+	    txCount: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new Session(source);
@@ -478,6 +480,8 @@ export namespace servermode {
 	        this.peer = source["peer"];
 	        this.loginAt = this.convertValues(source["loginAt"], null);
 	        this.lastSeen = this.convertValues(source["lastSeen"], null);
+	        this.rxCount = source["rxCount"];
+	        this.txCount = source["txCount"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

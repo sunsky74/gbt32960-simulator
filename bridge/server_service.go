@@ -112,6 +112,18 @@ func (s *ServerService) UpdateIdle(enabled bool, idleSeconds int) error {
 	return nil
 }
 
+// ClearLog 清空服务端导出缓冲(页面「清空日志」)。
+func (s *ServerService) ClearLog() error {
+	s.mu.Lock()
+	srv := s.srv
+	s.mu.Unlock()
+	if srv == nil || !srv.Status().Running {
+		return fmt.Errorf("服务未启动")
+	}
+	srv.ClearLog()
+	return nil
+}
+
 func (s *ServerService) Status() servermode.Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()

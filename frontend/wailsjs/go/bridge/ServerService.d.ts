@@ -4,6 +4,8 @@ import {bridge} from '../models';
 import {servermode} from '../models';
 import {context} from '../models';
 
+export function ClearLog():Promise<void>;
+
 export function ExportLog():Promise<string>;
 
 export function LoadConfig():Promise<bridge.ServerConfig>;

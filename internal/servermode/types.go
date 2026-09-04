@@ -12,6 +12,12 @@ const (
 	KindEncrypted FrameKind = "encrypted" // 加密帧(不支持解密)
 )
 
+// 帧方向(TX = 服务端发出的应答)。
+const (
+	DirRX string = "rx"
+	DirTX string = "tx"
+)
+
 // 事件结构一律带 json tag:wails EventsEmit 序列化后前端按小写字段消费。
 type Status struct {
 	Running    bool   `json:"running"`
@@ -35,6 +41,8 @@ type FrameEvent struct {
 	// Unauthed: 2016 帧来自未登入连接且非登入命令本身(0x01 是合法的鉴权流程,
 	// 不标)。前端据此在控制台加「未登入」标记。
 	Unauthed bool `json:"unauthed,omitempty"`
+	// Dir: rx 收到 / tx 服务端应答(缺省 rx,向后兼容)。
+	Dir string `json:"dir,omitempty"`
 }
 
 type WarnEvent struct {
@@ -48,6 +56,8 @@ type Session struct {
 	Peer     string    `json:"peer"`
 	LoginAt  time.Time `json:"loginAt"`
 	LastSeen time.Time `json:"lastSeen"`
+	RxCount  int       `json:"rxCount"`
+	TxCount  int       `json:"txCount"`
 }
 
 // Hooks 是 servermode 对外的唯一事件出口与时间源;bridge 层注入 EventsEmit,

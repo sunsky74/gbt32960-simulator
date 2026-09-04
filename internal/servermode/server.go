@@ -142,6 +142,9 @@ func (s *Server) Sessions() []Session { return s.registry.Snapshot() }
 // ExportLines 导出环形缓冲为文本行: [时间] [VIN] [命令] [hex](AC-5)。
 func (s *Server) ExportLines() []string { return s.buf.snapshot() }
 
+// ClearLog 清空导出环形缓冲(页面「清空日志」)。
+func (s *Server) ClearLog() { s.buf.clear() }
+
 // removeConn 连接退出清理 + offline 事件。
 func (s *Server) removeConn(c *conn) {
 	s.mu.Lock()

@@ -27,3 +27,9 @@ func (r *ring) snapshot() []string {
 	copy(out, r.vals)
 	return out
 }
+
+func (r *ring) clear() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.vals = r.vals[:0]
+}

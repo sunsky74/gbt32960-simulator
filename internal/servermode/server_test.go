@@ -321,3 +321,30 @@ func TestUnauthedFrameMarked(t *testing.T) {
 		}
 	}
 }
+
+func TestTxEventAndCounters(t *testing.T) {
+	h, c := newCollector(time.Now())
+	srv := startTestServer(t, DefaultConfig("127.0.0.1:0"), h)
+	conn := dial(t, srv)
+	defer conn.Close()
+
+	if _, err := conn.Write(loginFrame(t)); err != nil {
+		t.Fatal(err)
+	}
+	// 登入应答产生 TX 事件
+	waitFor(t, time.Second, func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		for _, f := range c.frames {
+			if f.Dir == DirTX && f.Cmd == "0x01" && f.Summary == "应答 成功(0x01)" {
+				return true
+			}
+		}
+		return false
+	})
+	// 会话快照:RX=1(登入帧)、TX=1(登入应答)
+	snap := srv.Sessions()
+	if len(snap) != 1 || snap[0].RxCount != 1 || snap[0].TxCount != 1 {
+		t.Fatalf("会话计数异常: %+v", snap)
+	}
+}

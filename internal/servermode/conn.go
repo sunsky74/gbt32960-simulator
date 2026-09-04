@@ -44,6 +44,7 @@ func (c *conn) handleRaw(ctx context.Context, raw []byte) {
 	c.srv.hooks.OnFrame(FrameEvent{
 		Time: now, VIN: d.VIN, Cmd: cmdName, Hex: fmt.Sprintf("%x", raw), Summary: sum, Kind: d.Kind,
 		Unauthed: d.Version == api.V2016 && !c.authed && d.Cmd != 0x01,
+		Dir:      DirRX,
 	})
 	if c.vin == "" && d.VIN != "" {
 		c.vin = d.VIN
@@ -75,6 +76,8 @@ func (c *conn) handleRaw(ctx context.Context, raw []byte) {
 	default: // 0x05/0x06/未知
 		c.srv.hooks.OnWarn(WarnEvent{Note: fmt.Sprintf("命令 0x%02X 不在服务端支持范围(平台链路/未知命令)", d.Cmd)})
 	}
+	// RX 计数放在处理器之后:登入帧须等 handleLogin 注册会话后才能计数
+	c.srv.registry.Count(d.VIN, 1, 0)
 }
 
 func (c *conn) reply(cmd byte, resp types.ResponseType, body []byte) {
@@ -85,6 +88,24 @@ func (c *conn) reply(cmd byte, resp types.ResponseType, body []byte) {
 	}
 	if _, err := c.nc.Write(raw); err != nil {
 		c.srv.hooks.OnWarn(WarnEvent{Note: "应答发送失败: " + err.Error()})
+		return
+	}
+	// TX 方向遥测:应答帧进入报文流(不进导出环形缓冲——AC-5 冻结为接收侧)
+	c.srv.hooks.OnFrame(FrameEvent{
+		Time: c.srv.hooks.Now(), VIN: c.vin, Cmd: fmt.Sprintf("0x%02X", cmd),
+		Hex: fmt.Sprintf("%x", raw), Summary: respText(resp), Kind: KindNormal, Dir: DirTX,
+	})
+	c.srv.registry.Count(c.vin, 0, 1)
+}
+
+func respText(resp types.ResponseType) string {
+	switch resp {
+	case types.ResponseSuccess:
+		return "应答 成功(0x01)"
+	case types.ResponseFailed:
+		return "应答 错误(0x02)"
+	default:
+		return fmt.Sprintf("应答 0x%02X", byte(resp))
 	}
 }
 

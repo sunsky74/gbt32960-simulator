@@ -35,6 +35,18 @@ func (r *Registry) Touch(vin string, now time.Time) {
 	}
 }
 
+// Count 累加会话的 RX/TX 帧计数;会话不存在时为 no-op(未登入连接的帧不计数)。
+// 最后活跃时间由 Touch 维护,二者职责分离。
+func (r *Registry) Count(vin string, rx, tx int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if s, ok := r.sessions[vin]; ok {
+		s.RxCount += rx
+		s.TxCount += tx
+		r.sessions[vin] = s
+	}
+}
+
 func (r *Registry) Remove(vin string) (Session, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
