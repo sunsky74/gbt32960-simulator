@@ -93,7 +93,8 @@ function bytesOf(r: StreamRow): string {
 
 <template>
   <section class="stream-pane">
-    <div class="stream-toolbar">
+    <header class="pane-head">
+      <span class="pane-title">实时通信</span>
       <a-radio-group v-model:value="filter" size="small" button-style="solid">
         <a-radio-button value="all">全部</a-radio-button>
         <a-radio-button value="rx">RX</a-radio-button>
@@ -111,7 +112,7 @@ function bytesOf(r: StreamRow): string {
         <a-checkbox v-model:checked="autoScroll" />跟随
       </label>
       <span class="stream-count">{{ visibleRows.length }} 条</span>
-    </div>
+    </header>
 
     <div v-if="emptyState" class="stream-empty">
       <template v-if="emptyState === 'off'">
@@ -173,14 +174,23 @@ function bytesOf(r: StreamRow): string {
   background: var(--bg-panel);
 }
 
-.stream-toolbar {
+.pane-head {
   flex: none;
   display: flex;
   align-items: center;
   gap: 10px;
+  min-height: 40px;
   padding: 6px 12px;
+  background: var(--bg-panel-head);
   border-bottom: 1px solid var(--border-subtle);
   flex-wrap: wrap;
+}
+
+.pane-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .stream-search {
@@ -241,7 +251,7 @@ function bytesOf(r: StreamRow): string {
 
 .stream-head {
   flex: none;
-  height: 26px;
+  height: 28px;
   font-size: 11px;
   color: var(--text-tertiary);
   border-bottom: 1px solid var(--border-subtle);
@@ -257,7 +267,7 @@ function bytesOf(r: StreamRow): string {
 }
 
 .stream-row {
-  height: 24px;
+  height: 34px;
   font-size: 12px;
   cursor: pointer;
   border-bottom: 1px solid var(--border-subtle);

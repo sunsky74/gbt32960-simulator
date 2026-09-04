@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { fmtClock, fmtDuration, type SessionRow } from './types'
 
 const props = defineProps<{
@@ -10,6 +11,16 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'select', vin: string): void
 }>()
+
+// VIN / peer(IP:Port)关键字过滤(仅影响显示,不改动会话数据)
+const search = ref('')
+const visibleSessions = computed<SessionRow[]>(() => {
+  const kw = search.value.trim().toLowerCase()
+  if (!kw) return props.sessions
+  return props.sessions.filter(
+    (s) => s.vin.toLowerCase().includes(kw) || s.peer.toLowerCase().includes(kw),
+  )
+})
 
 // 在线时长:loginAt 起算;离线会话停格在最后活跃时刻
 function onlineDur(s: SessionRow): string {
@@ -24,13 +35,23 @@ function onlineDur(s: SessionRow): string {
 
 <template>
   <aside class="session-pane">
-    <div class="pane-head">
-      客户端会话
-      <span v-if="sessions.length" class="pane-count">{{ sessions.length }}</span>
-    </div>
+    <header class="pane-head">
+      <div class="pane-head-row">
+        <span class="pane-title">客户端会话</span>
+        <span v-if="sessions.length" class="pane-count">{{ sessions.length }}</span>
+      </div>
+      <div class="pane-search">
+        <a-input-search
+          v-model:value="search"
+          size="small"
+          placeholder="搜索 VIN / IP"
+          allow-clear
+        />
+      </div>
+    </header>
     <div class="session-list">
       <div
-        v-for="s in sessions"
+        v-for="s in visibleSessions"
         :key="s.vin"
         class="sess-row"
         :class="{ online: s.online, selected: s.vin === selectedVin }"
@@ -48,9 +69,9 @@ function onlineDur(s: SessionRow): string {
         </div>
         <div class="sess-meta dim">最后活跃 {{ fmtClock(s.lastSeen) }}</div>
       </div>
-      <div v-if="!sessions.length" class="pane-empty">
-        <div class="pe-title">暂无客户端连接</div>
-        <div class="pe-sub">服务启动后,接入的客户端将显示在此</div>
+      <div v-if="!visibleSessions.length" class="pane-empty">
+        <div class="pe-title">{{ sessions.length ? '无匹配会话' : '暂无客户端连接' }}</div>
+        <div class="pe-sub">{{ sessions.length ? '调整搜索关键字后重试' : '服务启动后,接入的客户端将显示在此' }}</div>
       </div>
     </div>
   </aside>
@@ -58,25 +79,35 @@ function onlineDur(s: SessionRow): string {
 
 <style scoped>
 .session-pane {
-  width: 240px;
   flex: none;
+  width: 100%; /* 实际宽度由父级(ServerModePage 拖拽分割)以行内样式给定 */
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   background: var(--bg-panel);
-  border-right: 1px solid var(--border-subtle);
 }
 
 .pane-head {
   flex: none;
   display: flex;
+  flex-direction: column;
+  background: var(--bg-panel-head);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.pane-head-row {
+  display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
+  height: 32px;
+  padding: 0 12px;
+}
+
+.pane-title {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-subtle);
 }
 
 .pane-count {
@@ -85,6 +116,10 @@ function onlineDur(s: SessionRow): string {
   font-weight: 400;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+.pane-search {
+  padding: 0 8px 8px;
 }
 
 .session-list {

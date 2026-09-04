@@ -8,6 +8,7 @@ import * as ServerService from '../../wailsjs/go/bridge/ServerService'
 import * as ParserService from '../../wailsjs/go/bridge/ParserService'
 import { EventsOn } from '../../wailsjs/runtime/runtime'
 import ResizableDivider from '../components/layout/ResizableDivider.vue'
+import ResizableDividerCol from '../components/layout/ResizableDividerCol.vue'
 import SessionList from '../components/servermode/SessionList.vue'
 import PacketStream from '../components/servermode/PacketStream.vue'
 import PacketDetail from '../components/servermode/PacketDetail.vue'
@@ -215,14 +216,59 @@ function onSelectFrame(r: StreamRow) {
   detailFrame.value = detailFrame.value?.id === r.id ? null : r
 }
 
-// ---------- 上下拖拽:报文流 ↔ 报文详情(ResizableDivider,ClientSimulatorPage 同款) ----------
-const mainH = ref<number | null>(null) // null = 报文流自适应,详情区默认高
-function onDividerDrag(topPx: number) {
-  mainH.value = topPx
+// ---------- 双向分割:左右(Session 面板宽)+ 上下(报文流↔详情) ----------
+const workbenchEl = ref<HTMLElement | null>(null)
+const MIN_TOP_PX = 220 // 报文流区最小高
+const MIN_BOTTOM_PX = 180 // 详情区最小高
+const SESS_MAX_PX = 360 // 会话面板宽度上限
+const MIN_STREAM_PX = 360 // 报文流区最小宽(右侧不得挤没)
+const DIVIDER_PX = 7
+
+const mainH = ref<number | null>(null) // 报文流区高度 px;null = 初始未测量(flex 自适应)
+const sessW = ref(240) // 会话面板宽度 px
+
+// 上下拖拽:组件保证 bottom ≥ 180,此处补足 top ≥ 220
+function onVSplitDrag(topPx: number) {
+  mainH.value = Math.max(topPx, MIN_TOP_PX)
+}
+
+function onSessDrag(leftPx: number) {
+  sessW.value = leftPx
+}
+
+// 窗口缩放后钳制,任一区域不得为 0
+function clampMainH() {
+  const h = workbenchEl.value?.clientHeight ?? 0
+  if (h <= 0 || mainH.value === null) return
+  const max = Math.max(MIN_TOP_PX, h - MIN_BOTTOM_PX - DIVIDER_PX)
+  mainH.value = Math.min(Math.max(mainH.value, MIN_TOP_PX), max)
+}
+
+function clampSessW() {
+  const w = workbenchEl.value?.clientWidth ?? 0
+  if (w <= 0) return
+  const max = Math.min(SESS_MAX_PX, w - MIN_STREAM_PX - DIVIDER_PX)
+  if (max > 0) sessW.value = Math.min(sessW.value, max)
+}
+
+function onWindowResize() {
+  clampMainH()
+  clampSessW()
+}
+
+// 初始分割:上区 56%(800px 窗口 ≈ 420/330),先于异步数据执行避免首帧比例失衡
+function initSplit() {
+  const h = workbenchEl.value?.clientHeight ?? 0
+  if (h > 0) mainH.value = Math.round(h * 0.56)
+  clampMainH()
+  clampSessW()
 }
 
 onMounted(async () => {
   tickTimer = window.setInterval(() => (now.value = Date.now()), 1000)
+  // 先初始化分割与监听:纯浏览器调试(无 window.runtime)时布局仍可用
+  initSplit()
+  window.addEventListener('resize', onWindowResize)
   subscribe()
   await loadCfg()
   const st = await ServerService.Status().catch(() => null)
@@ -239,14 +285,17 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (tickTimer !== undefined) clearInterval(tickTimer)
+  window.removeEventListener('resize', onWindowResize)
   offs.forEach((off) => off())
 })
 </script>
 
 <template>
   <div class="server-page">
-    <!-- 顶部紧凑服务控制栏:状态 + 关键指标 + 操作 -->
+    <!-- 顶部紧凑服务控制栏:标题 + 状态 + 关键指标 + 操作 -->
     <header class="ctrl-bar">
+      <span class="page-title">服务端模式</span>
+      <span class="bar-sep" />
       <span class="dot" :class="{ on: running }" />
       <span class="st-text" :class="{ on: running }">{{ running ? '运行中' : '已停止' }}</span>
       <span class="proto-tag">TCP</span>
@@ -277,8 +326,8 @@ onUnmounted(() => {
       </a-button>
     </header>
 
-    <!-- 主体:左会话 / 中报文流,底部报文详情(上下可拖) -->
-    <div class="workbench">
+    <!-- 主体工作台:左会话 ↔ 右报文流(左右可拖),下方报文详情(上下可拖) -->
+    <div ref="workbenchEl" class="workbench">
       <div
         class="main-row"
         :class="{ fixed: mainH !== null }"
@@ -288,7 +337,14 @@ onUnmounted(() => {
           :sessions="sessions"
           :selected-vin="selectedVin"
           :now="now"
+          :style="{ width: sessW + 'px' }"
           @select="onSelectSession"
+        />
+        <ResizableDividerCol
+          :min-px="200"
+          :max-px="SESS_MAX_PX"
+          :right-min-px="MIN_STREAM_PX"
+          @drag="onSessDrag"
         />
         <PacketStream
           :frames="streamFrames"
@@ -300,8 +356,8 @@ onUnmounted(() => {
           @start="start"
         />
       </div>
-      <ResizableDivider :min-px="150" @drag="onDividerDrag" />
-      <div class="detail-row" :class="{ grown: mainH !== null }">
+      <ResizableDivider class="tight" :min-px="MIN_BOTTOM_PX" @drag="onVSplitDrag" />
+      <div class="detail-row">
         <PacketDetail :frame="detailFrame" :parser-packs="parserPacks" />
       </div>
     </div>
@@ -361,6 +417,7 @@ onUnmounted(() => {
 .server-page {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden; /* 满高工作台:顶栏 + 主体,主体内部各自滚动 */
@@ -373,13 +430,27 @@ onUnmounted(() => {
 /* ---------- 服务控制栏 ---------- */
 .ctrl-bar {
   flex: none;
-  height: 42px;
+  height: 48px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 0 14px;
   background: var(--bg-panel);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.page-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.bar-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border-strong);
+  flex: none;
 }
 
 .dot {
@@ -454,12 +525,13 @@ onUnmounted(() => {
   flex: 1;
 }
 
-/* ---------- 工作台骨架 ---------- */
+/* ---------- 工作台骨架:左右分割在上区,上下分割在整列 ---------- */
 .workbench {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  background: var(--bg-page);
 }
 
 .main-row {
@@ -474,14 +546,9 @@ onUnmounted(() => {
 }
 
 .detail-row {
-  flex: 0 0 232px; /* 默认高度:容纳字节网格与字段表 */
+  flex: 1 1 auto;
   min-height: 0;
   display: flex;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.detail-row.grown {
-  flex: 1 1 auto; /* 拖拽后详情区吃剩余空间 */
 }
 
 /* ---------- 配置抽屉 ---------- */

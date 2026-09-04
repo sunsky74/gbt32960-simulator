@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import * as ParserService from '../../../wailsjs/go/bridge/ParserService'
 import type { parser as parserNs } from '../../../wailsjs/go/models'
 import ByteGridView, { type ByteHover, type ByteRange } from '../parser/ByteGridView.vue'
 import FieldTableView from '../parser/FieldTableView.vue'
+import ResizableDividerCol from '../layout/ResizableDividerCol.vue'
 import { fmtMs, type StreamRow } from './types'
 
 type ParsedField = parserNs.Field
@@ -161,59 +162,116 @@ function dirText(f: StreamRow): string {
   if (f.kind === 'warn') return 'Error'
   return f.dir === 'tx' ? 'TX' : 'RX'
 }
+
+// ---------- 双栏宽度:HEX ↔ 解析 内部分割(默认 45%,可拖) ----------
+const colsEl = ref<HTMLElement | null>(null)
+const HEX_MIN_PX = 200
+const PARSE_MIN_PX = 240
+const COLS_DIVIDER_PX = 7
+const hexW = ref<number | null>(null)
+
+function onColsDrag(px: number) {
+  hexW.value = px
+}
+
+// 容器出现/窗口缩放后钳制,保证解析栏有可用宽度
+function clampHexW() {
+  const w = colsEl.value?.clientWidth ?? 0
+  if (w <= 0 || hexW.value === null) return
+  const max = Math.max(HEX_MIN_PX, w - PARSE_MIN_PX - COLS_DIVIDER_PX)
+  hexW.value = Math.min(Math.max(hexW.value, HEX_MIN_PX), max)
+}
+
+watch(colsEl, (el) => {
+  if (!el) return
+  if (hexW.value === null) hexW.value = Math.round(el.clientWidth * 0.45)
+  clampHexW()
+})
+
+function onWindowResize() {
+  clampHexW()
+}
+
+onMounted(() => window.addEventListener('resize', onWindowResize))
+onBeforeUnmount(() => window.removeEventListener('resize', onWindowResize))
 </script>
 
 <template>
   <section class="detail-pane">
     <template v-if="frame">
-      <div class="detail-head">
+      <header class="detail-head">
+        <span class="pane-title">报文详情</span>
+        <span class="bar-sep" />
         <span class="dh-dir" :class="frame.kind === 'link' ? 'dir-link' : frame.kind === 'warn' ? 'dir-error' : frame.dir">
           {{ dirText(frame) }}
         </span>
         <span class="dh-meta mono">{{ fmtMs(frame.time) }}</span>
         <span v-if="frame.vin" class="dh-vin mono">{{ frame.vin }}</span>
         <span v-if="frame.cmd" class="dh-cmd mono">{{ frame.cmd }}</span>
-        <span v-if="frame.hex" class="dh-bytes mono">{{ frame.hex.length / 2 }} B</span>
         <div class="spacer" />
+        <span v-if="frame.hex" class="dh-bytes mono">{{ frame.hex.length / 2 }} B</span>
         <template v-if="frame.kind === 'normal'">
           <span class="dh-label">扩展包</span>
           <a-select v-model:value="selectedPackId" size="small" class="pack-select" :options="packOptions" />
         </template>
-      </div>
+      </header>
 
-      <div v-if="frame.kind === 'normal'" class="detail-cols">
-        <div class="detail-left">
-          <p class="section-label">报文字节视图(悬停字节查看字段信息)</p>
-          <ByteGridView
-            :normalized-hex="frame.hex"
-            :active="activeRange"
-            :active-source="activeSource"
-            :active-byte="activeByte"
-            :issues="parseResult?.issues ?? []"
-            @hover="onByteHover"
-            @pin="onBytePin"
-          />
+      <div v-if="frame.kind === 'normal'" ref="colsEl" class="detail-cols">
+        <div
+          class="detail-left"
+          :style="hexW !== null ? { flex: '0 0 auto', width: hexW + 'px' } : undefined"
+        >
+          <div class="col-head">
+            HEX 字节视图
+            <span class="col-hint">悬停字节查看字段信息</span>
+          </div>
+          <div class="col-body">
+            <ByteGridView
+              :normalized-hex="frame.hex"
+              :active="activeRange"
+              :active-source="activeSource"
+              :active-byte="activeByte"
+              :issues="parseResult?.issues ?? []"
+              @hover="onByteHover"
+              @pin="onBytePin"
+            />
+          </div>
         </div>
+        <ResizableDividerCol
+          :min-px="HEX_MIN_PX"
+          :right-min-px="PARSE_MIN_PX"
+          @drag="onColsDrag"
+        />
         <div class="detail-right">
-          <p class="section-label">解析结果({{ parseResult?.fields.length ?? 0 }} 个字段 · 悬停/点击联动字节)</p>
-          <FieldTableView
-            :fields="parseResult?.fields ?? []"
-            :active="activeRange"
-            @hover="onFieldHover"
-            @pin="onFieldPin"
-          />
+          <div class="col-head">
+            协议解析
+            <span class="col-hint">{{ parseResult?.fields.length ?? 0 }} 个字段 · 悬停/点击联动字节</span>
+          </div>
+          <div class="col-body">
+            <FieldTableView
+              :fields="parseResult?.fields ?? []"
+              :active="activeRange"
+              @hover="onFieldHover"
+              @pin="onFieldPin"
+            />
+          </div>
         </div>
       </div>
 
       <div v-else class="detail-raw">
-        <p class="section-label">{{ frame.summary || '该帧不做字段解析' }}</p>
-        <pre v-if="frame.hex" class="raw-hex">{{ frame.hex }}</pre>
+        <div class="col-head">
+          原始报文
+          <span class="col-hint">{{ frame.summary || '该帧不做字段解析' }}</span>
+        </div>
+        <div class="raw-body">
+          <pre v-if="frame.hex" class="raw-hex">{{ frame.hex }}</pre>
+        </div>
       </div>
     </template>
 
     <div v-else class="detail-empty">
       <div class="de-title">报文详情</div>
-      <div class="de-sub">点击上方报文行查看字节视图与解析结果</div>
+      <div class="de-sub">点击上方报文查看详情</div>
     </div>
 
     <!-- 悬停信息卡片(照抄 PacketParserPage:字段卡/字节卡 + 屏幕边缘翻转) -->
@@ -260,9 +318,24 @@ function dirText(f: StreamRow): string {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 12px;
+  height: 36px;
+  padding: 0 12px;
+  background: var(--bg-panel-head);
   border-bottom: 1px solid var(--border-subtle);
-  min-height: 34px;
+}
+
+.pane-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.bar-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--border-subtle);
+  flex: none;
 }
 
 .dh-dir {
@@ -321,11 +394,36 @@ function dirText(f: StreamRow): string {
   width: 200px;
 }
 
-.section-label {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin: 6px 12px;
+/* 双栏小 Header:与 Panel 头分离,标注各区内容 */
+.col-head {
   flex: none;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.col-hint {
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 双栏 Body:各自独立滚动 */
+.col-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ---------- 双栏:左 HEX 字节视图,右协议解析结果 ---------- */
@@ -336,11 +434,10 @@ function dirText(f: StreamRow): string {
 }
 
 .detail-left {
-  flex: 1 1 44%;
+  flex: 0 0 45%; /* 首次拖拽前按 45% 基准,拖拽后由行内 px 宽度接管 */
   min-width: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid var(--border-subtle);
 }
 
 .detail-left :deep(.byte-grid) {
@@ -349,7 +446,7 @@ function dirText(f: StreamRow): string {
 }
 
 .detail-right {
-  flex: 1 1 56%;
+  flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -364,8 +461,15 @@ function dirText(f: StreamRow): string {
 .detail-raw {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.raw-body {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
-  padding: 0 12px 10px;
+  padding: 10px 12px;
 }
 
 .raw-hex {

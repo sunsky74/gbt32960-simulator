@@ -32,6 +32,8 @@
   --row-hover-bg: rgba(22, 119, 255, 0.06);
   --item-hover-bg: rgba(255, 255, 255, 0.04);
   --divider-grip: rgba(255, 255, 255, 0.25);
+  --divider-hover: rgba(22, 119, 255, 0.35);
+  --bg-panel-head: #1a1a1a;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   --scrollbar-thumb: rgba(255, 255, 255, 0.18);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
@@ -58,6 +60,8 @@
   --row-hover-bg: rgba(22, 119, 255, 0.06);
   --item-hover-bg: rgba(0, 0, 0, 0.04);
   --divider-grip: rgba(0, 0, 0, 0.15);
+  --divider-hover: rgba(22, 119, 255, 0.35);
+  --bg-panel-head: #fafafa;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
   --scrollbar-thumb: rgba(0, 0, 0, 0.18);
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.3);
@@ -247,6 +251,105 @@ body {
 
 .resizable-divider.dragging,
 .resizable-divider.dragging * {
+  user-select: none;
+}
+
+/* ============================================================
+   服务端工作台分割条(IDE 风):视觉 1px 线 + 7px 命中热区,
+   hover 线色增强 + 中央 grip 显现,拖拽中线变主色。
+   .tight 修饰既有上下拖拽条(仅服务端页使用,不影响客户端页);
+   .resizable-divider-col 为左右拖拽条(Session↔报文流、HEX↔解析)。
+   ============================================================ */
+.resizable-divider.tight {
+  height: 7px;
+}
+
+.resizable-divider.tight::before,
+.resizable-divider-col::before {
+  content: '';
+  position: absolute;
+  background: var(--border-subtle);
+  transition: background 0.15s;
+}
+
+.resizable-divider.tight::before {
+  left: 0;
+  right: 0;
+  top: 3px;
+  height: 1px;
+}
+
+.resizable-divider-col {
+  position: relative;
+  flex-shrink: 0;
+  width: 7px;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 6;
+  transition: background 0.15s;
+}
+
+.resizable-divider-col::before {
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+}
+
+.resizable-divider-col:hover,
+.resizable-divider-col.dragging {
+  background: var(--primary-hover-bg);
+}
+
+.resizable-divider.tight:hover::before,
+.resizable-divider-col:hover::before {
+  background: var(--divider-hover);
+}
+
+.resizable-divider.tight.dragging::before,
+.resizable-divider-col.dragging::before {
+  background: var(--primary);
+}
+
+/* tight 上下条:grip 常态隐藏,hover/拖拽显现(覆盖基类常显样式) */
+.resizable-divider.tight .divider-grip {
+  width: 24px;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, width 0.15s;
+}
+
+.resizable-divider.tight:hover .divider-grip,
+.resizable-divider.tight.dragging .divider-grip {
+  opacity: 1;
+  width: 24px;
+  background: var(--divider-grip);
+}
+
+.resizable-divider.tight.dragging .divider-grip {
+  background: var(--primary);
+}
+
+/* 左右条:grip 为竖向小条,hover/拖拽显现 */
+.resizable-divider-col .divider-grip {
+  width: 3px;
+  height: 24px;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.resizable-divider-col:hover .divider-grip {
+  opacity: 1;
+}
+
+.resizable-divider-col.dragging .divider-grip {
+  opacity: 1;
+  background: var(--primary);
+}
+
+.resizable-divider-col.dragging,
+.resizable-divider-col.dragging * {
   user-select: none;
 }
 
