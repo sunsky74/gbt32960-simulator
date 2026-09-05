@@ -294,28 +294,10 @@ async function clearConsole() {
 </template>
 
 <style scoped>
-/* 日志列表在 Panel 内纵向排布,空状态用 margin:auto 双轴居中 */
+/* 日志列表在 Panel 内纵向排布,空态容器复用全局 .console-empty(console-empty-*) */
 .console-list {
   display: flex;
   flex-direction: column;
-}
-
-.console-empty {
-  margin: auto;
-  padding: 32px 16px;
-  text-align: center;
-  user-select: none;
-}
-
-.console-empty-title {
-  color: var(--text-secondary);
-  font-size: 14px;
-  margin-bottom: 4px;
-}
-
-.console-empty-sub {
-  color: var(--text-tertiary);
-  font-size: 13px;
 }
 
 .check-line {

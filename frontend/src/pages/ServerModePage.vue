@@ -220,7 +220,7 @@ function onSelectFrame(r: StreamRow) {
 const workbenchEl = ref<HTMLElement | null>(null)
 const MIN_TOP_PX = 220 // 报文流区最小高
 const MIN_BOTTOM_PX = 180 // 详情区最小高
-const SESS_MAX_PX = 360 // 会话面板宽度上限
+const SESS_MAX_PX = 320 // 会话面板宽度上限
 const MIN_STREAM_PX = 360 // 报文流区最小宽(右侧不得挤没)
 const DIVIDER_PX = 7
 
@@ -292,17 +292,17 @@ onUnmounted(() => {
 
 <template>
   <div class="server-page">
-    <!-- 顶部紧凑服务控制栏:标题 + 状态 + 关键指标 + 操作 -->
-    <header class="ctrl-bar">
-      <span class="page-title">服务端模式</span>
+    <!-- 顶部服务控制栏:品牌位 + 状态 + 关键指标 + 操作(全局 .topbar) -->
+    <header class="topbar">
+      <span class="brand">服务端模式</span>
       <span class="bar-sep" />
-      <span class="dot" :class="{ on: running }" />
-      <span class="st-text" :class="{ on: running }">{{ running ? '运行中' : '已停止' }}</span>
-      <span class="proto-tag">TCP</span>
-      <span class="listen mono">{{ listenAddr || '未监听' }}</span>
-      <span class="stat">客户端 <b>{{ sessions.length }}</b></span>
-      <span class="stat">报文 <b>{{ frames.length }}</b></span>
-      <span class="stat">运行 <b>{{ uptimeText }}</b></span>
+      <span class="server-dot" :class="{ on: running }" />
+      <span class="server-status" :class="{ on: running }">{{ running ? '运行中' : '已停止' }}</span>
+      <span class="server-proto">TCP</span>
+      <span class="server-addr">{{ listenAddr || '未监听' }}</span>
+      <span class="server-stat">客户端 <b>{{ sessions.length }}</b></span>
+      <span class="server-stat">报文 <b>{{ frames.length }}</b></span>
+      <span class="server-stat">运行 <b>{{ uptimeText }}</b></span>
       <div class="spacer" />
       <a-button v-if="!running" type="primary" size="small" @click="start">
         <template #icon><CaretRightOutlined /></template>
@@ -327,9 +327,9 @@ onUnmounted(() => {
     </header>
 
     <!-- 主体工作台:左会话 ↔ 右报文流(左右可拖),下方报文详情(上下可拖) -->
-    <div ref="workbenchEl" class="workbench">
+    <div ref="workbenchEl" class="server-workbench">
       <div
-        class="main-row"
+        class="server-main-row"
         :class="{ fixed: mainH !== null }"
         :style="mainH !== null ? { height: mainH + 'px' } : undefined"
       >
@@ -357,9 +357,7 @@ onUnmounted(() => {
         />
       </div>
       <ResizableDivider class="tight" :min-px="MIN_BOTTOM_PX" @drag="onVSplitDrag" />
-      <div class="detail-row">
-        <PacketDetail :frame="detailFrame" :parser-packs="parserPacks" />
-      </div>
+      <PacketDetail :frame="detailFrame" :parser-packs="parserPacks" />
     </div>
 
     <!-- 服务配置抽屉:Listen/空闲设置不再常驻顶栏 -->
@@ -412,181 +410,3 @@ onUnmounted(() => {
     </a-drawer>
   </div>
 </template>
-
-<style scoped>
-.server-page {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden; /* 满高工作台:顶栏 + 主体,主体内部各自滚动 */
-}
-
-.mono {
-  font-family: var(--font-mono);
-}
-
-/* ---------- 服务控制栏 ---------- */
-.ctrl-bar {
-  flex: none;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 14px;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border-strong);
-}
-
-.page-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  white-space: nowrap;
-}
-
-.bar-sep {
-  width: 1px;
-  height: 16px;
-  background: var(--border-strong);
-  flex: none;
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-tertiary);
-  flex: none;
-}
-
-.dot.on {
-  background: var(--success);
-  animation: dot-pulse 2s ease-out infinite;
-}
-
-@keyframes dot-pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(82, 194, 26, 0.4);
-  }
-  70% {
-    box-shadow: 0 0 0 6px rgba(82, 194, 26, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(82, 194, 26, 0);
-  }
-}
-
-.st-text {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.st-text.on {
-  color: var(--success);
-}
-
-.proto-tag {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 16px;
-  padding: 0 6px;
-  border: 1px solid var(--border-strong);
-  border-radius: 2px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.listen {
-  font-size: 12px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.stat {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-
-.stat b {
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.spacer {
-  flex: 1;
-}
-
-/* ---------- 工作台骨架:左右分割在上区,上下分割在整列 ---------- */
-.workbench {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-page);
-}
-
-.main-row {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-  overflow: hidden;
-}
-
-.main-row.fixed {
-  flex: none; /* 拖拽后高度完全由 px 决定 */
-}
-
-.detail-row {
-  flex: 1 1 auto;
-  min-height: 0;
-  display: flex;
-}
-
-/* ---------- 配置抽屉 ---------- */
-.cfg-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin-bottom: 16px;
-}
-
-.cfg-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.form-label {
-  width: 80px;
-  flex: none;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.cfg-item :deep(.ant-input),
-.cfg-item :deep(.ant-input-number) {
-  flex: 1;
-}
-
-.cfg-num {
-  width: 100%;
-}
-
-.cfg-hint {
-  margin-bottom: 16px;
-}
-
-.cfg-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-</style>

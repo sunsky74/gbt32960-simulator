@@ -197,21 +197,21 @@ onBeforeUnmount(() => window.removeEventListener('resize', onWindowResize))
 </script>
 
 <template>
-  <section class="detail-pane">
+  <section class="zone">
     <template v-if="frame">
-      <header class="detail-head">
-        <span class="pane-title">报文详情</span>
+      <header class="zone-head">
+        <span class="zone-title">报文详情</span>
         <span class="bar-sep" />
-        <span class="dh-dir" :class="frame.kind === 'link' ? 'dir-link' : frame.kind === 'warn' ? 'dir-error' : frame.dir">
+        <span class="dir-badge" :class="frame.kind === 'link' ? 'dir-link' : frame.kind === 'warn' ? 'dir-error' : frame.dir">
           {{ dirText(frame) }}
         </span>
-        <span class="dh-meta mono">{{ fmtMs(frame.time) }}</span>
-        <span v-if="frame.vin" class="dh-vin mono">{{ frame.vin }}</span>
-        <span v-if="frame.cmd" class="dh-cmd mono">{{ frame.cmd }}</span>
+        <span class="detail-meta mono">{{ fmtMs(frame.time) }}</span>
+        <span v-if="frame.vin" class="detail-vin mono">{{ frame.vin }}</span>
+        <span v-if="frame.cmd" class="detail-cmd mono">{{ frame.cmd }}</span>
         <div class="spacer" />
-        <span v-if="frame.hex" class="dh-bytes mono">{{ frame.hex.length / 2 }} B</span>
+        <span v-if="frame.hex" class="detail-bytes mono">{{ frame.hex.length / 2 }} B</span>
         <template v-if="frame.kind === 'normal'">
-          <span class="dh-label">扩展包</span>
+          <span class="detail-label">扩展包</span>
           <a-select v-model:value="selectedPackId" size="small" class="pack-select" :options="packOptions" />
         </template>
       </header>
@@ -269,9 +269,9 @@ onBeforeUnmount(() => window.removeEventListener('resize', onWindowResize))
       </div>
     </template>
 
-    <div v-else class="detail-empty">
-      <div class="de-title">报文详情</div>
-      <div class="de-sub">点击上方报文查看详情</div>
+    <div v-else class="zone-empty">
+      <div class="console-empty-title">报文详情</div>
+      <div class="console-empty-sub">点击上方报文查看详情</div>
     </div>
 
     <!-- 悬停信息卡片(照抄 PacketParserPage:字段卡/字节卡 + 屏幕边缘翻转) -->
@@ -302,285 +302,3 @@ onBeforeUnmount(() => window.removeEventListener('resize', onWindowResize))
     </div>
   </section>
 </template>
-
-<style scoped>
-.detail-pane {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-panel);
-}
-
-.detail-head {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 36px;
-  padding: 0 12px;
-  background: var(--bg-panel-head);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.pane-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.bar-sep {
-  width: 1px;
-  height: 14px;
-  background: var(--border-subtle);
-  flex: none;
-}
-
-.dh-dir {
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.dh-dir.rx {
-  color: var(--success);
-}
-
-.dh-dir.tx {
-  color: var(--primary);
-}
-
-.dh-dir.dir-link {
-  color: #9254de;
-}
-
-.dh-dir.dir-error {
-  color: var(--error);
-}
-
-.mono {
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.dh-meta {
-  color: var(--text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-
-.dh-vin {
-  color: var(--primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 260px;
-}
-
-.dh-cmd {
-  color: var(--text-primary);
-}
-
-.dh-bytes {
-  color: var(--text-tertiary);
-}
-
-.dh-label {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.pack-select {
-  width: 200px;
-}
-
-/* 双栏小 Header:与 Panel 头分离,标注各区内容 */
-.col-head {
-  flex: none;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  font-size: 11px;
-  color: var(--text-tertiary);
-  background: var(--bg-elevated);
-  border-bottom: 1px solid var(--border-subtle);
-  user-select: none;
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.col-hint {
-  font-weight: 400;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* 双栏 Body:各自独立滚动 */
-.col-body {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-/* ---------- 双栏:左 HEX 字节视图,右协议解析结果 ---------- */
-.detail-cols {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-}
-
-.detail-left {
-  flex: 0 0 45%; /* 首次拖拽前按 45% 基准,拖拽后由行内 px 宽度接管 */
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.detail-left :deep(.byte-grid) {
-  flex: 1;
-  min-height: 0;
-}
-
-.detail-right {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.detail-right :deep(.field-table) {
-  flex: 1;
-  min-height: 0;
-}
-
-/* 未知/加密/告警行:仅 hex 原文与说明 */
-.detail-raw {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.raw-body {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 10px 12px;
-}
-
-.raw-hex {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.4px;
-  white-space: pre-wrap;
-  word-break: break-all;
-  color: var(--text-primary);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-  padding: 8px 10px;
-  margin: 0;
-}
-
-/* ---------- 空态 ---------- */
-.detail-empty {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  user-select: none;
-}
-
-.de-title {
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-
-.de-sub {
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-
-/* ---------- 字节悬停信息卡片(样式照抄 PacketParserPage) ---------- */
-.byte-card {
-  position: fixed;
-  z-index: 1200;
-  pointer-events: none;
-  min-width: 200px;
-  max-width: 250px;
-  padding: 8px 10px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  box-shadow: var(--shadow);
-  font-size: 12px;
-  animation: card-in 0.1s ease-out;
-}
-
-@keyframes card-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.bc-name {
-  color: var(--text-primary);
-  font-weight: 600;
-  margin-bottom: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.bc-kv {
-  display: flex;
-  gap: 8px;
-}
-
-.bc-k {
-  color: var(--text-tertiary);
-  min-width: 44px;
-  flex-shrink: 0;
-}
-
-.bc-v {
-  color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.bc-hex {
-  white-space: normal;
-  word-break: break-all;
-}
-
-.bc-u {
-  color: var(--text-tertiary);
-}
-
-.bc-issue {
-  margin-top: 6px;
-  padding: 5px 7px;
-  border-radius: 3px;
-  font-size: 11px;
-  line-height: 1.5;
-  color: #ff7875;
-  background: rgba(255, 77, 79, 0.1);
-}
-
-[data-theme='light'] .bc-issue {
-  color: #cf1322;
-  background: rgba(207, 19, 34, 0.08);
-}
-</style>
