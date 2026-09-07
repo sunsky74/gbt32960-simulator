@@ -33,7 +33,7 @@ defineProps<{
   justify-content: space-between;
   align-items: center;
   gap: 24px;
-  padding: 14px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -49,7 +49,7 @@ defineProps<{
 }
 
 .sr-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -60,21 +60,21 @@ defineProps<{
 
 .sr-badge {
   flex-shrink: 0;
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1;
-  padding: 2px 5px;
-  border-radius: 3px;
+  padding: 2px 6px;
+  border-radius: 2px;
   color: var(--text-tertiary);
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
 }
 
 .sr-desc {
-  margin-top: 3px;
+  margin-top: 4px;
   font-size: 12px;
   line-height: 1.6;
-  color: var(--text-tertiary);
-  max-width: 72%;
+  color: var(--text-secondary);
+  max-width: 70%;
   overflow-wrap: break-word;
 }
 

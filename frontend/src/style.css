@@ -44,6 +44,8 @@
   --hl-bg: rgba(22, 119, 255, 0.32);
   --hl-shadow: 0 0 0 1px rgba(22, 119, 255, 0.75), 0 0 8px rgba(22, 119, 255, 0.5);
   --success-glow: rgba(82, 194, 26, 0.4);
+  --c-unknown: #d46b08;
+  --c-encrypted: #9254de;
 }
 
 /* Light 主题变量:工业工具风(浅灰页面底 → 白色面板 → 白底输入) */
@@ -72,6 +74,8 @@
   --hl-bg: rgba(22, 119, 255, 0.15);
   --hl-shadow: 0 0 0 1px rgba(22, 119, 255, 0.6), 0 0 6px rgba(22, 119, 255, 0.35);
   --success-glow: rgba(56, 158, 13, 0.35);
+  --c-unknown: #ad4e00;
+  --c-encrypted: #6424c2;
 }
 
 /* 主题切换过渡:仅背景/文字/边框/阴影,快速且不影响输入与数据刷新 */
@@ -231,12 +235,15 @@ body {
 }
 
 /* ============================================================
-   可拖拽分割条:常态轻量,Hover/Drag 出现主色反馈
+   分割条统一规范(ui-design-reference §8):12px 透明判定区 + 常显居中胶囊手柄,
+   hover/拖拽切换主色并锁定全局光标;交互意图纯靠手柄与光标表达。
+   .resizable-divider 为上下拖拽条(手柄横向胶囊 36×4),
+   .resizable-divider-col 为左右拖拽条(手柄纵向胶囊 4×36)。
    ============================================================ */
 .resizable-divider {
   position: relative;
   flex-shrink: 0;
-  height: 9px;
+  height: 12px;
   cursor: ns-resize;
   display: flex;
   align-items: center;
@@ -252,32 +259,21 @@ body {
 
 .divider-grip {
   width: 36px;
-  height: 3px;
-  border-radius: 2px;
+  height: 4px;
+  border-radius: 999px;
   background: var(--divider-grip);
   transition: background 0.15s, width 0.15s;
 }
 
 .resizable-divider:hover .divider-grip,
 .resizable-divider.dragging .divider-grip {
-  width: 48px;
+  width: 40px;
   background: var(--primary);
 }
 
 .resizable-divider.dragging,
 .resizable-divider.dragging * {
   user-select: none;
-}
-
-/* ============================================================
-   服务端工作台分割条:12px 命中热区(同时构成 Panel 间 12px 呼吸间距),
-   透明容器 + 常显胶囊手柄,hover/拖拽平滑过渡主色,交互意图
-   纯靠手柄与光标表达(无视觉线、无悬浮文字)。
-   .tight 修饰既有上下拖拽条(仅服务端页使用,不影响客户端页);
-   .resizable-divider-col 为左右拖拽条(Session↔报文流、HEX↔解析)。
-   ============================================================ */
-.resizable-divider.tight {
-  height: 12px;
 }
 
 .resizable-divider-col {
@@ -297,27 +293,11 @@ body {
   background: var(--primary-hover-bg);
 }
 
-/* 上下条胶囊手柄:32×4 常显(背景继承基类 --divider-grip),hover/拖拽变主色加宽 */
-.resizable-divider.tight .divider-grip {
-  width: 32px;
-  height: 4px;
-  border-radius: 999px;
-  opacity: 1;
-  transition: background 0.15s, width 0.15s;
-}
-
-.resizable-divider.tight:hover .divider-grip,
-.resizable-divider.tight.dragging .divider-grip {
-  width: 40px;
-  background: var(--primary);
-}
-
-/* 左右条胶囊手柄:4×32 常显,hover/拖拽变主色加高 */
+/* 左右条胶囊手柄:4×36 常显,hover/拖拽变主色加高 */
 .resizable-divider-col .divider-grip {
   width: 4px;
-  height: 32px;
+  height: 36px;
   border-radius: 999px;
-  opacity: 1;
   transition: background 0.15s, height 0.15s;
 }
 
@@ -912,6 +892,32 @@ body {
   font-size: 12px;
 }
 
+
+/* ============================================================
+   弹层蒙层(§11):antd 默认 rgba(0,0,0,0.45) 之上叠加轻微毛玻璃
+   ============================================================ */
+.ant-modal-mask,
+.ant-drawer-mask {
+  backdrop-filter: blur(2px);
+}
+
+/* 弹窗内说明文字(§11.2):各弹层共用,禁止 scoped 重写 */
+.modal-hint {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+/* 控件固定宽度档位(§5 档位表):替代模板内联 style="width" */
+.w-84 { width: 84px; }
+.w-110 { width: 110px; }
+.w-130 { width: 130px; }
+.w-160 { width: 160px; }
+.w-180 { width: 180px; }
+.w-200 { width: 200px; }
+.w-220 { width: 220px; }
+.w-300 { width: 300px; }
+
 /* ============================================================
    滚动条
    ============================================================ */
@@ -1234,7 +1240,7 @@ html[data-no-anim] *::after {
 }
 
 .dir-badge.dir-link {
-  color: #9254de;
+  color: var(--c-encrypted);
 }
 
 .dir-badge.dir-error {
@@ -1281,12 +1287,12 @@ html[data-no-anim] *::after {
 }
 
 .st-unknown {
-  color: #d46b08;
+  color: var(--c-unknown);
   border-color: rgba(212, 107, 8, 0.4);
 }
 
 .st-encrypted {
-  color: #9254de;
+  color: var(--c-encrypted);
   border-color: rgba(146, 84, 222, 0.4);
 }
 
@@ -1303,13 +1309,13 @@ html[data-no-anim] *::after {
 .stream-row.frame-unknown .c-cmd,
 .stream-row.frame-unknown .c-name,
 .stream-row.frame-unknown .c-summary {
-  color: #d46b08;
+  color: var(--c-unknown);
 }
 
 .stream-row.frame-encrypted .c-cmd,
 .stream-row.frame-encrypted .c-name,
 .stream-row.frame-encrypted .c-summary {
-  color: #9254de;
+  color: var(--c-encrypted);
 }
 
 .stream-row.frame-warn .c-cmd,
@@ -1317,35 +1323,12 @@ html[data-no-anim] *::after {
   color: var(--error);
 }
 
-:root[data-theme='light'] .stream-row.frame-unknown .c-cmd,
-:root[data-theme='light'] .stream-row.frame-unknown .c-name,
-:root[data-theme='light'] .stream-row.frame-unknown .c-summary {
-  color: #ad4e00;
-}
-
-:root[data-theme='light'] .stream-row.frame-encrypted .c-cmd,
-:root[data-theme='light'] .stream-row.frame-encrypted .c-name,
-:root[data-theme='light'] .stream-row.frame-encrypted .c-summary {
-  color: #6424c2;
-}
-
 :root[data-theme='light'] .stream-row.frame-warn .c-cmd,
 :root[data-theme='light'] .stream-row.frame-warn .c-summary {
   color: #a8071a;
 }
 
-/* Link 紫与 frame-encrypted / st-encrypted 的 Light 覆盖同源(#9254de → #6424c2) */
-:root[data-theme='light'] .dir-badge.dir-link {
-  color: #6424c2;
-}
 
-:root[data-theme='light'] .st-unknown {
-  color: #ad4e00;
-}
-
-:root[data-theme='light'] .st-encrypted {
-  color: #6424c2;
-}
 
 :root[data-theme='light'] .st-warn {
   color: #a8071a;
@@ -1367,6 +1350,15 @@ html[data-no-anim] *::after {
 
 .detail-cmd {
   color: var(--text-primary);
+}
+
+/* 详情头描述:超长截断(title 悬浮全文),不挤爆工具行 */
+.detail-desc {
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
 }
 
 .detail-bytes {
@@ -1589,11 +1581,9 @@ html[data-no-anim] *::after {
 }
 
 /* ---- 服务端模式:报文行特殊颜色(kind 区分,亮暗主题各自定义) ---- */
-.frame-unknown td { color: #d46b08; }          /* 橙:未知命令字 */
-.frame-encrypted td { color: #9254de; }        /* 紫:加密帧 */
+.frame-unknown td { color: var(--c-unknown); }          /* 橙:未知命令字 */
+.frame-encrypted td { color: var(--c-encrypted); }        /* 紫:加密帧 */
 .frame-warn td { color: #cf1322; }             /* 红:服务端告警(空闲超时/超长/断开) */
-:root[data-theme='light'] .frame-unknown td { color: #ad4e00; }
-:root[data-theme='light'] .frame-encrypted td { color: #6424c2; }
 :root[data-theme='light'] .frame-warn td { color: #a8071a; }
 
 /* 未登入连接的报文:命令列灰色小标记(与 kind 颜色可叠加,不整行着色) */

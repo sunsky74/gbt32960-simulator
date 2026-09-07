@@ -244,9 +244,10 @@ function onClick(e: MouseEvent) {
   border-color: rgba(207, 19, 34, 0.35);
 }
 
-/* 同字段区间内字节:弱高亮 */
+/* 同字段区间内字节:规范联动高亮(primary-hover-bg 底 + 主色描边,双主题变量) */
 .byte-hl {
-  background: var(--hl-bg);
+  background: var(--primary-hover-bg);
+  box-shadow: 0 0 0 1px var(--divider-hover);
 }
 
 /* 当前字节:强高亮(边框 + 浅背景 + 放大) */
@@ -260,7 +261,8 @@ function onClick(e: MouseEvent) {
 
 /* 字段行悬停来源:整个字段区间明显突出、轻微放大 */
 .byte-field-hl {
-  background: var(--hl-bg);
+  background: var(--primary-hover-bg);
+  box-shadow: 0 0 0 1px var(--divider-hover);
   transform: scale(1.04);
 }
 

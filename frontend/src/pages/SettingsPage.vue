@@ -403,8 +403,8 @@ const shortcuts = [
 .sn-item {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 7px 10px;
+  gap: 8px;
+  padding: 8px 10px;
   border-radius: 6px;
   font-size: 13px;
   color: var(--text-secondary);
@@ -447,7 +447,7 @@ const shortcuts = [
 
 .sb-title {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
 }

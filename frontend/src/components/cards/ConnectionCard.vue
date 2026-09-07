@@ -39,7 +39,7 @@ onMounted(refreshPacks)
             <a-input v-model:value="cfg.host" placeholder="127.0.0.1" style="width: 100%" />
           </a-form-item>
           <a-form-item name="port" noStyle>
-            <a-input-number v-model:value="cfg.port" :min="1" :max="65535" placeholder="32960" style="width: 110px" />
+            <a-input-number v-model:value="cfg.port" :min="1" :max="65535" placeholder="32960" class="w-110" />
           </a-form-item>
         </a-space-compact>
       </a-form-item>
@@ -67,7 +67,7 @@ onMounted(refreshPacks)
           :min="0"
           :max="3600"
           addon-after="秒"
-          style="width: 180px"
+          class="w-180"
         />
         <span class="field-hint">0 = 不发心跳 (0x07)</span>
       </a-form-item>

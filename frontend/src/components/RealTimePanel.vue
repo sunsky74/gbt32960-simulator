@@ -165,7 +165,7 @@ async function onIntervalChange(v: number | string | null | undefined) {
               :max="3600"
               size="small"
               addon-after="秒"
-              style="width: 130px"
+              class="w-130"
               @change="onIntervalChange"
             />
           </div>
@@ -248,7 +248,7 @@ async function onIntervalChange(v: number | string | null | undefined) {
                             <a-input-number
                               :value="arrayValues(row, f.key)[ai]"
                               size="small"
-                              style="width: 84px"
+                              class="w-84"
                               @change="(v: number | string | null | undefined) => setArrayValue(row, f.key, ai, v)"
                             />
                             <a-button size="small" type="text" @click="removeArrayItem(row, f.key, ai)">×</a-button>
@@ -285,12 +285,12 @@ async function onIntervalChange(v: number | string | null | undefined) {
                   :min="0"
                   :max="86400"
                   addon-after="秒"
-                  style="width: 200px"
+                  class="w-200"
                 />
                 <span class="field-hint">第一条的采集时间 = 当前时间 − 偏移</span>
               </a-form-item>
               <a-form-item label="补发条数">
-                <a-input-number v-model:value="reissueCount" :min="1" :max="100" addon-after="条" style="width: 200px" />
+                <a-input-number v-model:value="reissueCount" :min="1" :max="100" addon-after="条" class="w-200" />
                 <span class="field-hint">模拟离线期间采集的报文条数</span>
               </a-form-item>
               <a-form-item label="补发间隔">
@@ -299,7 +299,7 @@ async function onIntervalChange(v: number | string | null | undefined) {
                   :min="1"
                   :max="3600"
                   addon-after="秒"
-                  style="width: 200px"
+                  class="w-200"
                 />
                 <span class="field-hint">每条的时间戳按此间隔逐条前移</span>
               </a-form-item>

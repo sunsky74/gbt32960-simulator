@@ -626,7 +626,7 @@ onMounted(refresh)
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 16px;
+  padding: 12px 16px;
   gap: 12px;
 }
 
@@ -701,8 +701,8 @@ onMounted(refresh)
 
 .ext-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
   align-content: start;
 }
 
@@ -831,13 +831,12 @@ onMounted(refresh)
 }
 
 .ec-bound.on {
-  color: #52c41a;
+  color: var(--success);
   background: rgba(82, 196, 26, 0.12);
 }
 
 [data-theme='light'] .ec-bound.on {
-  color: #389e0d;
-  background: rgba(82, 196, 26, 0.14);
+  background: rgba(56, 158, 13, 0.12);
 }
 
 /* 统计行:数字 + 单位 + 详情入口 */
@@ -1003,7 +1002,7 @@ onMounted(refresh)
 .dd-btn-danger:hover {
   background: rgba(255, 77, 79, 0.08) !important;
   border-color: rgba(255, 77, 79, 0.35) !important;
-  color: var(--error-color, #ff4d4f) !important;
+  color: var(--error) !important;
 }
 
 /* JSON 页签:代码块头部(标签 + 复制) */
@@ -1044,11 +1043,12 @@ onMounted(refresh)
   color: #d4d4d4;
   background: #0f0f0f;
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 12px 14px;
-  max-height: 60vh;
+  max-height: 360px;
   overflow: auto;
-  white-space: pre;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .dd-json :deep(.j-key) {

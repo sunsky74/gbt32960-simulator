@@ -1003,22 +1003,7 @@ function doCopyHex() {
 .bc-u {
   color: var(--text-tertiary);
 }
-
-/* 字节卡内的异常说明(与协议定义不符的单元) */
-.bc-issue {
-  margin-top: 6px;
-  padding: 5px 7px;
-  border-radius: 3px;
-  font-size: 11px;
-  line-height: 1.5;
-  color: #ff7875;
-  background: rgba(255, 77, 79, 0.1);
-}
-
-[data-theme='light'] .bc-issue {
-  color: #cf1322;
-  background: rgba(207, 19, 34, 0.08);
-}
+/* bc-issue 复用全局 style.css 版本(双主题 token 化),此处不再 scoped 重写 */
 </style>
 
 <style>

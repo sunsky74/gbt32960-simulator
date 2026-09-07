@@ -84,7 +84,7 @@ function leftContentHeight(): number {
   const padTop = parseFloat(cs.paddingTop) || 0
   const padBottom = parseFloat(cs.paddingBottom) || 0
   const divider = el.querySelector('.resizable-divider') as HTMLElement | null
-  return el.clientHeight - padTop - padBottom - (divider?.offsetHeight ?? 9)
+  return el.clientHeight - padTop - padBottom - (divider?.offsetHeight ?? 12)
 }
 
 function clampTopHeight() {

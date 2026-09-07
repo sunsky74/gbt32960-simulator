@@ -166,7 +166,7 @@ async function onReportIntervalChange(g: GroupSchema) {
               :max="3600"
               size="small"
               addon-after="秒"
-              style="width: 130px"
+              class="w-130"
               @change="() => onReportIntervalChange(g)"
             />
           </div>
@@ -177,16 +177,7 @@ async function onReportIntervalChange(g: GroupSchema) {
 </template>
 
 <style scoped>
-.row-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 4px;
-}
-.row-label {
-  font-size: 12px;
-  color: #888;
-}
+/* row-head/row-label/row-bytes 复用全局样式(group-row 体系),不再 scoped 重写 */
 .extcmd-actions {
   display: flex;
   align-items: center;

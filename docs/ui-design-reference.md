@@ -1,8 +1,10 @@
-# UI 全局参考设置参数(客户端模拟页基准)
+# UI 全局参考设置参数 V2.0(正式版)
 
-> 来源:以 `frontend/src/pages/ClientSimulatorPage.vue` 及其全部子组件(RealTimePanel / ConsolePanel / CollapsibleCard / 右侧卡片栈)+ `frontend/src/style.css` + `frontend/src/theme/index.ts` 为基准提炼。
-> 用途:新增页面/组件时的间距、边框、按钮、字号等全局参考,保证与客户端模拟页视觉一致。
-> 双主题:所有颜色参数均提供 Dark / Light 两套,由 `<html data-theme>` 驱动。
+> 来源基准:客户端模拟页体系 + 全仓审计(`docs/frontend-ui-spec.md`)。
+> 用途:**后续前端开发的唯一准则**——新增页面/组件一律以本文档为准;与本文冲突的存量实现按 §13 迁移清单收敛。
+> 双主题:所有颜色参数提供 Dark / Light 两套,由 `<html data-theme="dark|light">` 驱动。
+> 修订记录:V2.0(2026-09-07)——①分割条统一规范(废除 9px/12px 双标);②新增 §5.1 SettingRow;③新增 §11 弹窗与抽屉;④新增 §12 扩展包/应用网格卡片。
+> V1.0:客户端模拟页基准首版提炼。
 
 ---
 
@@ -11,15 +13,13 @@
 | 参数 | 值 | 说明 / 使用处 |
 |---|---|---|
 | 顶部工具栏高度 | `48px` | `.topbar`(页面级 Header) |
-| 侧导航栏宽度(展开) | `168px` | `.sidenav` EXPANDED_W |
-| 侧导航栏宽度(折叠) | `56px` | `.sidenav` COLLAPSED_W |
-| 侧栏品牌区高度 | `44px` | `.sidenav-brand` |
-| 右侧卡片栈宽度 | `320px` | `.right`(flex-shrink: 0, overflow-y: auto) |
-| 左侧面板最小高度 | `160px` | MIN_PANEL_PX(上下 Panel 拖拽钳制) |
+| 侧导航栏宽度(展开/折叠) | `168px` / `56px` | `.sidenav`,brand 区 44px 高 |
+| 二级导航栏宽度(设置页) | `220px` | `.settings-nav` |
+| 右侧卡片栈宽度(客户端页) | `320px` | `.right`(flex-shrink:0, overflow-y:auto) |
+| 上下 Panel 最小高度 | `160px` | 客户端页 MIN_PANEL_PX |
 | 上下 Panel 初始占比 | `55% / 45%` | 拖拽分割条初始位置 |
-| 上下拖拽条高度 | `9px`(客户端基类) / `12px`(服务端 tight) | `.resizable-divider` / `.tight` |
-| 左右拖拽条宽度 | `12px`(服务端 Session↔报文流、HEX↔解析) | `.resizable-divider-col` |
-| 字号基准 | `14px` | body(antd fontSize: 14) |
+| **分割条判定区(统一)** | **`12px`**(上下条高 / 左右条宽) | 见 §8 统一规范 |
+| 字号基准 | `14px` | body(antd fontSize:14) |
 
 ---
 
@@ -30,112 +30,81 @@
 | 容器 | padding | 备注 |
 |---|---|---|
 | 滚动型页面根 | `12px 16px` | `.page-root`(解析/服务端/设置页) |
-| 客户端页左区 | `12px 16px` | `.left`(含 border-right 分隔) |
-| 客户端页右区(卡片栈) | `12px` | `.right` |
+| 工作台页主区 | `12px 16px` | `.server-workbench` / 客户端页 `.left` |
 | 顶栏 | `0 16px` | `.topbar` |
 | Panel 内容区 | `16px` | `.zone-body` |
 | Panel 头部 | `8px 16px`(min-height 40px) | `.zone-head` |
 | 控制台工具条 | `8px 16px 12px` | `.console-toolbar` |
-| Tabs 头部 | `8px 16px 0`(zone)/ `12px 16px 0`(console) | `.zone-tabs .ant-tabs-nav` |
-| 可折叠卡片头部 | `12px 16px` | `.cc-head` |
-| 可折叠卡片内容 | `8px 16px 16px` | `.cc-content`(上窄下宽,贴头部) |
-| 分组折叠体 | `6px 8px 8px` | `.group-body` |
-| 数据行(虚线盒) | `8px 10px` | `.group-row` |
-| 控制台事件行 | `4px 16px` | `.console-row` |
-| 列表上下留白 | `4px 0` | `.console-list` / `.stream-list` |
+| 可折叠卡片 | 头 `12px 16px` / 内容 `8px 16px 16px` | `.cc-head` / `.cc-content` |
+| 分组折叠体 / 数据行 | `6px 8px 8px` / `8px 10px` | `.group-body` / `.group-row`(1px dashed) |
+| 列表行 | `4~8px 16px` | `.console-row` 4px / `.sess-row` 8px |
 
 ### 2.2 元素间距(gap / margin)
 
 | 场景 | 值 |
 |---|---|
-| 顶栏控件横向间距 | `12px`(gap) |
-| 右侧卡片栈纵向间距 | `12px`(gap) |
-| 工具条/Panel 头部控件间距 | `8px`(gap) |
-| 按钮组间距(a-space) | `8`(默认)/ `small` |
-| 表单项纵向间距 | `8px`(.mini-form .ant-form-item margin-bottom) |
-| 开关行间距 | `gap: 8px` + `margin-bottom: 6px`(.switch-row) |
-| 字段网格间距 | `6px 14px`(行 × 列,.fields-grid) |
-| 字段内 label ↔ 控件 | `6px`(gap) |
-| 数据行之间 | `8px`(margin-bottom,.group-row) |
-| 分组卡片之间 | `8px`(margin-bottom,.group-collapse item) |
-| 位组网格间距 | `2px 10px`(.bits-group / .alarm-bits) |
-| 标题 ↔ 副标题 | `4px`(console-empty-title margin-bottom) |
-| 行头 ↔ 内容 | `4px`(row-head margin-bottom) |
+| 顶栏控件横向 / 卡片栈纵向 | `12px` |
+| 工具条、Panel 头、按钮组(a-space) | `8px` |
+| 表单项纵向 / 数据行之间 / 分组卡片之间 | `8px` |
+| 开关行 | `gap 8px + margin-bottom 6px` |
+| 字段网格 `6px 14px` / 字段内 label↔控件 `6px` | 紧凑级 |
+| 位组网格 `2px 10px`;标题↔副标题 `4px` | 微级 |
 
-**间距选用规则**:
-- 结构级分隔(区块之间、卡片栈)→ `12px`
-- 组件级分隔(按钮组、表单项、行)→ `8px`
-- 紧凑内容(字段行内、位复选)→ `6px` 或 `2~4px`
-- 水平留白统一 `16px`(左右 padding 对齐),紧凑场景可降为 `12px`
+**选用规则**:结构级 12px / 组件级 8px / 紧凑 6px / 微 2~4px;水平留白统一 16px;面板间距 100% 由容器 gap 或分割条占位提供,**禁止手写 margin**。
 
 ---
 
 ## 3. 盒子(容器)边框与外观
 
-### 3.1 边框颜色(CSS 变量,双主题)
+### 3.1 边框颜色
 
 | Token | Dark | Light | 用途 |
 |---|---|---|---|
-| `--border-subtle` | `rgba(255,255,255,0.08)` | `rgba(0,0,0,0.06)` | 分隔线、卡片边框(次级) |
-| `--border-strong` | `rgba(255,255,255,0.15)` | `rgba(0,0,0,0.12)` | 主面板(zone)边框、悬浮卡片边框 |
+| `--border-subtle` | `rgba(255,255,255,.08)` | `rgba(0,0,0,.06)` | 分隔线、卡片次级边框 |
+| `--border-strong` | `rgba(255,255,255,.15)` | `rgba(0,0,0,.12)` | 主面板边框、悬浮卡边框 |
 
-antd token 对应:`colorBorderSecondary` = subtle、`colorBorder` = 0.12/0.12。
+### 3.2 使用规则
 
-### 3.2 边框使用规则
+| 场景 | 边框 |
+|---|---|
+| 主面板 `.zone` | `1px solid var(--border-strong)` |
+| 卡片 `.side-card` / 分组 `.group-collapse` | `1px solid var(--border-subtle)` |
+| 可编辑数据行 `.group-row` | `1px dashed var(--border-strong)`(虚线=可编辑语义) |
+| 结构分隔线 / 行分隔 | `1px solid var(--border-subtle)` |
+| 列表选中行 | 背景 `--hl-bg` + `inset 2px 0 0 var(--primary)` 左指示条 |
 
-| 场景 | 边框 | 场景类 |
-|---|---|---|
-| 主面板盒(zone) | `1px solid var(--border-strong)` | `.zone` |
-| 右侧卡片 / 分组卡片 | `1px solid var(--border-subtle)` | `.side-card` / `.group-collapse .ant-collapse-item` |
-| 可编辑数据行 | `1px dashed var(--border-strong)` | `.group-row`(虚线=可编辑语义) |
-| 结构分隔线 | `1px solid var(--border-subtle)` | 顶栏下边线、Panel 头下边线、行下边线 |
-| 选中行 | 背景高亮 + `inset 2px 0 0 var(--primary)` | `.sess-row.selected`(左侧 2px 主色指示条) |
-
-### 3.3 圆角(4 级)
+### 3.3 圆角与阴影
 
 | 级别 | 值 | 使用处 |
 |---|---|---|
-| 盒子级 | `8px` | `.zone`、`.side-card`、`.group-collapse`、antd 全局 borderRadius |
-| 子容器级 | `6px` | `.group-row`、`.row-detail` |
-| 小元素级 | `4px` | `.raw-hex`、`.byte-card`、滚动条 thumb |
-| 微标签级 | `2px` | `.server-proto`、`.st` 状态小标签 |
-| 圆形 | `50%` | 状态圆点(.server-dot / .sess-dot 8×8) |
+| 盒子级 | `8px` | zone / side-card / group-collapse / antd 全局 / §12 网格卡片 |
+| 子容器级 | `6px` | group-row / row-detail |
+| 小元素级 | `4px` | raw-hex / byte-card / 滚动条 thumb |
+| 微标签级 | `2px` | server-proto / st |
+| 胶囊 | `999px` | 分割条手柄(§8) |
+| 阴影 | `--shadow`(dark `0 1px 2px rgba(0,0,0,.3)` / light `.06`) | 仅主面板与悬浮卡;卡片栈不加;§12 网格卡 hover 态加 shadow-md |
 
-### 3.4 阴影与背景分层
+### 3.4 背景三级分层
 
-| Token | 值(Dark / Light) |
-|---|---|
-| `--shadow` | `0 1px 2px rgba(0,0,0,0.3)` / `0 1px 2px rgba(0,0,0,0.06)` |
-
-三级背景分层(页面 → 面板 → 输入框):
-
-| 层级 | Dark | Light | 对应 |
-|---|---|---|---|
-| 页面底 | `#141414` | `#f0f2f5` | `--bg-page` / colorBgLayout |
-| 面板 | `#1f1f1f` | `#ffffff` | `--bg-panel` |
-| 抬升层(输入/悬浮) | `#262626` | `#ffffff` | `--bg-elevated` / colorBgContainer #262626→#2a2a2a elevated |
-
-阴影仅用于主面板 zone 与悬浮卡片(byte-card),卡片栈不加重影(靠边框分层)。
+| 层级 | Dark | Light |
+|---|---|---|
+| 页面底 `--bg-page` | `#141414` | `#f0f2f5` |
+| 面板 `--bg-panel` | `#1f1f1f` | `#ffffff` |
+| 抬升层 `--bg-elevated` | `#262626` | `#ffffff` |
 
 ---
 
 ## 4. 按钮体系
 
-**核心规则:全站按钮统一 `size="small"`(紧凑工具风),仅模态框确认类用默认尺寸。**
+**全站按钮 `size="small"`**;模态框确认类用默认尺寸。
 
-| 场景 | 规格 | 示例 |
-|---|---|---|
-| 顶栏主操作 | `small + type="primary"` | 连接并登录 |
-| 顶栏次操作 | `small + default` | 测试连接、新建连接 |
-| 顶栏危险操作 | `small + danger` | 断开连接 |
-| Panel 头操作组 | `small`,primary(主)+ default(次)混排,a-space :size="8" | 发送(0x02)/ 预览 HEX / 保存配置 |
-| 工具条过滤器 | `small`,选中态 `type="primary"`,未选中 `default`(button 组;客户端控制台与服务端报文流同款,禁止 radio-button) | 控制台/报文流:全部/发送(TX)/接收(RX)/链路(Error) |
-| 行内删除 | `small + type="text" + danger` | 删除行、数组项 × |
-| 行内链接操作 | `small + type="link"`,padding 压缩为 `0 4px` | 应答按钮 |
-| 添加类操作 | `small + type="dashed"`,列表级用 `block` 拉满 | ＋ 添加一行 / ＋ 添加项 |
-| 弹窗确认 | 默认尺寸 + primary | 发送应答 / 选择位置并导出 |
-
-按钮间距:同一操作组内 `8px`(a-space :size="8" 或容器 gap: 8px);不同语义区之间靠 `bar-sep` 竖线或 `spacer` 弹性空隙分隔。
+| 场景 | 规格 |
+|---|---|
+| 顶栏/主操作 | `small + primary`;危险 `small + danger`;次操作 `small + default` |
+| Panel 头操作组 | `small`,primary+default 混排,a-space :size="8" |
+| 工具条筛选组 | `small` button 组,选中 `primary`(禁止 radio-button) |
+| 行内删除 / 链接操作 / 添加 | `small + text + danger` / `small + link`(padding 0 4px) / `small + dashed` |
+| 组内间距 | `8px`;语义区之间用 `bar-sep` 或 `spacer` |
 
 ---
 
@@ -143,101 +112,151 @@ antd token 对应:`colorBorderSecondary` = subtle、`colorBorder` = 0.12/0.12。
 
 | 控件 | 规格 |
 |---|---|
-| 输入框 / 选择器 / 数字输入 | 一律 `size="small"`(表单/工具条内) |
-| 开关 | `size="small"` |
-| 复选框组 | 网格排列,checkbox 字号 `12px`(bits)/ `13px`(alarm) |
-| Tabs | `size="small"`,nav padding `8px 16px 0` |
-| 表单布局 | `layout="vertical"`,label 下 padding-bottom `2px` |
-| 固定宽度参考 | 档案选择 `300px`、搜索框 `220px`、端口输入 `110px`、心跳输入 `180px`、补发数字输入 `200px`、间隔输入 `130px`、数组项输入 `84px` |
-| 弹性宽度 | 字段行内控件 `flex: 1; min-width: 0` 填满剩余 |
-| 字段网格 | `repeat(auto-fill, minmax(210px, 1fr))`;位组 `minmax(170px, 1fr)`;报警位两列 `1fr 1fr` |
+| 输入/选择/数字/开关/Tabs | 一律 `size="small"`(高 24px) |
+| 表单布局 | `layout="vertical"`,label padding-bottom 2px |
+| 固定宽度档位 | 档案选择 300 / 搜索 220 / zone 内搜索 160 / 端口 110 / 心跳 180 / 补发数字 200 / 间隔 130 / 数组项 84 / 预览弹窗 select 200 |
+| 弹性宽度 | 字段行内 `flex:1; min-width:0` |
+| 字段网格 | `repeat(auto-fill, minmax(210px, 1fr))`;位组 `minmax(170px, 1fr)` |
+| 状态徽标 | a-tag(语义色) / a-badge / 圆点 8×8+脉冲;自绘徽标 11px 字号下限 |
 
-**已收录的场景变体**(有意偏离基准,新组件同场景应沿用变体而非基准值):
+### 5.1 设置项行(SettingRow)规范
 
-| 变体 | 值 | 场景 |
-|---|---|---|
-| Panel 头部内嵌搜索框 | `160px`(`.zone-search`) | zone-head 单行内的紧凑搜索,区别于工具条级 220px |
-| 原始报文内容区 padding | `8px 16px`(`.raw-body`) | 不做字段解析的紧凑展示区,区别于 zone-body 16px |
-| 抽屉/弹窗表单间距 | `gap: 16px`(`.cfg-form`) | 弹层内表单比页面结构级 12px 略宽松 |
+**结构**:水平 flex 容器,`justify-content: space-between`,`align-items: center`(多行描述时 `flex-start`),`padding: 12px 0`,行底 `1px solid var(--border-subtle)`,**每组最后一行去除 border-bottom**。
+
+| 区 | 规范 |
+|---|---|
+| 左侧信息区 | `flex:1; min-width:0`,**最大宽度限制 65%~70%**,超长自动换行(`overflow-wrap: break-word`) |
+| 标题行 | 标题 `font-size: 14px; font-weight: 500; color: var(--text-primary)`,与 Badge 同行 `gap: 8px`;禁用/规划中态标题降为 `--text-secondary` |
+| 副说明 | `12px; var(--text-secondary); margin-top: 4px; line-height: 1.6`;数据类说明走 `--font-mono` 11px |
+| 右侧控件区 | `flex-shrink:0`,右对齐,内部多控件 `gap: 8px`;**Select / Input 固定宽度 180px~240px,禁止拉伸或压扁**(开关/单选不受限) |
 
 ---
 
 ## 6. 字号与文本层级
 
-| 层级 | 字号 | 字重 | 颜色 Token | 使用处 |
-|---|---|---|---|---|
-| 页面标题(品牌) | 16px | 600 | --text-primary | .brand |
-| 卡片标题 | 14px | 600 | --text-primary | .cc-title |
-| 正文/主要文本 | 14px | 400 | --text-primary | body 默认 |
-| 次要说明 | 13px | 400/600 | --text-secondary | .toolbar-label、.group-title、.modal-hint |
-| 辅助标签/数据 | 12px | 400 | --text-secondary / --text-tertiary | .zone-title、.field-label、.row-time、hex 数据 |
-| 微标签 | 11px | 400~600 | --text-tertiary | .dir-badge、.st、.col-head、.server-proto |
+| 层级 | 字号×字重 | 颜色 |
+|---|---|---|
+| Hero 标题 | 22×600 | --text-primary |
+| 品牌/卡片标题 | 16×600 / 14×600 | --text-primary |
+| 正文 | 14×400 | --text-primary |
+| 次要说明 | 13×400 | --text-secondary |
+| 辅助标签/数据 | 12×400 | --text-secondary / tertiary |
+| 微标签 | 11×400~600 | --text-tertiary |
 
-- 文本透明度阶梯(Dark,Light 同构):primary `0.88` / secondary `0.65` / tertiary `0.45` / disabled `0.35`
-- 等宽字体:hex/JSON/VIN/时间等数据文本统一 `--font-mono`(SFMono-Regular, Consolas, Menlo…)+ `font-variant-numeric: tabular-nums`
-- 系统字体栈:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Microsoft YaHei', sans-serif
+等宽:数据文本统一 `--font-mono` + `font-variant-numeric: tabular-nums`。**字号下限 11px**。
 
 ---
 
 ## 7. 状态色(双主题)
 
-| 语义 | Token | Dark | Light |
-|---|---|---|---|
-| 主色(品牌/交互/TX) | `--primary` | `#1677ff` | `#1677ff` |
-| 成功(RX/在线) | `--success` | `#52c41a` | `#389e0d` |
-| 警告(链路) | `--warning` | `#faad14` | `#d46b08` |
-| 错误(危险) | `--error` | `#ff4d4f` | `#cf1322` |
+| 语义 | Dark | Light |
+|---|---|---|
+| 主色 `--primary` | `#1677ff` | `#1677ff` |
+| 成功 `--success` | `#52c41a` | `#389e0d` |
+| 警告 `--warning` | `#faad14` | `#d46b08` |
+| 错误 `--error` | `#ff4d4f` | `#cf1322` |
 
-辅助交互色:
-
-| Token | Dark | Light | 用途 |
-|---|---|---|---|
-| `--primary-hover-bg` | rgba(22,119,255,0.1) | 0.08 | 分割条 hover、主色淡底 |
-| `--row-hover-bg` | rgba(22,119,255,0.06) | 0.06 | 列表行 hover |
-| `--item-hover-bg` | rgba(255,255,255,0.04) | rgba(0,0,0,0.04) | 卡片头 hover |
-| `--hl-bg` | rgba(22,119,255,0.32) | 0.15 | 选中行高亮 |
-| `--hl-shadow` | 0 0 0 1px 主色描边 + 外发光 | 同构弱化 | 选中强调 |
-| `--success-glow` | rgba(82,194,26,0.4) | rgba(56,158,13,0.35) | 在线状态点脉冲光晕起始色 |
-
-特殊语义色(未知橙 `#d46b08`/`#ad4e00`、加密紫 `#9254de`/`#6424c2`、告警红)双主题各自覆盖。
+辅助:`--primary-hover-bg`(0.08~0.1)、`--row-hover-bg`(0.06)、`--item-hover-bg`(0.04)、`--hl-bg`+`--hl-shadow`(选中)、`--success-glow`(状态点光晕)。特殊语义色须提供 light 覆盖(参照 dir-link `#9254de→#6424c2` 先例)。
 
 ---
 
-## 8. 交互动效
+## 8. 分割条统一规范(V2.0 起,废除 9px/12px 双标)
+
+**底层抽象**:统一分割组件 `ResizableDivider`(横向,上下拖,cursor `ns-resize`/`row-resize`)与 `ResizableDividerCol`(纵向,左右拖,cursor `col-resize`),共用同一视觉契约。
+
+| 项 | 统一规范 |
+|---|---|
+| 判定区(Hit Area) | **12px**(上下条高度 / 左右条宽度),透明、无视觉线 |
+| 手柄(居中胶囊) | 横向拖拽条:`36px × 4px`(宽×高);纵向拖拽条:`4px × 36px`;`border-radius: 999px`;常态色 `--divider-grip`,**常显** |
+| Hover / 拖拽中 | 手柄切换 `var(--primary)`(允许 ≤40px 的轻微加长动效),条底 `var(--primary-hover-bg)` 淡色 |
+| 全局锁定 | 拖拽中 `body.dragging-ns/ew`:禁文字选中 + 锁定全局光标 |
+| 提示 | 仅 `aria-label`(无原生 tooltip、无悬浮文字) |
+| 钳制常量同步 | 页面级 `DIVIDER_PX` 等钳制常量必须与 12px 同步(代码注释标注联动) |
+| 占位语义 | 面板间距由分割条 12px 占位构成,两侧 0 额外 margin |
+
+组件契约:拖拽数学动态读取自身 `offsetWidth/offsetHeight`,不硬编码尺寸。
+
+---
+
+## 9. 交互动效
 
 | 场景 | 时长/曲线 |
 |---|---|
-| hover 微交互(行/卡片头/分割条) | `0.15s` |
-| 主题切换过渡(背景/文字/边框/阴影) | `0.2s ease` |
-| 卡片折叠动画(grid-template-rows 0fr↔1fr) | `0.3s ease` |
-| 侧导航宽度切换 | `0.2s ease` |
-| 悬浮信息卡入场 | `0.1s ease-out`(opacity) |
-| 在线状态点脉冲 | `2s ease-out infinite` box-shadow 扩散 |
-| reduced-motion / 设置关动画 | 全局压到 `0.01ms` |
-
-分割条拖拽:客户端基类 = grip 常显长条(36×3,hover 48×3 主色);服务端变体 = 12px 透明命中区 + 常显胶囊手柄(tight 32×4 / col 4×32,hover 变主色并轻微加长),同时构成 Panel 间 12px 呼吸间距;拖拽中变主色并锁定光标(body.dragging-ns/ew + user-select: none);无视觉线、无悬浮文字,交互意图纯靠手柄与光标表达。
+| hover 微交互 | `0.15s` |
+| 主题切换 / 侧栏宽度 | `0.2s ease` |
+| 卡片折叠(grid 0fr↔1fr) | `0.3s ease` |
+| 悬浮卡入场 | `0.1s ease-out` |
+| 状态点脉冲 | `2s ease-out infinite` |
+| reduced-motion / 设置关动画 | 全局压至 `0.01ms` |
 
 ---
 
-## 9. 滚动条
+## 10. 滚动条
 
-| 参数 | 值 |
+宽/高 `8px`,thumb 圆角 4px、色 `--scrollbar-thumb`(hover 加深),轨道透明。
+
+---
+
+## 11. 弹窗与抽屉(Modal & Drawer)规范
+
+### 11.1 抽屉(Drawer)
+
+| 项 | 规范 |
 |---|---|
-| 宽/高 | `8px` |
-| thumb 圆角 | `4px` |
-| thumb 颜色 | `--scrollbar-thumb`(Dark: rgba(255,255,255,0.18)) |
-| thumb hover | `--scrollbar-thumb-hover`(0.3) |
-| 轨道 | 透明 |
+| 宽度 | **统一 440px**(placement right);特殊宽内容(表格级)可 520px,须注明理由 |
+| 蒙层 | `rgba(0,0,0,0.45)` + 轻微 `backdrop-filter: blur(2px)` |
+| 内容区 | **轻卡片化排版**:内层分组用 `var(--bg-panel)` 底 + `1px var(--border-subtle)` 细边框卡片,**禁用纯白刺眼底色直铺**;表单行 gap 12~16px |
+| 头部/操作区 | 标题 16×600;操作区右下对齐(`justify-content: flex-end`),主操作 primary |
+
+### 11.2 模态框(Modal)
+
+宽度档位:420(轻提示)/ 440(单表单)/ 520(双列表单)/ 760(宽内容预览);蒙层同 11.1;说明文字 13px secondary;确认按钮默认尺寸 primary;危险确认走 `Modal.confirm`。
+
+### 11.3 弹层内代码预览区(JSON / 原始报文 HEX)
+
+- **强制独立深色代码块容器**:不随主题切换的固定深底(如 `#0f0f0f` 系)+ 前景色 token 化;`border-radius: 6px`;`max-height: 360px; overflow-y: auto`
+- 字体 `--font-mono` `12px`,`white-space: pre-wrap; word-break: break-all`
+- **右上角必须配备快捷复制按钮**(antd Typography `copyable` 或自绘 icon 按钮),复制成功给 `message.success` 反馈
+- 禁止将 JSON 直接倾倒在正文文本流中
 
 ---
 
-## 10. 快速对照:新页面/新组件检查单
+## 12. 扩展包 / 应用网格卡片规范
 
-1. **容器**:滚动页用 `.page-root`(12px 16px + gap 12px);工作台页自管高度,用 `.topbar` + `.zone` 体系。
-2. **盒子**:主面板 `1px solid --border-strong + 8px 圆角 + --shadow`;子卡片 `1px solid --border-subtle + 8px 圆角`,不加阴影。
-3. **内边距**:头部 `8px 16px`、内容 `16px`、卡片内容 `8px 16px 16px`、行 `4~8px 16px`。
-4. **按钮**:一律 `size="small"`;主操作 primary、危险 danger/text+danger、添加 dashed、行内链接 link。
-5. **间距**:区块 12px、组件 8px、紧凑 6px、微 2~4px;水平对齐线 16px。
-6. **文本**:数据用 mono + tabular-nums;层级 14/13/12/11 + 三级透明度。
-7. **颜色**:只用 CSS 变量与状态 token,禁止硬编码;需双主题各验一遍。
-8. **动效**:hover 0.15s、结构动画 0.2~0.3s,尊重 reduced-motion。
+适用于扩展包管理页、卡片墙类内容区(ExtensionsPage 等)。
+
+| 项 | 规范 |
+|---|---|
+| 容器栅格 | `repeat(auto-fill, minmax(320px, 1fr))`,`gap: 12px` |
+| 卡片外观 | `border-radius: 8px`;`1px solid var(--border-subtle)`;底 `var(--bg-panel)`;**hover:`shadow-md` 悬浮动效**(`0.2s` 过渡,不位移) |
+| 头部左侧 | 固定 **40px × 40px** 扩展图标;无图标时用**首字母彩色徽章**(底色由包 id 哈希取主题色盘,文字白/黑按对比度) |
+| 头部右侧 | **唯一 `a-switch` 启用开关**;**杜绝卡片底部重复显示"已启用"文字状态**(状态语义由开关唯一承载) |
+| 卡片内容 | 名称 14×600;元信息(vendor/版本/单元数)12px tertiary;操作(详情/删除)收进 hover 显现或下拉,不与 Switch 抢位 |
+
+---
+
+## 13. 存量迁移清单(V2.0 生效,按此收敛)
+
+| # | 现状 | 迁移动作 | 状态 |
+|---|---|---|---|
+| 1 | 客户端上下分割条 9px + 36×3 长条 grip(`.resizable-divider` 基类) | 统一至 §8:12px + 胶囊 36×4 | ✅ 已完成 |
+| 2 | 服务端胶囊 32×4 / 4×32(hover 40) | 尺寸对齐 §8 的 36×4 / 4×36 | ✅ 已完成(tight 变体整体删除) |
+| 3 | SettingRow 现值 14px 0 / 72% / 13px 标题 / desc tertiary | 对齐 §5.1:12px 0 / ≤70% / 14px 标题 / desc secondary | ✅ 已完成 |
+| 4 | 服务端配置抽屉 360px、无 blur | 对齐 §11.1:440px + 蒙层 blur | ✅ 已完成 |
+| 5 | ExtensionsPage 网格与卡片未按 §12(底部"已启用"文字态、硬编码 JSON 深色块) | 按 §12 重排;JSON 块对齐 §11.3(补复制按钮) | ✅ 已完成(40×40 徽章/唯一 Switch/复制按钮原已就位;网格 320/gap12、padding 12 16、JSON 块 360px/pre-wrap、success/error token 化) |
+| 6 | `frontend-ui-spec.md` §5 所列 9 项坏味道 | 按该清单逐项修复(硬编码色 → token、内联宽度 → 档位类) | ✅ 已完成(#888→token、重复 row-head/bc-issue/modal-hint 删除、内联宽度→w-* 档位类(余 4 处 100% 豁免)、sn-item 网格归位、三色提 --c-unknown/--c-encrypted 变量、字号倒挂修正) |
+
+---
+
+## 14. 快速检查单(新页面/新组件)
+
+1. 容器:滚动页 `.page-root`(12px 16px + gap 12);工作台页 `.topbar` + `.zone` 体系。
+2. 盒子:主面板 strong 边框 + 8px + shadow;子卡片 subtle 边框无阴影;可编辑行 dashed。
+3. 内边距:头 8px 16px / 体 16px / 卡片内容 8 16 16 / 行 4~8px 16px。
+4. 按钮:一律 small;语义档位见 §4;筛选 = button 组。
+5. 间距:12/8/6/2-4;水平线 16px;零手写 margin 于面板间。
+6. 文本:四级字号 + 三级透明度;数据 mono;下限 11px。
+7. 颜色:仅 CSS 变量与状态 token;双主题各验;特殊语义色成对定义。
+8. 分割条:一律 §8 统一组件与规格;钳制常量同步。
+9. 设置行:§5.1;弹窗/抽屉:§11;网格卡片:§12。
+10. 动效 0.15/0.2/0.3s;尊重 reduced-motion。

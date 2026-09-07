@@ -21,6 +21,8 @@ function startDrag(e: PointerEvent) {
 
   dragging.value = true
   divider.setPointerCapture(e.pointerId)
+  // 锁定全局光标与文字选中(style.css 既有 body.dragging-ns)
+  document.body.classList.add('dragging-ns')
 
   const onMove = (ev: PointerEvent) => {
     const rect = container.getBoundingClientRect()
@@ -39,6 +41,7 @@ function startDrag(e: PointerEvent) {
   const onUp = (ev: PointerEvent) => {
     dragging.value = false
     divider.releasePointerCapture(ev.pointerId)
+    document.body.classList.remove('dragging-ns')
     window.removeEventListener('pointermove', onMove)
     window.removeEventListener('pointerup', onUp)
     emit('dragend')
