@@ -17,6 +17,13 @@ const emit = defineEmits<{
 
 type FilterKey = 'all' | 'rx' | 'tx' | 'error'
 const filter = ref<FilterKey>('all')
+// 过滤按钮组:与客户端 ConsolePanel 同款(选中 primary / 未选中 default)
+const FILTERS: Array<{ key: FilterKey; label: string }> = [
+  { key: 'all', label: '全部' },
+  { key: 'rx', label: 'RX' },
+  { key: 'tx', label: 'TX' },
+  { key: 'error', label: 'Error' },
+]
 const search = ref('')
 const autoScroll = ref(true)
 const listEl = ref<HTMLElement | null>(null)
@@ -95,12 +102,15 @@ function bytesOf(r: StreamRow): string {
   <section class="zone">
     <header class="zone-head">
       <span class="zone-title">实时通信</span>
-      <a-radio-group v-model:value="filter" size="small" button-style="solid">
-        <a-radio-button value="all">全部</a-radio-button>
-        <a-radio-button value="rx">RX</a-radio-button>
-        <a-radio-button value="tx">TX</a-radio-button>
-        <a-radio-button value="error">Error</a-radio-button>
-      </a-radio-group>
+      <a-button
+        v-for="f in FILTERS"
+        :key="f.key"
+        size="small"
+        :type="filter === f.key ? 'primary' : 'default'"
+        @click="filter = f.key"
+      >
+        {{ f.label }}
+      </a-button>
       <a-input-search
         v-model:value="search"
         size="small"
@@ -108,7 +118,9 @@ function bytesOf(r: StreamRow): string {
         placeholder="搜索 VIN / 命令 / HEX / 摘要"
         allow-clear
       />
-      <a-checkbox v-model:checked="autoScroll">跟随</a-checkbox>
+      <label class="toolbar-label check-line">
+        <a-checkbox v-model:checked="autoScroll" />跟随
+      </label>
       <span class="toolbar-count">{{ visibleRows.length }} 条</span>
     </header>
 

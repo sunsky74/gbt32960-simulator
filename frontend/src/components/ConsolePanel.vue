@@ -300,12 +300,7 @@ async function clearConsole() {
   flex-direction: column;
 }
 
-.check-line {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-}
+/* .check-line 已提升至全局 style.css(服务端 PacketStream 复用同款"跟随"开关行) */
 
 /* 事件方向徽标:仅上色,布局交给全局 .row-kind */
 .row-kind.tx {
