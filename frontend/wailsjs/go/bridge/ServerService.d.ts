@@ -10,6 +10,10 @@ export function ExportLog():Promise<string>;
 
 export function LoadConfig():Promise<bridge.ServerConfig>;
 
+export function SendExtCommand(arg1:string,arg2:string,arg3:string,arg4:Record<string, any>):Promise<void>;
+
+export function ServerExtCommands():Promise<Array<bridge.ExtCommandInfo>>;
+
 export function Sessions():Promise<Array<servermode.Session>>;
 
 export function SetContext(arg1:context.Context):Promise<void>;

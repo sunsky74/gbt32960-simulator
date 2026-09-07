@@ -61,6 +61,9 @@ func (s *MessageService) GetSchema(version string) []schema.GroupSchema {
 func (s *MessageService) compileCommandGroups(p *ext.Pack) []schema.GroupSchema {
 	out := make([]schema.GroupSchema, 0, len(p.Commands))
 	for _, c := range p.Commands {
+		if c.Direction != "up" {
+			continue // 平台下发模板不进客户端命令组
+		}
 		switch c.Body.Type {
 		case "fields":
 			g := ext.CompileUnit(ext.AppendUnit{Key: c.Key, Title: c.Label, Fields: c.Body.Fields, Enabled: true})
@@ -618,6 +621,9 @@ func (s *MessageService) SendExtension(key string) error {
 	}
 	if cmd.RemoteSub > 0 {
 		return c.RespondRemoteAck(payload)
+	}
+	if cmd.RespType == ext.RespTypeSuccess {
+		return c.RespondRaw(byte(cmd.Code), types.ResponseSuccess, payload)
 	}
 	return c.Send(context.Background(), byte(cmd.Code), engine.NewRawBody(s.version(), payload))
 }

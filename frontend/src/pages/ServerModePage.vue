@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import {
-  CaretRightOutlined, ClearOutlined, DownloadOutlined, SettingOutlined, StopOutlined,
+  CaretRightOutlined, ClearOutlined, DownloadOutlined, SendOutlined, SettingOutlined, StopOutlined,
 } from '@ant-design/icons-vue'
 import * as ServerService from '../../wailsjs/go/bridge/ServerService'
 import * as ParserService from '../../wailsjs/go/bridge/ParserService'
@@ -13,6 +13,63 @@ import SessionList from '../components/servermode/SessionList.vue'
 import PacketStream from '../components/servermode/PacketStream.vue'
 import PacketDetail from '../components/servermode/PacketDetail.vue'
 import { RENDER_CAP, fmtDuration, type SessionRow, type StreamRow } from '../components/servermode/types'
+import {
+  bitsArrayOf, bitOptions, boolOf, hexOf, numOf, setBitsArray, setBool, setEnum, setHex, setNum,
+} from '../composables/useFieldHelpers'
+import type { FieldSchema } from '../api/backend'
+
+// ---------- 平台下发:扩展包 down 命令模板 ----------
+interface ExtCommandInfo {
+  packId: string
+  packLabel: string
+  key: string
+  label: string
+  code: number
+  respType: string
+  fields: FieldSchema[]
+  defaults: Record<string, unknown>
+}
+
+const extCmds = ref<ExtCommandInfo[]>([])
+const extCmdOpen = ref(false)
+const extCmdKey = ref('')
+const extCmdRow = ref<Record<string, unknown>>({})
+
+const extCmdOptions = computed(() =>
+  extCmds.value.map((c) => ({ value: `${c.packId}/${c.key}`, label: `${c.packLabel} · ${c.label}` })),
+)
+
+const activeExtCmd = computed(() => {
+  const [packId, key] = extCmdKey.value.split('/')
+  return extCmds.value.find((c) => c.packId === packId && c.key === key) ?? null
+})
+
+async function refreshExtCmds() {
+  extCmds.value = (await ServerService.ServerExtCommands().catch(() => [])) ?? []
+}
+
+function onExtCmdSelect(val: string) {
+  extCmdKey.value = val
+  const cmd = extCmds.value.find((c) => `${c.packId}/${c.key}` === val)
+  extCmdRow.value = cmd ? { ...cmd.defaults } : {}
+}
+
+async function sendExtCmd() {
+  const cmd = activeExtCmd.value
+  if (!cmd || !selectedVin.value) return
+  try {
+    await ServerService.SendExtCommand(cmd.packId, cmd.key, selectedVin.value, extCmdRow.value)
+    message.success(`已下发「${cmd.label}」→ ${selectedVin.value}`)
+    extCmdOpen.value = false
+  } catch (e) {
+    message.error('下发失败: ' + String(e))
+  }
+}
+
+function openExtCmdModal() {
+  void refreshExtCmds()
+  extCmdOpen.value = true
+}
 
 const cfg = reactive({ ip: '127.0.0.1', port: 32960, idleEnabled: true, idleSeconds: 60 })
 const running = ref(false)
@@ -218,18 +275,20 @@ function onSelectFrame(r: StreamRow) {
 
 // ---------- 双向分割:左右(Session 面板宽)+ 上下(报文流↔详情) ----------
 const workbenchEl = ref<HTMLElement | null>(null)
-const MIN_TOP_PX = 220 // 报文流区最小高
-const MIN_BOTTOM_PX = 180 // 详情区最小高
-const SESS_MAX_PX = 320 // 会话面板宽度上限
+const MIN_TOP_PX = 260 // 报文流区最小高
+const MIN_BOTTOM_PX = 180 // 详情区最小高(另受"下方≤60%"约束)
+const SESS_MAX_PX = 400 // 会话面板宽度上限
 const MIN_STREAM_PX = 360 // 报文流区最小宽(右侧不得挤没)
-const DIVIDER_PX = 12 // 与 .resizable-divider-col / .tight 的 12px 命中区同步
+const DIVIDER_PX = 12 // 与统一分割条 12px 判定区同步(ui-design-reference §8)
 
 const mainH = ref<number | null>(null) // 报文流区高度 px;null = 初始未测量(flex 自适应)
 const sessW = ref(240) // 会话面板宽度 px
 
-// 上下拖拽:组件保证 bottom ≥ 180,此处补足 top ≥ 220
+// 上下拖拽:组件保证 bottom ≥ 180,此处补足 top ≥ 260 与 top ≥ 40%(即下方 ≤ 60%)
 function onVSplitDrag(topPx: number) {
-  mainH.value = Math.max(topPx, MIN_TOP_PX)
+  const h = workbenchEl.value?.clientHeight ?? 0
+  const min = h > 0 ? Math.max(MIN_TOP_PX, Math.round(h * 0.4)) : MIN_TOP_PX
+  mainH.value = Math.max(topPx, min)
 }
 
 function onSessDrag(leftPx: number) {
@@ -240,8 +299,11 @@ function onSessDrag(leftPx: number) {
 function clampMainH() {
   const h = workbenchEl.value?.clientHeight ?? 0
   if (h <= 0 || mainH.value === null) return
+  // 上限 = 详情区保底(下方 ≤ 60% 由下限侧共同保证)
   const max = Math.max(MIN_TOP_PX, h - MIN_BOTTOM_PX - DIVIDER_PX)
-  mainH.value = Math.min(Math.max(mainH.value, MIN_TOP_PX), max)
+  // 下限 = 报文流保底 与 40%(下方不得超过 60%) 取大
+  const min = Math.max(MIN_TOP_PX, Math.round((h - DIVIDER_PX) * 0.4))
+  mainH.value = Math.min(Math.max(mainH.value, min), Math.max(min, max))
 }
 
 function clampSessW() {
@@ -256,10 +318,10 @@ function onWindowResize() {
   clampSessW()
 }
 
-// 初始分割:上区 56%(800px 窗口 ≈ 420/330),先于异步数据执行避免首帧比例失衡
+// 初始分割:上区 60% / 下区 40%,先于异步数据执行避免首帧比例失衡
 function initSplit() {
   const h = workbenchEl.value?.clientHeight ?? 0
-  if (h > 0) mainH.value = Math.round(h * 0.56)
+  if (h > 0) mainH.value = Math.round((h - DIVIDER_PX) * 0.6)
   clampMainH()
   clampSessW()
 }
@@ -324,6 +386,10 @@ onUnmounted(() => {
         <template #icon><SettingOutlined /></template>
         服务配置
       </a-button>
+      <a-button size="small" :disabled="!running || !selectedVin" @click="openExtCmdModal">
+        <template #icon><SendOutlined /></template>
+        下发命令
+      </a-button>
     </header>
 
     <!-- 主体工作台:左会话 ↔ 右报文流(左右可拖),下方报文详情(上下可拖) -->
@@ -356,12 +422,86 @@ onUnmounted(() => {
           @start="start"
         />
       </div>
-      <ResizableDivider class="tight" :min-px="MIN_BOTTOM_PX" @drag="onVSplitDrag" />
+      <ResizableDivider :min-px="MIN_BOTTOM_PX" @drag="onVSplitDrag" />
       <PacketDetail :frame="detailFrame" :parser-packs="parserPacks" />
     </div>
 
+    <!-- 平台下发:扩展包 down 命令模板 -->
+    <a-modal
+      v-model:open="extCmdOpen"
+      title="平台下发扩展命令"
+      :width="520"
+      ok-text="下发"
+      cancel-text="取消"
+      :ok-button-props="{ disabled: !activeExtCmd }"
+      @ok="sendExtCmd"
+    >
+      <p class="modal-hint">
+        目标车辆 {{ selectedVin || '(未选中)' }} · 命令来自已导入扩展包(scope 含 server)的下发模板
+      </p>
+      <a-select
+        :value="extCmdKey || undefined"
+        :options="extCmdOptions"
+        placeholder="选择下发命令"
+        style="width: 100%"
+        @change="onExtCmdSelect"
+      />
+      <div v-if="activeExtCmd" class="extcmd-fields">
+        <template v-for="f in activeExtCmd.fields" :key="f.key">
+          <div v-if="f.kind === 'enum'" class="field">
+            <span class="field-label">{{ f.label }}</span>
+            <a-select
+              :value="numOf(extCmdRow, f.key)"
+              size="small"
+              style="flex: 1"
+              :options="(f.enum ?? []).map((e) => ({ value: e.value, label: e.label }))"
+              @change="(v: unknown) => setEnum(extCmdRow, f.key, v)"
+            />
+          </div>
+          <div v-else-if="f.kind === 'int' || f.kind === 'float'" class="field">
+            <span class="field-label">{{ f.label }}<em v-if="f.unit"> ({{ f.unit }})</em></span>
+            <a-input-number
+              :value="numOf(extCmdRow, f.key)"
+              size="small"
+              style="flex: 1"
+              :min="f.min"
+              :max="f.max"
+              @change="(v: number | string | null | undefined) => setNum(extCmdRow, f.key, v)"
+            />
+          </div>
+          <div v-else-if="f.kind === 'bytes'" class="field">
+            <span class="field-label">{{ f.label }}<em v-if="f.length"> ({{ f.length }}B hex)</em></span>
+            <a-input
+              :value="hexOf(extCmdRow, f.key)"
+              class="hex-input"
+              size="small"
+              style="flex: 1"
+              @update:value="(v: string) => setHex(extCmdRow, f.key, f, v)"
+            />
+          </div>
+          <div v-else-if="f.kind === 'bool'" class="field field-bool">
+            <span class="field-label">{{ f.label }}</span>
+            <a-switch
+              :checked="boolOf(extCmdRow, f.key)"
+              size="small"
+              @change="(v: unknown) => setBool(extCmdRow, f.key, v)"
+            />
+          </div>
+          <div v-else-if="f.kind === 'bitgroup'" class="field field-bits">
+            <span class="field-label">{{ f.label }}</span>
+            <a-checkbox-group
+              :value="bitsArrayOf(extCmdRow, f)"
+              :options="bitOptions(f)"
+              class="bits-group"
+              @change="(vals: Array<string | number | boolean>) => setBitsArray(extCmdRow, f, vals)"
+            />
+          </div>
+        </template>
+      </div>
+    </a-modal>
+
     <!-- 服务配置抽屉:Listen/空闲设置不再常驻顶栏 -->
-    <a-drawer v-model:open="cfgOpen" title="服务配置" placement="right" :width="360">
+    <a-drawer v-model:open="cfgOpen" title="服务配置" placement="right" :width="440">
       <div class="cfg-form">
         <div class="cfg-item">
           <span class="form-label">Listen IP</span>
@@ -410,3 +550,22 @@ onUnmounted(() => {
     </a-drawer>
   </div>
 </template>
+
+<style scoped>
+.modal-hint {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.extcmd-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.hex-input :deep(input) {
+  font-family: var(--font-mono);
+}
+</style>

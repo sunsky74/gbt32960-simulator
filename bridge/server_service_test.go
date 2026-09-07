@@ -8,7 +8,7 @@ import (
 
 func TestServerServiceStartStopPersist(t *testing.T) {
 	tempHome(t) // store 持久化落到临时目录,不污染真实用户配置
-	svc := NewServerService()
+	svc := NewServerService(nil)
 	cfg := ServerConfig{IP: "127.0.0.1", Port: 0, IdleEnabled: true, IdleSeconds: 60}
 	st, err := svc.Start(cfg, true)
 	if err != nil || !st.Running {
@@ -27,7 +27,7 @@ func TestServerServiceStartStopPersist(t *testing.T) {
 
 func TestServerServiceRestartOnNewPort(t *testing.T) {
 	tempHome(t)
-	svc := NewServerService()
+	svc := NewServerService(nil)
 	st1, err := svc.Start(ServerConfig{IP: "127.0.0.1", Port: 0, IdleEnabled: true, IdleSeconds: 60}, true)
 	if err != nil || !st1.Running {
 		t.Fatalf("首次启动: %v %+v", err, st1)
@@ -48,7 +48,7 @@ func TestServerServiceRestartOnNewPort(t *testing.T) {
 }
 
 func TestServerServiceNonLoopbackNeedsForce(t *testing.T) {
-	svc := NewServerService()
+	svc := NewServerService(nil)
 	if _, err := svc.Start(ServerConfig{IP: "0.0.0.0", Port: 0}, false); err == nil {
 		t.Fatal("非环回地址未 force 应拒绝")
 	}

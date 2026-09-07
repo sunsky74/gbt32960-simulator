@@ -34,6 +34,18 @@ func RegisterCommand(v api.GBTVersion, code byte, name string) {
 	extCommands.cmds[v][code] = name
 }
 
+// RegisterCommandIfAbsent 同码已注册时保留首个(同码多命令场景:首个 label 作为显示名)。
+func RegisterCommandIfAbsent(v api.GBTVersion, code byte, name string) {
+	extCommands.mu.Lock()
+	defer extCommands.mu.Unlock()
+	if extCommands.cmds[v] == nil {
+		extCommands.cmds[v] = map[byte]string{}
+	}
+	if _, ok := extCommands.cmds[v][code]; !ok {
+		extCommands.cmds[v][code] = name
+	}
+}
+
 // ResetExtCommands 清除全部扩展命令并恢复 私有远控 内置条目(换绑/解绑时调用)。
 func ResetExtCommands() {
 	extCommands.mu.Lock()

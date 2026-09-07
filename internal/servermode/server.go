@@ -189,3 +189,22 @@ func (s *Server) UpdateIdle(enabled bool, d time.Duration) {
 		}
 	}
 }
+
+// WriteFrameVIN 向指定 VIN 的已登入会话写入一帧原始字节(平台下发通道,
+// bridge 组帧后调用;产生 TX 遥测)。会话不在线或未登入返回错误。
+func (s *Server) WriteFrameVIN(vin string, cmd byte, raw []byte, summary string) error {
+	s.mu.Lock()
+	var target *conn
+	for c := range s.conns {
+		if c.authed && c.vin == vin {
+			target = c
+			break
+		}
+	}
+	s.mu.Unlock()
+	if target == nil {
+		return fmt.Errorf("车辆 %s 不在线或未登入", vin)
+	}
+	target.writeFrame(cmd, raw, summary)
+	return nil
+}

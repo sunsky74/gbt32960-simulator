@@ -8,6 +8,8 @@ import (
 	"gbt32960-simulator/internal/engine"
 	"gbt32960-simulator/internal/ext"
 	"gbt32960-simulator/internal/schema"
+	"gbt32960-simulator/internal/servermode"
+	"github.com/sunsky74/gb32960/types"
 )
 
 // Runtime 持有共享事件总线、当前引擎客户端与最新配置快照。
@@ -83,6 +85,7 @@ func (rt *Runtime) SetPacks(packs []*ext.Pack) {
 	rt.packs = packs
 	rt.pack = rt.resolvePackLocked(packs, rt.connCfg)
 	rt.syncExtCommands(rt.pack)
+	rt.syncServerExtCmds(packs)
 }
 
 // SetPackStates 更新包级启用/停用状态并重新解析激活包。
@@ -98,6 +101,7 @@ func (rt *Runtime) SetPackStates(disabled map[string]bool) {
 // syncExtCommands 按激活包同步引擎命令注册表:先重置(保留 私有远控 内置),再注册包内命令。
 // 挂接在 SetConnCfg/SetPacks——包激活的唯一入口,查询接口(GetSchema)不携带副作用。
 // scope 未声明 client 的包不进入客户端链路(仅用于报文解析等场景)。
+// 同码多命令先到先得(首个 label 作为该码的显示名);down 模板是服务端下发用,不注册。
 func (rt *Runtime) syncExtCommands(p *ext.Pack) {
 	engine.ResetExtCommands()
 	if p == nil || !ext.ScopeHas(p, ext.ScopeClient) {
@@ -105,7 +109,10 @@ func (rt *Runtime) syncExtCommands(p *ext.Pack) {
 	}
 	v := parseVersion(p.Meta.BaseVersion)
 	for _, c := range p.Commands {
-		engine.RegisterCommand(v, byte(c.Code), c.Label)
+		if c.Direction != "up" {
+			continue
+		}
+		engine.RegisterCommandIfAbsent(v, byte(c.Code), c.Label)
 	}
 }
 
@@ -142,4 +149,39 @@ func (rt *Runtime) Groups() map[string]schema.GroupConfig {
 		out[k] = v
 	}
 	return out
+}
+
+// responseTypeOf 扩展包 respType 语义名 → 协议库应答标志(缺省 command/0xFE)。
+func responseTypeOf(name string) types.ResponseType {
+	if name == ext.RespTypeSuccess {
+		return types.ResponseSuccess
+	}
+	return types.ResponseCommand
+}
+
+// syncServerExtCmds 按已导入包集合同步服务端模式扩展命令规则:
+// scope 含 server 的包参与;up 命令注册显示名,声明 serverReply 的同时注册自动应答;
+// 同码先到先得。挂接 SetPacks——包增删/启停的唯一汇聚点。
+func (rt *Runtime) syncServerExtCmds(packs []*ext.Pack) {
+	servermode.ResetExtCmds()
+	for _, p := range packs {
+		if !ext.ScopeHas(p, ext.ScopeServer) {
+			continue
+		}
+		for _, c := range p.Commands {
+			if c.Direction != "up" {
+				continue
+			}
+			if _, exists := servermode.ExtCmd(byte(c.Code)); exists {
+				continue
+			}
+			rule := servermode.ExtCmdRule{Label: c.Label}
+			if c.ServerReply != nil {
+				rule.Reply = true
+				rule.Echo = c.ServerReply.Echo
+				rule.RespType = responseTypeOf(c.ServerReply.RespType)
+			}
+			servermode.RegisterExtCmd(byte(c.Code), rule)
+		}
+	}
 }

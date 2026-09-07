@@ -57,7 +57,7 @@
 | `label` | 显示名 | 非空;在包列表、绑定下拉框中显示 |
 | `vendor` | 厂商名 | 可选,仅展示用 |
 | `baseVersion` | 协议版本 | 只能填 `"2016"` 或 `"2025"`,与连接档案的协议版本必须一致 |
-| `scope` | 应用范围 | 可选,数组,取值 `"client"`(客户端模拟)/ `"parser"`(报文解析);缺省视为 `["client"]` |
+| `scope` | 应用范围 | 可选,数组,取值 `"client"`(客户端模拟)/ `"parser"`(报文解析)/ `"server"`(服务端模式:下行应答规则与平台下发模板);缺省视为 `["client"]` |
 
 ```json
 "meta": { "id": "sample-private", "label": "示例·私有遥测包", "vendor": "示例", "baseVersion": "2016", "scope": ["client", "parser"] }
@@ -104,7 +104,7 @@
 | `key` | 命令键 | 非空;禁含冒号 `:`;禁与标准组键同名;同包内唯一 |
 | `label` | 命令显示名 | 非空 |
 | `code` | 命令码 | 整数,只能落在上行预留区(2016: 0x09~0x7F;2025: 0x0C~0x7F),同包内唯一 |
-| `direction` | 方向 | 本期只支持 `"up"`(上行) |
+| `direction` | 方向 | `up`(终端上行)或 `down`(平台下发模板,仅服务端模式可用) |
 | `trigger` | 触发方式 | `"manual"`(仅手动)/ `"periodic"`(仅周期)/ `"manual+periodic"`(手动+周期) |
 | `body` | 命令体 | 见下 |
 
@@ -230,7 +230,16 @@
 
 ### 其他
 
-- `direction` 仅支持 `up`;`trigger` 只能是 `manual` / `periodic` / `manual+periodic`。
+- `direction` 支持 `up` / `down`;`trigger` 只能是 `manual` / `periodic` / `manual+periodic`;命令码可用**上行预留区(0x09~0x7F)或私有命令区(0x80~0xFE)**,同码多命令合法(同一命令码的请求/应答模板共用一码)。
+
+**应答标志与服务端联动**(可选字段):
+
+- `respType`:发送帧的应答标志。`"command"`(0xFE,缺省,常规上行数据帧)或 `"success"`(0x01,应答帧——用于"收到平台下发后回执"类模板)。
+- `serverReply`:**服务端模式**对该命令请求帧的自动应答规则(需 `meta.scope` 含 `"server"`,`direction` 须为 `up`):
+  - `respType`:应答标志,`"success"`(缺省)或 `"command"`;
+  - `echo`:`true` = 应答体回显请求体(许可/回执类),`false` = 空体。
+  - 服务端收到该命令码的**请求帧(0xFE)**才回应答;应答帧(0x01)只展示不回帧。仅注册显示名不回应答时省略 `serverReply` 即可。
+- `direction: "down"`:平台下发模板。不出现在客户端「自定义数据」页;服务端模式选中会话后经「下发命令」按钮组帧下发(组帧标志按 `respType`,缺省 0xFE)。
 - `maxRows ≥ 0`;`fields` 与 `body.units` 都至少一项。
 
 ---

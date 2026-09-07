@@ -24,6 +24,8 @@ const (
 	ScopeClient = "client"
 	// ScopeParser 报文解析:解析页可选用该包解码自定义数据单元。
 	ScopeParser = "parser"
+	// ScopeServer 服务端模式:私有命令的下行应答规则(serverReply)与平台下发模板(direction=down)。
+	ScopeServer = "server"
 )
 
 // ScopeHas 报告包是否声明了指定应用范围。scope 缺省(空)视为仅 client(向后兼容旧包)。
@@ -61,15 +63,32 @@ type AppendUnit struct {
 // Command 私有命令帧声明(Phase 3 实现发送,Phase 1 仅定义与校验)。
 // RemoteSub > 0 时表示 私有远控 0x8A 远程控制应答模板(命令码固定 0x8A,
 // 子指令码 = RemoteSub,发送帧走应答标志 0x01,载荷 = 表21头 + 应答体)。
+// RespType 声明发送帧的应答标志(见 ResponseType 取值);ServerReply 声明
+// 服务端模式(scope 含 server)对该命令请求帧的自动应答规则。
+// Direction=down 表示平台下发模板:仅供服务端模式下发,不进客户端命令组。
 type Command struct {
-	Key       string      `json:"key"`
-	Label     string      `json:"label"`
-	Code      int         `json:"code"`
-	Direction string      `json:"direction"` // up | down
-	Trigger   string      `json:"trigger"`   // manual | periodic | manual+periodic
-	RemoteSub int         `json:"remoteSub,omitempty"`
-	Body      CommandBody `json:"body"`
+	Key         string       `json:"key"`
+	Label       string       `json:"label"`
+	Code        int          `json:"code"`
+	Direction   string       `json:"direction"` // up | down
+	Trigger     string       `json:"trigger"`   // manual | periodic | manual+periodic
+	RemoteSub   int          `json:"remoteSub,omitempty"`
+	RespType    string       `json:"respType,omitempty"`    // command | success;缺省 command
+	ServerReply *ServerReply `json:"serverReply,omitempty"` // 服务端收到该命令请求帧时的应答规则
+	Body        CommandBody  `json:"body"`
 }
+
+// ServerReply 服务端模式的下行应答规则:收到命令码命中的请求帧(标志 0xFE)时自动回应答。
+type ServerReply struct {
+	RespType string `json:"respType"` // command | success;缺省 success
+	Echo     bool   `json:"echo"`     // true=回显请求体;false=空体应答
+}
+
+// 命令应答标志语义名(与协议库 ResponseType 的映射由 bridge 层完成)。
+const (
+	RespTypeCommand = "command" // 请求/命令标志 0xFE(上行数据帧缺省)
+	RespTypeSuccess = "success" // 成功应答标志 0x01
+)
 
 // CommandBody 命令体布局:平铺字段或实时报文同构(6B 十进制时间 + TLV 单元)。
 type CommandBody struct {

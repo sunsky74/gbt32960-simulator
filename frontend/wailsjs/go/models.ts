@@ -70,6 +70,50 @@ export namespace bridge {
 	        this.count = source["count"];
 	    }
 	}
+	export class ExtCommandInfo {
+	    packId: string;
+	    packLabel: string;
+	    key: string;
+	    label: string;
+	    code: number;
+	    respType: string;
+	    fields: schema.FieldSchema[];
+	    defaults: Record<string, any>;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExtCommandInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.packId = source["packId"];
+	        this.packLabel = source["packLabel"];
+	        this.key = source["key"];
+	        this.label = source["label"];
+	        this.code = source["code"];
+	        this.respType = source["respType"];
+	        this.fields = this.convertValues(source["fields"], schema.FieldSchema);
+	        this.defaults = source["defaults"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class PackInfo {
 	    id: string;
 	    label: string;

@@ -28,8 +28,8 @@ type DownlinkInfo struct {
 	Cmd  byte   `json:"cmd"`
 	Kind string `json:"kind"` // query|setup|control|remote
 
-	ParamIDs   []int           `json:"paramIds,omitempty"`  // 0x80: 查询的参数 ID 列表
-	Params     []DownlinkParam `json:"params,omitempty"`    // 0x81: 设置的参数项
+	ParamIDs   []int           `json:"paramIds,omitempty"`   // 0x80: 查询的参数 ID 列表
+	Params     []DownlinkParam `json:"params,omitempty"`     // 0x81: 设置的参数项
 	ControlHex string          `json:"controlHex,omitempty"` // 0x82: 控制命令字节
 
 	// 私有远控 0x8A 表21 头(10B)+ 信息体
@@ -207,6 +207,12 @@ func downlinkInfo(wireCmd byte, pm *frame.ProtocolMessage) *DownlinkInfo {
 // 与 私有远控 0x8A 第一层 ACK。
 func (c *Client) RespondAck(cmd byte, respType types.ResponseType) error {
 	return c.writeFrameWithResponse(cmd, respType, nil)
+}
+
+// RespondRaw 发送指定命令 + 应答标志 + 原始载荷的帧。
+// 扩展命令按包声明的 respType 组帧的通用路径(如私有命令的成功应答)。
+func (c *Client) RespondRaw(cmd byte, respType types.ResponseType, payload []byte) error {
+	return c.writeFrameWithResponse(cmd, respType, payload)
 }
 
 // RespondParamQuery 发送 0x80 参数查询应答。

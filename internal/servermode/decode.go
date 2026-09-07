@@ -56,12 +56,14 @@ func decodeFrame(raw []byte) Decoded {
 	d.PM = pm
 	d.Version = pm.Version
 	d.VIN = pm.VIN
-	if code, ok := frame.CommandCode(pm.RequestType); ok {
-		d.Cmd = code
-	}
+	// 命令码取帧头字节(与加密分支同源):库对私有命令码(0x80~0xFE 表外)
+	// 解出的 RequestType 无法经 CommandCode 还原,零值会污染白名单判定。
+	d.Cmd = raw[2]
 	if pm.Version == api.V2016 && !knownCmds2016[d.Cmd] {
-		d.Kind = KindUnknown
-		return d
+		if _, ok := ExtCmd(d.Cmd); !ok {
+			d.Kind = KindUnknown
+			return d
+		}
 	}
 	d.Kind = KindNormal // 2025 全部只读展示,不再细分 unknown
 	return d

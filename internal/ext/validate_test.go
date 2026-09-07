@@ -29,6 +29,42 @@ func TestValidate2025ReservedCommandOK(t *testing.T) {
 	}
 }
 
+func TestValidatePrivateCommandOK(t *testing.T) {
+	p := validPack()
+	p.Meta.Scope = []string{"client", "parser", "server"}
+	// 私有命令区(0x80~0xFE):请求与应答同码多命令 + down 模板,均应合法
+	req := p.Commands[0]
+	req.Key, req.Code, req.RespType = "privReq", 0x90, ""
+	req.ServerReply = &ServerReply{RespType: "success", Echo: true}
+	ack := p.Commands[0]
+	ack.Key, ack.Code, ack.RespType = "privAck", 0x90, RespTypeSuccess
+	down := p.Commands[0]
+	down.Key, down.Code, down.Direction = "privDown", 0x91, "down"
+	p.Commands = []Command{req, ack, down}
+	if err := Validate(p); err != nil {
+		t.Fatalf("私有区同码多命令 + down 模板应合法: %v", err)
+	}
+}
+
+func TestValidateRespTypeErrors(t *testing.T) {
+	p := validPack()
+	p.Commands[0].RespType = "ok"
+	if err := Validate(p); err == nil || !strings.Contains(err.Error(), "respType") {
+		t.Fatalf("非法 respType 应报错: %v", err)
+	}
+	p = validPack()
+	p.Commands[0].ServerReply = &ServerReply{RespType: "bad"}
+	if err := Validate(p); err == nil || !strings.Contains(err.Error(), "serverReply") {
+		t.Fatalf("非法 serverReply.respType 应报错: %v", err)
+	}
+	p = validPack()
+	p.Commands[0].Direction = "down"
+	p.Commands[0].ServerReply = &ServerReply{RespType: "success"}
+	if err := Validate(p); err == nil || !strings.Contains(err.Error(), "serverReply") {
+		t.Fatalf("down 命令声明 serverReply 应报错: %v", err)
+	}
+}
+
 func TestValidateErrors(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -75,9 +111,9 @@ func TestValidateErrors(t *testing.T) {
 		}, "realtime.appendUnits[0].fields[3].bits[1].index"},
 		{"bytes 长度 0", func(p *Pack) { p.Realtime.AppendUnits[0].Fields[4].Length = 0 }, "realtime.appendUnits[0].fields[4].length"},
 		{"命令码撞 2016 标准", func(p *Pack) { p.Commands[0].Code = 2 }, "commands[0].code"},
-		{"命令码在下行区", func(p *Pack) { p.Commands[0].Code = 0x83 }, "commands[0].code"},
+		{"命令码超上限 0xFF", func(p *Pack) { p.Commands[0].Code = 0xFF }, "commands[0].code"},
 		{"0x8A 缺子指令码", func(p *Pack) { p.Commands[0].Code = 0x8A }, "commands[0].remoteSub"},
-		{"direction down", func(p *Pack) { p.Commands[0].Direction = "down" }, "commands[0].direction"},
+		{"direction 非法", func(p *Pack) { p.Commands[0].Direction = "sideways" }, "commands[0].direction"},
 		{"trigger 非法", func(p *Pack) { p.Commands[0].Trigger = "auto" }, "commands[0].trigger"},
 		{"body.type 非法", func(p *Pack) { p.Commands[0].Body.Type = "raw" }, "commands[0].body.type"},
 		{"命令 key 与单元重复", func(p *Pack) { p.Commands[0].Key = "telemetry" }, "commands[0].key"},
@@ -121,11 +157,6 @@ func TestValidateNewGuardErrors(t *testing.T) {
 		wantPath string
 		wantSub  string
 	}{
-		{"命令码同包重复", func(p *Pack) {
-			dup := p.Commands[0]
-			dup.Key = "extData2"
-			p.Commands = append(p.Commands, dup)
-		}, "commands[1].code", "命令码重复"},
 		{"命令 key 含冒号", func(p *Pack) { p.Commands[0].Key = "ext:data" }, "commands[0].key", "冒号"},
 		{"单元 key 含冒号", func(p *Pack) { p.Realtime.AppendUnits[0].Key = "tele:metry" }, "realtime.appendUnits[0].key", "冒号"},
 		{"命令 key 撞标准组保留键", func(p *Pack) { p.Commands[0].Key = "vehicle" }, "commands[0].key", "标准报文组"},
@@ -175,7 +206,13 @@ func TestValidateScope(t *testing.T) {
 	if err := Validate(mk([]string{"parser"})); err != nil {
 		t.Errorf("仅 parser 应合法: %v", err)
 	}
-	if err := Validate(mk([]string{"server"})); err == nil {
+	if err := Validate(mk([]string{"server"})); err != nil {
+		t.Errorf("仅 server 应合法: %v", err)
+	}
+	if err := Validate(mk([]string{"client", "parser", "server"})); err != nil {
+		t.Errorf("client+parser+server 应合法: %v", err)
+	}
+	if err := Validate(mk([]string{"foo"})); err == nil {
 		t.Error("非法 scope 值应报错")
 	}
 	if err := Validate(mk([]string{"client", "client"})); err == nil {

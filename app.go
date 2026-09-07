@@ -32,7 +32,7 @@ func NewApp() *App {
 		parser:    bridge.NewParserService(rt),
 		extsvc:    bridge.NewExtService(rt),
 		sys:       bridge.NewSystemService(),
-		server:    bridge.NewServerService(),
+		server:    bridge.NewServerService(rt),
 		forwarder: fwd,
 	}
 }

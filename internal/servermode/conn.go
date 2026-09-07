@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"gbt32960-simulator/internal/framing"
@@ -15,11 +16,12 @@ import (
 // conn 单个车端连接:帧循环 + 协议状态(authed)。
 // serve/nextFrame 见下方(空闲判定走 cfgSnapshot 支持运行中更新)。
 type conn struct {
-	nc     net.Conn
-	fr     *framing.FrameReader
-	srv    *Server
-	authed bool
-	vin    string
+	nc      net.Conn
+	fr      *framing.FrameReader
+	srv     *Server
+	authed  bool
+	vin     string
+	writeMu sync.Mutex // 帧写串行化:读循环应答与外部下发通道共用
 }
 
 func (c *conn) handleRaw(ctx context.Context, raw []byte) {
@@ -34,8 +36,14 @@ func (c *conn) handleRaw(ctx context.Context, raw []byte) {
 
 	// 帧事件(kind 三态;2025 只读标注)
 	cmdName := fmt.Sprintf("0x%02X", d.Cmd)
+	if r, ok := ExtCmd(d.Cmd); ok && r.Label != "" {
+		cmdName = r.Label
+	}
 	if d.PM != nil && d.PM.Payload != nil {
 		cmdName = fmt.Sprintf("0x%02X", d.Cmd) // 摘要后续可扩展为解码要点
+		if r, ok := ExtCmd(d.Cmd); ok && r.Label != "" {
+			cmdName = r.Label
+		}
 	}
 	sum := ""
 	if d.Version == api.V2025 {
@@ -74,7 +82,11 @@ func (c *conn) handleRaw(ctx context.Context, raw []byte) {
 	case 0x08:
 		c.handleClock(d, now)
 	default: // 0x05/0x06/未知
-		c.srv.hooks.OnWarn(WarnEvent{Note: fmt.Sprintf("命令 0x%02X 不在服务端支持范围(平台链路/未知命令)", d.Cmd)})
+		if rule, ok := ExtCmd(d.Cmd); ok {
+			c.handleExtCmd(d, now, rule)
+		} else {
+			c.srv.hooks.OnWarn(WarnEvent{Note: fmt.Sprintf("命令 0x%02X 不在服务端支持范围(平台链路/未知命令)", d.Cmd)})
+		}
 	}
 	// RX 计数放在处理器之后:登入帧须等 handleLogin 注册会话后才能计数
 	c.srv.registry.Count(d.VIN, 1, 0)
@@ -86,14 +98,26 @@ func (c *conn) reply(cmd byte, resp types.ResponseType, body []byte) {
 		c.srv.hooks.OnWarn(WarnEvent{Note: "应答构造失败: " + err.Error()})
 		return
 	}
-	if _, err := c.nc.Write(raw); err != nil {
-		c.srv.hooks.OnWarn(WarnEvent{Note: "应答发送失败: " + err.Error()})
+	c.writeFrame(cmd, raw, respText(resp))
+}
+
+// writeFrame 串行写一帧并产生 TX 遥测(reply 与外部下发通道共用)。
+func (c *conn) writeFrame(cmd byte, raw []byte, summary string) {
+	c.writeMu.Lock()
+	_, werr := c.nc.Write(raw)
+	c.writeMu.Unlock()
+	if werr != nil {
+		c.srv.hooks.OnWarn(WarnEvent{Note: "应答发送失败: " + werr.Error()})
 		return
+	}
+	cmdName := fmt.Sprintf("0x%02X", cmd)
+	if r, ok := ExtCmd(cmd); ok && r.Label != "" {
+		cmdName = r.Label
 	}
 	// TX 方向遥测:应答帧进入报文流(不进导出环形缓冲——AC-5 冻结为接收侧)
 	c.srv.hooks.OnFrame(FrameEvent{
-		Time: c.srv.hooks.Now(), VIN: c.vin, Cmd: fmt.Sprintf("0x%02X", cmd),
-		Hex: fmt.Sprintf("%x", raw), Summary: respText(resp), Kind: KindNormal, Dir: DirTX,
+		Time: c.srv.hooks.Now(), VIN: c.vin, Cmd: cmdName,
+		Hex: fmt.Sprintf("%x", raw), Summary: summary, Kind: KindNormal, Dir: DirTX,
 	})
 	c.srv.registry.Count(c.vin, 0, 1)
 }
@@ -128,6 +152,31 @@ func (c *conn) handleData(d Decoded, now time.Time) {
 	}
 	c.srv.registry.Touch(c.vin, now)
 	c.reply(d.Cmd, types.ResponseSuccess, nil)
+}
+
+// handleExtCmd 扩展命令处理器:请求帧(标志 0xFE)按注册规则回应答;
+// 应答帧(终端对下发命令的回执)只读展示不回帧,避免回环。
+func (c *conn) handleExtCmd(d Decoded, now time.Time, rule ExtCmdRule) {
+	if !rule.Reply {
+		return // 仅注册显示名的命令(如应答模板):不自动回帧
+	}
+	if d.PM != nil && d.PM.ResponseType != types.ResponseCommand {
+		return
+	}
+	if !c.authed {
+		c.srv.hooks.OnWarn(WarnEvent{Note: "未登入连接的扩展命令帧被丢弃: " + d.VIN})
+		return
+	}
+	c.srv.registry.Touch(c.vin, now)
+	var body []byte
+	if rule.Echo {
+		// 回显体从原始帧切(头 24B:起始2+cmd1+resp1+vin17+加密1+长度2);私有命令不经库解码
+		bodyLen := int(d.Raw[22])<<8 | int(d.Raw[23])
+		if len(d.Raw) >= 24+bodyLen {
+			body = d.Raw[24 : 24+bodyLen]
+		}
+	}
+	c.reply(d.Cmd, rule.RespType, body)
 }
 
 func (c *conn) handleLogout(d Decoded, now time.Time) {

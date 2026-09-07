@@ -39,7 +39,6 @@ func Validate(p *Pack) error {
 	}
 	keys := map[string]bool{}
 	unitCodes := map[int]bool{}
-	cmdCodes := map[int]bool{}
 	for i, u := range p.Realtime.AppendUnits {
 		path := fmt.Sprintf("realtime.appendUnits[%d]", i)
 		if err := validateUnit(path, u, p.Meta.BaseVersion, keys, unitCodes); err != nil {
@@ -48,7 +47,7 @@ func Validate(p *Pack) error {
 	}
 	for i, c := range p.Commands {
 		path := fmt.Sprintf("commands[%d]", i)
-		if err := validateCommand(path, c, p.Meta.BaseVersion, keys, unitCodes, cmdCodes); err != nil {
+		if err := validateCommand(path, c, p.Meta.BaseVersion, keys, unitCodes); err != nil {
 			return err
 		}
 	}
@@ -67,8 +66,8 @@ func validateMeta(m Meta) error {
 	}
 	seen := map[string]bool{}
 	for i, s := range m.Scope {
-		if s != ScopeClient && s != ScopeParser {
-			return verrf(fmt.Sprintf("meta.scope[%d]", i), "须为 %q 或 %q: %q", ScopeClient, ScopeParser, s)
+		if s != ScopeClient && s != ScopeParser && s != ScopeServer {
+			return verrf(fmt.Sprintf("meta.scope[%d]", i), "须为 %q/%q/%q: %q", ScopeClient, ScopeParser, ScopeServer, s)
 		}
 		if seen[s] {
 			return verrf(fmt.Sprintf("meta.scope[%d]", i), "重复的应用范围: %q", s)
@@ -171,7 +170,7 @@ func validateFields(path string, fields []FieldSpec) error {
 	return nil
 }
 
-func validateCommand(path string, c Command, base string, keys map[string]bool, unitCodes map[int]bool, cmdCodes map[int]bool) error {
+func validateCommand(path string, c Command, base string, keys map[string]bool, unitCodes map[int]bool) error {
 	if strings.TrimSpace(c.Key) == "" {
 		return verrf(path+".key", "不能为空")
 	}
@@ -210,15 +209,30 @@ func validateCommand(path string, c Command, base string, keys map[string]bool, 
 		return validateFields(path+".body.fields", c.Body.Fields)
 	}
 	reservedLo := hi + 1 // 上行预留区起点:2016=0x09,2025=0x0C
-	if c.Code < reservedLo || c.Code > 0x7F {
-		return verrf(path+".code", "本期仅支持上行预留区 0x%02X~0x7F: 0x%02X", reservedLo, c.Code)
+	if c.Code < reservedLo || c.Code > 0xFE {
+		return verrf(path+".code", "命令码须在预留区 0x%02X~0x7F 或私有命令区 0x80~0xFE: 0x%02X", reservedLo, c.Code)
 	}
-	if cmdCodes[c.Code] {
-		return verrf(path+".code", "命令码重复: 0x%02X 已被同包其他命令占用", c.Code)
+	// 同码多命令合法(同一私有命令码的不同 body/标志语义,如请求与应答共用一码);
+	// 发送按 key 定位命令,code 仅参与组帧,无歧义。
+	switch c.Direction {
+	case "up", "down":
+	default:
+		return verrf(path+".direction", "须为 up(终端上行)或 down(平台下发): %q", c.Direction)
 	}
-	cmdCodes[c.Code] = true
-	if c.Direction != "up" {
-		return verrf(path+".direction", "本期仅支持 up: %q", c.Direction)
+	switch c.RespType {
+	case "", RespTypeCommand, RespTypeSuccess:
+	default:
+		return verrf(path+".respType", "须为 %q 或 %q: %q", RespTypeCommand, RespTypeSuccess, c.RespType)
+	}
+	if c.ServerReply != nil {
+		switch c.ServerReply.RespType {
+		case "", RespTypeCommand, RespTypeSuccess:
+		default:
+			return verrf(path+".serverReply.respType", "须为 %q 或 %q: %q", RespTypeCommand, RespTypeSuccess, c.ServerReply.RespType)
+		}
+		if c.Direction != "up" {
+			return verrf(path+".serverReply", "仅上行命令可声明服务端应答规则(direction=up)")
+		}
 	}
 	switch c.Trigger {
 	case "manual", "periodic", "manual+periodic":

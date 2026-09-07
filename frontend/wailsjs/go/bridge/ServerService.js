@@ -14,6 +14,14 @@ export function LoadConfig() {
   return window['go']['bridge']['ServerService']['LoadConfig']();
 }
 
+export function SendExtCommand(arg1, arg2, arg3, arg4) {
+  return window['go']['bridge']['ServerService']['SendExtCommand'](arg1, arg2, arg3, arg4);
+}
+
+export function ServerExtCommands() {
+  return window['go']['bridge']['ServerService']['ServerExtCommands']();
+}
+
 export function Sessions() {
   return window['go']['bridge']['ServerService']['Sessions']();
 }

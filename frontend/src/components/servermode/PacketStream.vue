@@ -48,14 +48,28 @@ const visibleRows = computed<StreamRow[]>(() => {
 })
 
 // 新帧置底 + 自动滚动到底(跟随开关关闭时静止阅读)
+// programScroll 区分程序滚动与用户滚动:跟随写入时置位,scroll 事件据此放行
+let programScroll = false
 watch(
   () => [props.frames.length, filter.value, search.value] as const,
   async () => {
     if (!autoScroll.value) return
     await nextTick()
-    if (listEl.value) listEl.value.scrollTop = listEl.value.scrollHeight
+    if (!listEl.value) return
+    programScroll = true
+    listEl.value.scrollTop = listEl.value.scrollHeight
+    requestAnimationFrame(() => {
+      programScroll = false
+    })
   },
 )
+
+// 用户滚动位置驱动跟随:向上浏览历史自动暂停,滚回底部(距底 < 40px)自动恢复
+function onListScroll() {
+  if (programScroll || !listEl.value) return
+  const el = listEl.value
+  autoScroll.value = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+}
 
 // 空状态三态:服务未启动 / 已启动无客户端 / 有客户端无报文(或过滤后空)
 const emptyState = computed<'off' | 'noClient' | 'noFrame' | null>(() => {
@@ -149,7 +163,7 @@ function bytesOf(r: StreamRow): string {
         <span>状态</span>
         <span>摘要</span>
       </div>
-      <div ref="listEl" class="stream-list">
+      <div ref="listEl" class="stream-list" @scroll.passive="onListScroll">
         <div
           v-for="r in visibleRows"
           :key="r.id"

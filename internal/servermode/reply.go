@@ -33,6 +33,11 @@ func buildReply(v api.GBTVersion, vin string, cmd byte, resp types.ResponseType,
 	return msg.Bytes()
 }
 
+// BuildFrame 导出通用组帧(bridge 下发扩展命令时使用),参数语义同 buildReply。
+func BuildFrame(v api.GBTVersion, vin string, cmd byte, resp types.ResponseType, body []byte) ([]byte, error) {
+	return buildReply(v, vin, cmd, resp, body)
+}
+
 // clockBody 校时应答体:BeanTime 6 字节十进制(年-2000/月/日/时/分/秒)。
 func clockBody(now time.Time) []byte {
 	b := ext.EncodeBeanTime(now)

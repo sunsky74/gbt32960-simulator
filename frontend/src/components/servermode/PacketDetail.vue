@@ -208,6 +208,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', onWindowResize))
         <span class="detail-meta mono">{{ fmtMs(frame.time) }}</span>
         <span v-if="frame.vin" class="detail-vin mono">{{ frame.vin }}</span>
         <span v-if="frame.cmd" class="detail-cmd mono">{{ frame.cmd }}</span>
+        <span v-if="frame.summary" class="detail-desc" :title="frame.summary">{{ frame.summary }}</span>
         <div class="spacer" />
         <span v-if="frame.hex" class="detail-bytes mono">{{ frame.hex.length / 2 }} B</span>
         <template v-if="frame.kind === 'normal'">
