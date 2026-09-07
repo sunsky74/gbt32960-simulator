@@ -2,7 +2,6 @@
 import { computed } from 'vue'
 import { ApiOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons-vue'
 import { activeNavKey, bottomNavItems, navItems } from '../../navigation'
-import ThemeSwitch from '../ThemeSwitch.vue'
 
 // IDE 工具栏式侧边导航宽度:折叠仅图标 / 展开图标 + 文字。
 // 通过 CSS 变量 --nav-w 注入,宽度切换仍由 .sidenav 的 width transition 平滑过渡。
@@ -12,7 +11,6 @@ const COLLAPSED_W = 56
 const props = defineProps<{ collapsed: boolean }>()
 const emit = defineEmits<{ (e: 'update:collapsed', v: boolean): void }>()
 
-const allItems = computed(() => [...navItems, ...bottomNavItems])
 const navWidth = computed(() => (props.collapsed ? COLLAPSED_W : EXPANDED_W))
 
 function onSelect(info: { key: string | number }) {
@@ -41,15 +39,25 @@ function onSelect(info: { key: string | number }) {
       :selected-keys="[activeNavKey]"
       @click="onSelect"
     >
-      <a-menu-item v-for="item in allItems" :key="item.key">
+      <a-menu-item v-for="item in navItems" :key="item.key">
         <component :is="item.icon" />
         <span>{{ item.title }}</span>
       </a-menu-item>
     </a-menu>
 
+    <!-- 底部固定区:系统级入口(设置)下沉至此,与主菜单同为 a-menu 以继承统一样式/选中态/折叠 Tooltip -->
     <div class="sidenav-bottom">
-      <ThemeSwitch />
-      <span v-if="!collapsed" class="bottom-label">深 / 浅色</span>
+      <a-menu
+        mode="inline"
+        :inline-collapsed="collapsed"
+        :selected-keys="[activeNavKey]"
+        @click="onSelect"
+      >
+        <a-menu-item v-for="item in bottomNavItems" :key="item.key">
+          <component :is="item.icon" />
+          <span>{{ item.title }}</span>
+        </a-menu-item>
+      </a-menu>
     </div>
   </aside>
 </template>
@@ -101,25 +109,14 @@ function onSelect(info: { key: string | number }) {
   display: none;
 }
 
+/* 底部系统入口区:菜单项 padding 自带,容器只负责贴底(margin-top:auto 由 flex 列布局收尾)与分隔线 */
 .sidenav-bottom {
   margin-top: auto;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
+  flex-direction: column;
+  padding-bottom: 12px;
   border-top: 1px solid var(--border-subtle);
   flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.collapsed .sidenav-bottom {
-  padding: 12px 0;
-  justify-content: center;
-}
-
-.bottom-label {
-  color: var(--text-tertiary);
-  font-size: 12px;
 }
 
 .sidenav :deep(.ant-menu) {

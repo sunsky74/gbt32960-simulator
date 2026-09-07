@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { THEME_STORAGE_KEY, resolveStoredTheme, type ThemeMode } from './index'
 
-// 模块级单例:App.vue、ThemeSwitch 与设置中心共享同一份响应式状态。
+// 模块级单例:App.vue 与设置中心(外观 → 应用程序主题)共享同一份响应式状态。
 // themeMode 含 'auto'(跟随系统);resolvedMode 为实际渲染的 dark/light。
 const themeMode = ref<ThemeMode>('dark')
 const systemDark = ref(false)
