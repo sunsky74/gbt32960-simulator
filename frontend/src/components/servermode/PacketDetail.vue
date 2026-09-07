@@ -167,7 +167,7 @@ function dirText(f: StreamRow): string {
 const colsEl = ref<HTMLElement | null>(null)
 const HEX_MIN_PX = 200
 const PARSE_MIN_PX = 240
-const COLS_DIVIDER_PX = 7
+  const COLS_DIVIDER_PX = 12 // 与 .resizable-divider-col 的 12px 命中区同步
 const hexW = ref<number | null>(null)
 
 function onColsDrag(px: number) {

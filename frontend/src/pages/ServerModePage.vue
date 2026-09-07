@@ -222,7 +222,7 @@ const MIN_TOP_PX = 220 // 报文流区最小高
 const MIN_BOTTOM_PX = 180 // 详情区最小高
 const SESS_MAX_PX = 320 // 会话面板宽度上限
 const MIN_STREAM_PX = 360 // 报文流区最小宽(右侧不得挤没)
-const DIVIDER_PX = 7
+const DIVIDER_PX = 12 // 与 .resizable-divider-col / .tight 的 12px 命中区同步
 
 const mainH = ref<number | null>(null) // 报文流区高度 px;null = 初始未测量(flex 自适应)
 const sessW = ref(240) // 会话面板宽度 px

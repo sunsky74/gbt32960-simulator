@@ -56,7 +56,7 @@ function startDrag(e: PointerEvent) {
     :class="{ dragging }"
     role="separator"
     aria-orientation="horizontal"
-    title="拖动调整上下区域高度"
+    aria-label="拖动调整上下区域高度"
     @pointerdown="startDrag"
   >
     <span class="divider-grip" />

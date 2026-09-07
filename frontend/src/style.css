@@ -43,6 +43,7 @@
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.3);
   --hl-bg: rgba(22, 119, 255, 0.32);
   --hl-shadow: 0 0 0 1px rgba(22, 119, 255, 0.75), 0 0 8px rgba(22, 119, 255, 0.5);
+  --success-glow: rgba(82, 194, 26, 0.4);
 }
 
 /* Light 主题变量:工业工具风(浅灰页面底 → 白色面板 → 白底输入) */
@@ -70,6 +71,7 @@
   --scrollbar-thumb-hover: rgba(0, 0, 0, 0.3);
   --hl-bg: rgba(22, 119, 255, 0.15);
   --hl-shadow: 0 0 0 1px rgba(22, 119, 255, 0.6), 0 0 6px rgba(22, 119, 255, 0.35);
+  --success-glow: rgba(56, 158, 13, 0.35);
 }
 
 /* 主题切换过渡:仅背景/文字/边框/阴影,快速且不影响输入与数据刷新 */
@@ -268,34 +270,20 @@ body {
 }
 
 /* ============================================================
-   服务端工作台分割条(IDE 风):视觉 1px 线 + 7px 命中热区,
-   hover 线色增强 + 中央 grip 显现,拖拽中线变主色。
+   服务端工作台分割条:12px 命中热区(同时构成 Panel 间 12px 呼吸间距),
+   透明容器 + 常显胶囊手柄,hover/拖拽平滑过渡主色,交互意图
+   纯靠手柄与光标表达(无视觉线、无悬浮文字)。
    .tight 修饰既有上下拖拽条(仅服务端页使用,不影响客户端页);
    .resizable-divider-col 为左右拖拽条(Session↔报文流、HEX↔解析)。
    ============================================================ */
 .resizable-divider.tight {
-  height: 7px;
-}
-
-.resizable-divider.tight::before,
-.resizable-divider-col::before {
-  content: '';
-  position: absolute;
-  background: var(--border-subtle);
-  transition: background 0.15s;
-}
-
-.resizable-divider.tight::before {
-  left: 0;
-  right: 0;
-  top: 3px;
-  height: 1px;
+  height: 12px;
 }
 
 .resizable-divider-col {
   position: relative;
   flex-shrink: 0;
-  width: 7px;
+  width: 12px;
   cursor: col-resize;
   display: flex;
   align-items: center;
@@ -304,60 +292,38 @@ body {
   transition: background 0.15s;
 }
 
-.resizable-divider-col::before {
-  top: 0;
-  bottom: 0;
-  left: 3px;
-  width: 1px;
-}
-
 .resizable-divider-col:hover,
 .resizable-divider-col.dragging {
   background: var(--primary-hover-bg);
 }
 
-.resizable-divider.tight:hover::before,
-.resizable-divider-col:hover::before {
-  background: var(--divider-hover);
-}
-
-.resizable-divider.tight.dragging::before,
-.resizable-divider-col.dragging::before {
-  background: var(--primary);
-}
-
-/* tight 上下条:grip 常态隐藏,hover/拖拽显现(覆盖基类常显样式) */
+/* 上下条胶囊手柄:32×4 常显(背景继承基类 --divider-grip),hover/拖拽变主色加宽 */
 .resizable-divider.tight .divider-grip {
-  width: 24px;
-  opacity: 0;
-  transition: opacity 0.15s, background 0.15s, width 0.15s;
+  width: 32px;
+  height: 4px;
+  border-radius: 999px;
+  opacity: 1;
+  transition: background 0.15s, width 0.15s;
 }
 
 .resizable-divider.tight:hover .divider-grip,
 .resizable-divider.tight.dragging .divider-grip {
-  opacity: 1;
-  width: 24px;
-  background: var(--divider-grip);
-}
-
-.resizable-divider.tight.dragging .divider-grip {
+  width: 40px;
   background: var(--primary);
 }
 
-/* 左右条:grip 为竖向小条,hover/拖拽显现 */
+/* 左右条胶囊手柄:4×32 常显,hover/拖拽变主色加高 */
 .resizable-divider-col .divider-grip {
-  width: 3px;
-  height: 24px;
-  opacity: 0;
-  transition: opacity 0.15s, background 0.15s;
-}
-
-.resizable-divider-col:hover .divider-grip {
+  width: 4px;
+  height: 32px;
+  border-radius: 999px;
   opacity: 1;
+  transition: background 0.15s, height 0.15s;
 }
 
+.resizable-divider-col:hover .divider-grip,
 .resizable-divider-col.dragging .divider-grip {
-  opacity: 1;
+  height: 40px;
   background: var(--primary);
 }
 
@@ -678,6 +644,14 @@ body {
 .toolbar-label {
   color: var(--text-secondary);
   font-size: 13px;
+}
+
+/* 工具条"跟随"开关行:checkbox + 文字紧凑同行(客户端 Console / 服务端 PacketStream 共用) */
+.check-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
 }
 
 .toolbar-count {
@@ -1008,6 +982,8 @@ html[data-no-anim] *::after {
   display: flex;
   flex-direction: column;
   background: var(--bg-page);
+  /* 页面级留白:与客户端页 .left 同款(12px 16px),防止面板贴死 sidenav/顶栏/视口边 */
+  padding: 12px 16px;
 }
 
 .server-main-row {
@@ -1038,7 +1014,7 @@ html[data-no-anim] *::after {
 
 @keyframes server-dot-pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(82, 194, 26, 0.4);
+    box-shadow: 0 0 0 0 var(--success-glow);
   }
   70% {
     box-shadow: 0 0 0 6px rgba(82, 194, 26, 0);
@@ -1233,6 +1209,7 @@ html[data-no-anim] *::after {
 
 .stream-row.selected {
   background: var(--hl-bg);
+  box-shadow: inset 2px 0 0 var(--primary);
 }
 
 .c-time {
@@ -1355,6 +1332,11 @@ html[data-no-anim] *::after {
 :root[data-theme='light'] .stream-row.frame-warn .c-cmd,
 :root[data-theme='light'] .stream-row.frame-warn .c-summary {
   color: #a8071a;
+}
+
+/* Link 紫与 frame-encrypted / st-encrypted 的 Light 覆盖同源(#9254de → #6424c2) */
+:root[data-theme='light'] .dir-badge.dir-link {
+  color: #6424c2;
 }
 
 :root[data-theme='light'] .st-unknown {
