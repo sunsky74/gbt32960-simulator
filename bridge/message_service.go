@@ -31,6 +31,33 @@ type MessageService struct {
 	rt       *Runtime
 	extMu    sync.Mutex
 	extStops map[string]chan struct{}
+
+	trackMu        sync.Mutex
+	track          trackHook
+	reportMu       sync.Mutex
+	reportOn       bool
+	reportInterval int // 秒;0 = 未设置(取连接配置或默认 10)
+}
+
+// trackHook 周期上报与轨迹回放的耦合点(由 TrackService 实现,测试可替换):
+// 每次 0x02 tick 组装前推进一个轨迹点;发送失败终止回放;停报即停回放。
+type trackHook interface {
+	AdvanceForReport()
+	FailOnSend(err error)
+	StopReplay()
+}
+
+// SetTrackReplay 注入轨迹回放钩子(app 装配时调用)。
+func (s *MessageService) SetTrackReplay(h trackHook) {
+	s.trackMu.Lock()
+	defer s.trackMu.Unlock()
+	s.track = h
+}
+
+func (s *MessageService) replayHook() trackHook {
+	s.trackMu.Lock()
+	defer s.trackMu.Unlock()
+	return s.track
 }
 
 // NewMessageService 创建服务。
@@ -451,8 +478,21 @@ func (s *MessageService) SendReissue(count int, offsetSec int, intervalSec int) 
 	return nil
 }
 
-// SetAutoReport 开关周期上报(默认 10s,可改)。enabled=false 时停止。
+// SetAutoReport 开关周期上报(默认 10s,可改)。enabled=false 时停止并联动
+// 停止轨迹回放(回放搭载周期上报,停报后无推进载体)。enabled=true 时每次
+// tick 先推进轨迹回放(激活时)再组装发送,实现"每条周期 0x02 携带下一轨迹点"。
 func (s *MessageService) SetAutoReport(enabled bool, intervalSec int) error {
+	s.reportMu.Lock()
+	s.reportOn = enabled
+	if intervalSec > 0 {
+		s.reportInterval = intervalSec
+	}
+	s.reportMu.Unlock()
+	if !enabled {
+		if h := s.replayHook(); h != nil {
+			h.StopReplay()
+		}
+	}
 	c := s.rt.CurrentClient()
 	if c == nil {
 		return fmt.Errorf("未连接")
@@ -462,19 +502,69 @@ func (s *MessageService) SetAutoReport(enabled bool, intervalSec int) error {
 		return nil
 	}
 	if intervalSec <= 0 {
-		intervalSec = 10
+		intervalSec = s.effectiveReportInterval()
 	}
 	c.SetAutoReport(time.Duration(intervalSec)*time.Second, func() error {
 		if s.rt.Groups() == nil {
 			return fmt.Errorf("报文配置为空")
 		}
+		if h := s.replayHook(); h != nil {
+			h.AdvanceForReport()
+		}
 		body, err := s.assembleBody(time.Now())
 		if err != nil {
 			return err
 		}
-		return c.Send(context.Background(), 0x02, body)
+		if err := c.Send(context.Background(), 0x02, body); err != nil {
+			if h := s.replayHook(); h != nil {
+				h.FailOnSend(err)
+			}
+			return err
+		}
+		return nil
 	})
 	return nil
+}
+
+// EnsureAutoReport 确保周期上报处于开启状态:未开启则按记忆间隔(缺省取
+// 连接配置 reportInterval,再缺省 10s)开启;已开启也重装 ticker——客户端
+// 重建后 ticker 丢失,重装幂等。轨迹导入与回放启动的"默认开周期上报"
+// 由此保证。
+func (s *MessageService) EnsureAutoReport() error {
+	c := s.rt.CurrentClient()
+	if c == nil || c.State() != engine.StateOnline {
+		return fmt.Errorf("未连接或未登录")
+	}
+	return s.SetAutoReport(true, s.effectiveReportInterval())
+}
+
+// ReportState 周期上报状态快照(前端展示与同步)。
+type ReportState struct {
+	On          bool `json:"on"`
+	IntervalSec int  `json:"intervalSec"`
+}
+
+// AutoReportState 返回周期上报开关与生效间隔。
+func (s *MessageService) AutoReportState() ReportState {
+	s.reportMu.Lock()
+	on, remembered := s.reportOn, s.reportInterval
+	s.reportMu.Unlock()
+	return ReportState{On: on, IntervalSec: effectiveSec(remembered, s.rt)}
+}
+
+// effectiveReportInterval 生效间隔:记忆值 > 连接配置 reportInterval > 10s。
+func (s *MessageService) effectiveReportInterval() int {
+	return effectiveSec(s.reportInterval, s.rt)
+}
+
+func effectiveSec(remembered int, rt *Runtime) int {
+	if remembered > 0 {
+		return remembered
+	}
+	if cfg := rt.ConnCfg(); cfg != nil && cfg.ReportInterval > 0 {
+		return cfg.ReportInterval
+	}
+	return 10
 }
 
 // version 取当前连接配置的协议版本。
