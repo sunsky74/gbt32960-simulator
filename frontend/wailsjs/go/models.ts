@@ -1,5 +1,17 @@
 export namespace bridge {
 	
+	export class AppSettings {
+	    consoleExportCap: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new AppSettings(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.consoleExportCap = source["consoleExportCap"];
+	    }
+	}
 	export class ConnectionConfig {
 	    name: string;
 	    host: string;
@@ -13,6 +25,10 @@ export namespace bridge {
 	    autoReconnect: boolean;
 	    reportInterval: number;
 	    reissueOffsetSec: number;
+	    platformMode: boolean;
+	    platformVin?: string;
+	    platformUser?: string;
+	    platformPass?: string;
 	    extensionPack?: string;
 	    tls: tlsconf.Config;
 	
@@ -34,6 +50,10 @@ export namespace bridge {
 	        this.autoReconnect = source["autoReconnect"];
 	        this.reportInterval = source["reportInterval"];
 	        this.reissueOffsetSec = source["reissueOffsetSec"];
+	        this.platformMode = source["platformMode"];
+	        this.platformVin = source["platformVin"];
+	        this.platformUser = source["platformUser"];
+	        this.platformPass = source["platformPass"];
 	        this.extensionPack = source["extensionPack"];
 	        this.tls = this.convertValues(source["tls"], tlsconf.Config);
 	    }
@@ -174,11 +194,29 @@ export namespace bridge {
 	        this.active = source["active"];
 	    }
 	}
+	export class ReportState {
+	    on: boolean;
+	    intervalSec: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ReportState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.on = source["on"];
+	        this.intervalSec = source["intervalSec"];
+	    }
+	}
 	export class ServerConfig {
 	    ip: string;
 	    port: number;
 	    idleEnabled: boolean;
 	    idleSeconds: number;
+	    maxConns: number;
+	    maxFrameBytes: number;
+	    logLines: number;
+	    maxVinsPerConn: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new ServerConfig(source);
@@ -190,6 +228,10 @@ export namespace bridge {
 	        this.port = source["port"];
 	        this.idleEnabled = source["idleEnabled"];
 	        this.idleSeconds = source["idleSeconds"];
+	        this.maxConns = source["maxConns"];
+	        this.maxFrameBytes = source["maxFrameBytes"];
+	        this.logLines = source["logLines"];
+	        this.maxVinsPerConn = source["maxVinsPerConn"];
 	    }
 	}
 	export class TestResult {
@@ -206,6 +248,48 @@ export namespace bridge {
 	        this.ok = source["ok"];
 	        this.elapsedMs = source["elapsedMs"];
 	        this.message = source["message"];
+	    }
+	}
+	export class TrackInfo {
+	    name: string;
+	    format: string;
+	    count: number;
+	    skipped: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new TrackInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.format = source["format"];
+	        this.count = source["count"];
+	        this.skipped = source["skipped"];
+	    }
+	}
+	export class TrackReplayStatus {
+	    running: boolean;
+	    index: number;
+	    total: number;
+	    loop: boolean;
+	    lastError: string;
+	    lng: number;
+	    lat: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new TrackReplayStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.running = source["running"];
+	        this.index = source["index"];
+	        this.total = source["total"];
+	        this.loop = source["loop"];
+	        this.lastError = source["lastError"];
+	        this.lng = source["lng"];
+	        this.lat = source["lat"];
 	    }
 	}
 
@@ -513,6 +597,7 @@ export namespace servermode {
 	    lastSeen: any;
 	    rxCount: number;
 	    txCount: number;
+	    platform?: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Session(source);
@@ -526,6 +611,7 @@ export namespace servermode {
 	        this.lastSeen = this.convertValues(source["lastSeen"], null);
 	        this.rxCount = source["rxCount"];
 	        this.txCount = source["txCount"];
+	        this.platform = source["platform"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
