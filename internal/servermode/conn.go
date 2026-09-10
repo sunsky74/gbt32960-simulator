@@ -14,14 +14,18 @@ import (
 )
 
 // conn 单个车端连接:帧循环 + 协议状态(authed)。
+// platform:本连接为平台链路(0x05 平台登入建立),vins 记录该连接注册的
+// 全部会话 VIN(平台标识 + 各车辆;断开时逐一注销,避免多车会话泄漏)。
 // serve/nextFrame 见下方(空闲判定走 cfgSnapshot 支持运行中更新)。
 type conn struct {
-	nc      net.Conn
-	fr      *framing.FrameReader
-	srv     *Server
-	authed  bool
-	vin     string
-	writeMu sync.Mutex // 帧写串行化:读循环应答与外部下发通道共用
+	nc       net.Conn
+	fr       *framing.FrameReader
+	srv      *Server
+	authed   bool
+	platform bool
+	vin      string
+	vins     []string
+	writeMu  sync.Mutex // 帧写串行化:读循环应答与外部下发通道共用
 }
 
 func (c *conn) handleRaw(ctx context.Context, raw []byte) {
@@ -51,8 +55,9 @@ func (c *conn) handleRaw(ctx context.Context, raw []byte) {
 	}
 	c.srv.hooks.OnFrame(FrameEvent{
 		Time: now, VIN: d.VIN, Cmd: cmdName, Hex: fmt.Sprintf("%x", raw), Summary: sum, Kind: d.Kind,
-		Unauthed: d.Version == api.V2016 && !c.authed && d.Cmd != 0x01,
+		Unauthed: d.Version == api.V2016 && !c.authed && d.Cmd != 0x01 && d.Cmd != 0x05,
 		Dir:      DirRX,
+		Platform: c.platform,
 	})
 	if c.vin == "" && d.VIN != "" {
 		c.vin = d.VIN
@@ -77,11 +82,17 @@ func (c *conn) handleRaw(ctx context.Context, raw []byte) {
 		c.handleData(d, now)
 	case 0x04:
 		c.handleLogout(d, now)
+	// 0x05/0x06 平台登入/登出(企业平台级联):会话语义与车辆登入/登出
+	// 同构——以帧头 VIN(此处为平台标识)注册会话/应答/关闭。
+	case 0x05:
+		c.handleLogin(d, now)
+	case 0x06:
+		c.handleLogout(d, now)
 	case 0x07:
 		c.handleHeartbeat(d, now)
 	case 0x08:
 		c.handleClock(d, now)
-	default: // 0x05/0x06/未知
+	default: // 未知命令
 		if rule, ok := ExtCmd(d.Cmd); ok {
 			c.handleExtCmd(d, now, rule)
 		} else {
@@ -92,17 +103,19 @@ func (c *conn) handleRaw(ctx context.Context, raw []byte) {
 	c.srv.registry.Count(d.VIN, 1, 0)
 }
 
-func (c *conn) reply(cmd byte, resp types.ResponseType, body []byte) {
-	raw, err := buildReply(api.V2016, c.vin, cmd, resp, body)
+// reply 构造并发送应答帧。vin 必须回显请求帧的 VIN:平台链路多车复用时,
+// 连接级 c.vin 是最后一次登入者,不回显请求 VIN 会导致 ACK 与请求对不上。
+func (c *conn) reply(vin string, cmd byte, resp types.ResponseType, body []byte) {
+	raw, err := buildReply(api.V2016, vin, cmd, resp, body)
 	if err != nil {
 		c.srv.hooks.OnWarn(WarnEvent{Note: "应答构造失败: " + err.Error()})
 		return
 	}
-	c.writeFrame(cmd, raw, respText(resp))
+	c.writeFrame(vin, cmd, raw, respText(resp))
 }
 
 // writeFrame 串行写一帧并产生 TX 遥测(reply 与外部下发通道共用)。
-func (c *conn) writeFrame(cmd byte, raw []byte, summary string) {
+func (c *conn) writeFrame(vin string, cmd byte, raw []byte, summary string) {
 	c.writeMu.Lock()
 	_, werr := c.nc.Write(raw)
 	c.writeMu.Unlock()
@@ -116,10 +129,11 @@ func (c *conn) writeFrame(cmd byte, raw []byte, summary string) {
 	}
 	// TX 方向遥测:应答帧进入报文流(不进导出环形缓冲——AC-5 冻结为接收侧)
 	c.srv.hooks.OnFrame(FrameEvent{
-		Time: c.srv.hooks.Now(), VIN: c.vin, Cmd: cmdName,
+		Time: c.srv.hooks.Now(), VIN: vin, Cmd: cmdName,
 		Hex: fmt.Sprintf("%x", raw), Summary: summary, Kind: KindNormal, Dir: DirTX,
+		Platform: c.platform,
 	})
-	c.srv.registry.Count(c.vin, 0, 1)
+	c.srv.registry.Count(vin, 0, 1)
 }
 
 func respText(resp types.ResponseType) string {
@@ -134,15 +148,35 @@ func respText(resp types.ResponseType) string {
 }
 
 func (c *conn) handleLogin(d Decoded, now time.Time) {
-	if ok := c.srv.registry.Register(d.VIN, c.nc.RemoteAddr().String(), now); !ok {
+	isPlatformLogin := d.Cmd == 0x05
+	// 车辆直连连接只允许一次登入(0x01);已登入后同 VIN/换 VIN/0x05 升级一律拒绝,
+	// 且不改动原会话(重复登入的拒绝语义在此前置,Register 的 putIfAbsent 仅兜底)。
+	if c.authed && !c.platform {
+		c.srv.hooks.OnWarn(WarnEvent{Note: "连接已登入,拒绝重复登入: " + d.VIN})
+		c.reply(d.VIN, d.Cmd, types.ResponseFailed, nil)
+		return
+	}
+	// 平台链路 VIN 数上限:c.vins 含 0x05 平台标识,故以 > 比较——上限指可复用的
+	// 车辆 VIN 数(平台标识不占额度),与「平台链路 VIN 数超限(上限 N)」文案一致。
+	if cfg := c.srv.cfgSnapshot(); len(c.vins) > cfg.MaxVinsPerConn {
+		c.srv.hooks.OnWarn(WarnEvent{Note: fmt.Sprintf("平台链路 VIN 数超限(上限 %d),拒绝登入: %s", cfg.MaxVinsPerConn, d.VIN)})
+		c.reply(d.VIN, d.Cmd, types.ResponseFailed, nil)
+		return
+	}
+	if isPlatformLogin {
+		c.platform = true // 0x05 平台登入:本连接此后按平台链路对待
+	}
+	if ok := c.srv.registry.Register(d.VIN, c.nc.RemoteAddr().String(), now, c.platform); !ok {
 		c.srv.hooks.OnWarn(WarnEvent{Note: "重复登入拒绝: " + d.VIN})
-		c.reply(0x01, types.ResponseFailed, nil)
+		c.reply(d.VIN, d.Cmd, types.ResponseFailed, nil)
 		return
 	}
 	c.authed = true
 	c.vin = d.VIN
-	c.reply(0x01, types.ResponseSuccess, nil)
-	c.srv.hooks.OnSession(SessionEvent{VIN: d.VIN, Peer: c.nc.RemoteAddr().String(), Online: true, LastSeen: now})
+	c.vins = append(c.vins, d.VIN)
+	// 应答回显请求命令码:0x01 车辆登入 / 0x05 平台登入共用本处理器
+	c.reply(d.VIN, d.Cmd, types.ResponseSuccess, nil)
+	c.srv.hooks.OnSession(SessionEvent{VIN: d.VIN, Peer: c.nc.RemoteAddr().String(), Online: true, LastSeen: now, Platform: c.platform})
 }
 
 func (c *conn) handleData(d Decoded, now time.Time) {
@@ -150,8 +184,9 @@ func (c *conn) handleData(d Decoded, now time.Time) {
 		c.srv.hooks.OnWarn(WarnEvent{Note: "未登入连接的数据帧被丢弃: " + d.VIN})
 		return
 	}
-	c.srv.registry.Touch(c.vin, now)
-	c.reply(d.Cmd, types.ResponseSuccess, nil)
+	// 平台链路多车复用:按数据帧自身 VIN 活跃(Touch/Count 同口径)
+	c.srv.registry.Touch(d.VIN, now)
+	c.reply(d.VIN, d.Cmd, types.ResponseSuccess, nil)
 }
 
 // handleExtCmd 扩展命令处理器:请求帧(标志 0xFE)按注册规则回应答;
@@ -167,7 +202,7 @@ func (c *conn) handleExtCmd(d Decoded, now time.Time, rule ExtCmdRule) {
 		c.srv.hooks.OnWarn(WarnEvent{Note: "未登入连接的扩展命令帧被丢弃: " + d.VIN})
 		return
 	}
-	c.srv.registry.Touch(c.vin, now)
+	c.srv.registry.Touch(d.VIN, now)
 	var body []byte
 	if rule.Echo {
 		// 回显体从原始帧切(头 24B:起始2+cmd1+resp1+vin17+加密1+长度2);私有命令不经库解码
@@ -176,13 +211,14 @@ func (c *conn) handleExtCmd(d Decoded, now time.Time, rule ExtCmdRule) {
 			body = d.Raw[24 : 24+bodyLen]
 		}
 	}
-	c.reply(d.Cmd, rule.RespType, body)
+	c.reply(d.VIN, d.Cmd, rule.RespType, body)
 }
 
 func (c *conn) handleLogout(d Decoded, now time.Time) {
-	// 只回应答;会话注销与 offline 事件由 removeConn 在连接真正关闭后发出
+	// 只回应答(回显请求命令码:0x04 车辆登出 / 0x06 平台登出共用);
+	// 会话注销与 offline 事件由 removeConn 在连接真正关闭后发出
 	// (车端先收到 ack、后观察到掉线——与 Task 7 集成断言一致,评审 M2)。
-	c.reply(0x04, types.ResponseSuccess, nil)
+	c.reply(d.VIN, d.Cmd, types.ResponseSuccess, nil)
 	time.AfterFunc(200*time.Millisecond, func() { _ = c.nc.Close() }) // 等 ack flush(D8)
 }
 
@@ -191,8 +227,8 @@ func (c *conn) handleHeartbeat(d Decoded, now time.Time) {
 		c.srv.hooks.OnWarn(WarnEvent{Note: "未登入连接的心跳被丢弃"})
 		return
 	}
-	c.srv.registry.Touch(c.vin, now)
-	c.reply(0x07, types.ResponseSuccess, nil)
+	c.srv.registry.Touch(d.VIN, now)
+	c.reply(d.VIN, d.Cmd, types.ResponseSuccess, nil)
 }
 
 func (c *conn) handleClock(d Decoded, now time.Time) {
@@ -200,7 +236,8 @@ func (c *conn) handleClock(d Decoded, now time.Time) {
 		c.srv.hooks.OnWarn(WarnEvent{Note: "未登入连接的校时被丢弃"})
 		return
 	}
-	c.reply(0x08, types.ResponseSuccess, clockBody(now))
+	c.srv.registry.Touch(d.VIN, now)
+	c.reply(d.VIN, d.Cmd, types.ResponseSuccess, clockBody(now))
 }
 
 // serve 连接帧循环。空闲判定每轮走 cfgSnapshot(支持运行中 UpdateIdle 即时生效);

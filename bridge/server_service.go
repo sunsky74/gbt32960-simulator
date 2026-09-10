@@ -8,11 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"gbt32960-simulator/internal/ext"
-	"gbt32960-simulator/internal/schema"
 	"gbt32960-simulator/internal/servermode"
 	"gbt32960-simulator/internal/store"
-	"github.com/sunsky74/gb32960/api"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -25,6 +22,13 @@ type ServerConfig struct {
 	Port        int    `json:"port"`
 	IdleEnabled bool   `json:"idleEnabled"`
 	IdleSeconds int    `json:"idleSeconds"`
+	MaxConns    int    `json:"maxConns"`
+	// MaxFrameBytes 单帧字节上限(512~65536)。
+	MaxFrameBytes int `json:"maxFrameBytes"`
+	// LogLines 导出日志保留行数(100~10000)。
+	LogLines int `json:"logLines"`
+	// MaxVinsPerConn 平台链路车辆 VIN 数上限(1~1024)。
+	MaxVinsPerConn int `json:"maxVinsPerConn"`
 }
 
 // ServerService 服务端模式的前端绑定面。
@@ -33,9 +37,8 @@ type ServerService struct {
 	mu  sync.Mutex
 	srv *servermode.Server
 	rt  *Runtime
-	// lastIP/lastPort 最近一次启动的地址(UpdateIdle 持久化时回填)
-	lastIP   string
-	lastPort int
+	// last 最近一次启动的表单配置(UpdateIdle 基于其副本回填持久化)
+	last ServerConfig
 }
 
 func NewServerService(rt *Runtime) *ServerService { return &ServerService{rt: rt} }
@@ -50,10 +53,25 @@ func (s *ServerService) emit(name string, data any) {
 }
 
 func (s *ServerService) LoadConfig() ServerConfig {
-	cfg := ServerConfig{IP: "127.0.0.1", Port: 32960, IdleEnabled: true, IdleSeconds: 60}
-	_ = store.Load(serverCfgFile, &cfg) // 文件缺失/损坏用默认值
+	cfg := ServerConfig{
+		IP: "127.0.0.1", Port: 32960, IdleEnabled: true, IdleSeconds: 60,
+		MaxConns: 64, MaxFrameBytes: 8192, LogLines: 500, MaxVinsPerConn: 128,
+	}
+	_ = store.Load(serverCfgFile, &cfg) // 文件缺失/损坏用默认值;旧版文件缺新键时预置默认值保留
 	if cfg.IdleSeconds < 5 || cfg.IdleSeconds > 3600 {
 		cfg.IdleSeconds = 60
+	}
+	if cfg.MaxConns < 1 || cfg.MaxConns > 512 {
+		cfg.MaxConns = 64
+	}
+	if cfg.MaxFrameBytes < 512 || cfg.MaxFrameBytes > 65536 {
+		cfg.MaxFrameBytes = 8192
+	}
+	if cfg.LogLines < 100 || cfg.LogLines > 10000 {
+		cfg.LogLines = 500
+	}
+	if cfg.MaxVinsPerConn < 1 || cfg.MaxVinsPerConn > 1024 {
+		cfg.MaxVinsPerConn = 128
 	}
 	return cfg
 }
@@ -70,6 +88,18 @@ func (s *ServerService) Start(cfg ServerConfig, force bool) (servermode.Status, 
 	if cfg.IdleSeconds < 5 || cfg.IdleSeconds > 3600 {
 		return servermode.Status{}, fmt.Errorf("空闲时长须在 5~3600 秒")
 	}
+	if cfg.MaxConns < 1 || cfg.MaxConns > 512 {
+		return servermode.Status{}, fmt.Errorf("最大连接数须在 1~512")
+	}
+	if cfg.MaxFrameBytes < 512 || cfg.MaxFrameBytes > 65536 {
+		return servermode.Status{}, fmt.Errorf("帧上限须在 512~65536 字节")
+	}
+	if cfg.LogLines < 100 || cfg.LogLines > 10000 {
+		return servermode.Status{}, fmt.Errorf("日志保留行数须在 100~10000")
+	}
+	if cfg.MaxVinsPerConn < 1 || cfg.MaxVinsPerConn > 1024 {
+		return servermode.Status{}, fmt.Errorf("平台链路 VIN 数上限须在 1~1024")
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.srv != nil && s.srv.Status().Running {
@@ -78,7 +108,15 @@ func (s *ServerService) Start(cfg ServerConfig, force bool) (servermode.Status, 
 	// 未运行时无条件按本次配置重建 Server:Stop 后换端口重启、首次绑定失败后
 	// 改端口重试都必须生效(旧实例的 Addr 已固化,复用会永久绑错地址)。
 	// 停机即清会话语义合理——Sessions/ExportLog 均要求运行中。
-	s.srv = servermode.New(servermode.DefaultConfig(fmt.Sprintf("%s:%d", cfg.IP, cfg.Port)), servermode.Hooks{
+	// 空闲参数同样在此固化(修复:此前仅 UpdateIdle 能改,Start 的 IdleEnabled/IdleSeconds 被忽略)。
+	base := servermode.DefaultConfig(fmt.Sprintf("%s:%d", cfg.IP, cfg.Port))
+	base.IdleEnabled = cfg.IdleEnabled
+	base.IdleTimeout = time.Duration(cfg.IdleSeconds) * time.Second
+	base.MaxConns = cfg.MaxConns
+	base.MaxFrameBytes = cfg.MaxFrameBytes
+	base.LogLines = cfg.LogLines
+	base.MaxVinsPerConn = cfg.MaxVinsPerConn
+	s.srv = servermode.New(base, servermode.Hooks{
 		OnStatus:  func(st servermode.Status) { s.emit("server:status", st) },
 		OnSession: func(e servermode.SessionEvent) { s.emit("server:session", e) },
 		OnFrame:   func(e servermode.FrameEvent) { s.emit("server:frame", e) },
@@ -87,7 +125,7 @@ func (s *ServerService) Start(cfg ServerConfig, force bool) (servermode.Status, 
 	if err := s.srv.Start(context.Background()); err != nil {
 		return servermode.Status{}, err
 	}
-	s.lastIP, s.lastPort = cfg.IP, cfg.Port
+	s.last = cfg
 	_ = store.Save(serverCfgFile, cfg)
 	return s.srv.Status(), nil
 }
@@ -112,7 +150,11 @@ func (s *ServerService) UpdateIdle(enabled bool, idleSeconds int) error {
 		return fmt.Errorf("空闲时长须在 5~3600 秒")
 	}
 	s.srv.UpdateIdle(enabled, time.Duration(idleSeconds)*time.Second)
-	_ = store.Save(serverCfgFile, ServerConfig{IP: s.lastIP, Port: s.lastPort, IdleEnabled: enabled, IdleSeconds: idleSeconds})
+	cfg := s.last // 副本:保留连接/帧/日志/VIN 上限等高级参数
+	cfg.IdleEnabled = enabled
+	cfg.IdleSeconds = idleSeconds
+	_ = store.Save(serverCfgFile, cfg)
+	s.last = cfg
 	return nil
 }
 
@@ -168,90 +210,4 @@ func (s *ServerService) ExportLog() (string, error) {
 		return "", err
 	}
 	return path, nil
-}
-
-// ExtCommandInfo 服务端可下发的扩展命令模板(来自已导入包 scope=server 的 down 命令)。
-type ExtCommandInfo struct {
-	PackID    string               `json:"packId"`
-	PackLabel string               `json:"packLabel"`
-	Key       string               `json:"key"`
-	Label     string               `json:"label"`
-	Code      int                  `json:"code"`
-	RespType  string               `json:"respType"`
-	Fields    []schema.FieldSchema `json:"fields"`
-	Defaults  map[string]any       `json:"defaults"`
-}
-
-// ServerExtCommands 枚举所有已导入包(scope 含 server)的平台下发模板(direction=down)。
-func (s *ServerService) ServerExtCommands() []ExtCommandInfo {
-	var out []ExtCommandInfo
-	if s.rt == nil {
-		return out
-	}
-	for _, p := range s.rt.Packs() {
-		if !ext.ScopeHas(p, ext.ScopeServer) {
-			continue
-		}
-		for _, c := range p.Commands {
-			if c.Direction != "down" || c.Body.Type != "fields" {
-				continue
-			}
-			fields := make([]schema.FieldSchema, len(c.Body.Fields))
-			for i, f := range c.Body.Fields {
-				fields[i] = ext.CompileField(f)
-			}
-			out = append(out, ExtCommandInfo{
-				PackID:    p.Meta.ID,
-				PackLabel: p.Meta.Label,
-				Key:       c.Key,
-				Label:     c.Label,
-				Code:      c.Code,
-				RespType:  c.RespType,
-				Fields:    fields,
-				Defaults:  ext.DefaultsFor(ext.AppendUnit{Fields: c.Body.Fields}),
-			})
-		}
-	}
-	return out
-}
-
-// SendExtCommand 按 包ID/命令key 组帧并下发到指定 VIN 会话(服务须已启动)。
-// row 为字段值(前端表单);组帧 respType 按命令声明(缺省 command/0xFE)。
-func (s *ServerService) SendExtCommand(packID, key, vin string, row map[string]any) error {
-	if s.rt == nil {
-		return fmt.Errorf("运行时未注入")
-	}
-	s.mu.Lock()
-	srv := s.srv
-	s.mu.Unlock()
-	if srv == nil {
-		return fmt.Errorf("服务未启动")
-	}
-	var cmd *ext.Command
-	for _, p := range s.rt.Packs() {
-		if p.Meta.ID != packID || !ext.ScopeHas(p, ext.ScopeServer) {
-			continue
-		}
-		for i := range p.Commands {
-			if p.Commands[i].Key == key && p.Commands[i].Direction == "down" {
-				cmd = &p.Commands[i]
-				break
-			}
-		}
-	}
-	if cmd == nil {
-		return fmt.Errorf("下发模板不存在: %s/%s", packID, key)
-	}
-	if cmd.Body.Type != "fields" {
-		return fmt.Errorf("仅支持平铺 fields 体模板")
-	}
-	body, err := ext.EncodeFields(cmd.Body.Fields, schema.RowValue(row))
-	if err != nil {
-		return fmt.Errorf("字段编码失败: %w", err)
-	}
-	raw, err := servermode.BuildFrame(api.V2016, vin, byte(cmd.Code), responseTypeOf(cmd.RespType), body)
-	if err != nil {
-		return fmt.Errorf("组帧失败: %w", err)
-	}
-	return srv.WriteFrameVIN(vin, byte(cmd.Code), raw, "平台下发 "+cmd.Label)
 }

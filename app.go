@@ -17,23 +17,30 @@ type App struct {
 	extsvc    *bridge.ExtService
 	sys       *bridge.SystemService
 	server    *bridge.ServerService
+	track     *bridge.TrackService
 	forwarder *bridge.Forwarder
+	settings  *bridge.SettingsService
 }
 
 // NewApp 创建应用装配(在 wails.Run 之前,保证 Bind 可用)。
 func NewApp() *App {
 	rt := bridge.NewRuntime()
 	fwd := bridge.NewForwarder(rt)
+	msg := bridge.NewMessageService(rt)
+	track := bridge.NewTrackService(rt, msg)
+	msg.SetTrackReplay(track)
 	return &App{
 		rt:        rt,
 		conn:      bridge.NewConnectionService(rt),
-		msg:       bridge.NewMessageService(rt),
+		msg:       msg,
 		console:   bridge.NewConsoleService(fwd),
 		parser:    bridge.NewParserService(rt),
 		extsvc:    bridge.NewExtService(rt),
 		sys:       bridge.NewSystemService(),
 		server:    bridge.NewServerService(rt),
+		track:     track,
 		forwarder: fwd,
+		settings:  bridge.NewSettingsService(fwd),
 	}
 }
 
@@ -44,6 +51,7 @@ func (a *App) startup(ctx context.Context) {
 	a.extsvc.SetContext(ctx)
 	a.sys.SetContext(ctx)
 	a.server.SetContext(ctx)
+	a.track.SetContext(ctx)
 	go a.forwarder.Start(ctx)
 }
 

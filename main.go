@@ -34,6 +34,8 @@ func main() {
 			app.extsvc,
 			app.sys,
 			app.server,
+			app.track,
+			app.settings,
 		},
 	})
 

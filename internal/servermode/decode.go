@@ -17,8 +17,10 @@ const encryptionNone = 0x01
 
 // knownCmds2016 服务端已知(会正常处理/应答)的 2016 命令白名单。
 // 注意不能用 frame.PayloadType==nil 判未知:0x07/0x08 载荷类型即 nil(评审 B3)。
+// 0x05/0x06 平台登入/登出(企业平台级联)与会话语义同构,同样正常应答。
 var knownCmds2016 = map[byte]bool{
-	0x01: true, 0x02: true, 0x03: true, 0x04: true, 0x07: true, 0x08: true,
+	0x01: true, 0x02: true, 0x03: true, 0x04: true,
+	0x05: true, 0x06: true, 0x07: true, 0x08: true,
 }
 
 // Decoded 是单帧的解码与分类结果。

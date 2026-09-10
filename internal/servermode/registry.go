@@ -16,13 +16,15 @@ type Registry struct {
 
 func NewRegistry() *Registry { return &Registry{sessions: map[string]Session{}} }
 
-func (r *Registry) Register(vin, peer string, now time.Time) bool {
+// Register 登记会话(putIfAbsent:后到登入被拒,原会话不受影响)。
+// platform 标记平台链路会话(0x05 平台登入建立)。
+func (r *Registry) Register(vin, peer string, now time.Time, platform bool) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.sessions[vin]; exists {
 		return false
 	}
-	r.sessions[vin] = Session{VIN: vin, Peer: peer, LoginAt: now, LastSeen: now}
+	r.sessions[vin] = Session{VIN: vin, Peer: peer, LoginAt: now, LastSeen: now, Platform: platform}
 	return true
 }
 

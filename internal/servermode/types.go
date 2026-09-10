@@ -29,6 +29,8 @@ type SessionEvent struct {
 	Peer     string    `json:"peer"`
 	Online   bool      `json:"online"`
 	LastSeen time.Time `json:"lastSeen"`
+	// Platform:该会话由 0x05 平台登入建立(企业平台链路),区别于车辆直连。
+	Platform bool `json:"platform,omitempty"`
 }
 
 type FrameEvent struct {
@@ -38,11 +40,13 @@ type FrameEvent struct {
 	Hex     string    `json:"hex"`
 	Summary string    `json:"summary"`
 	Kind    FrameKind `json:"kind"`
-	// Unauthed: 2016 帧来自未登入连接且非登入命令本身(0x01 是合法的鉴权流程,
-	// 不标)。前端据此在控制台加「未登入」标记。
+	// Unauthed: 2016 帧来自未登入连接且非登入命令本身(0x01/0x05 是合法的
+	// 鉴权流程,不标)。前端据此在控制台加「未登入」标记。
 	Unauthed bool `json:"unauthed,omitempty"`
 	// Dir: rx 收到 / tx 服务端应答(缺省 rx,向后兼容)。
 	Dir string `json:"dir,omitempty"`
+	// Platform:帧来自平台链路连接(0x05 登入建立),前端据此标注链路类型。
+	Platform bool `json:"platform,omitempty"`
 }
 
 type WarnEvent struct {
@@ -58,6 +62,8 @@ type Session struct {
 	LastSeen time.Time `json:"lastSeen"`
 	RxCount  int       `json:"rxCount"`
 	TxCount  int       `json:"txCount"`
+	// Platform:平台链路会话(0x05 登入建立)。
+	Platform bool `json:"platform,omitempty"`
 }
 
 // Hooks 是 servermode 对外的唯一事件出口与时间源;bridge 层注入 EventsEmit,
@@ -74,12 +80,20 @@ type Config struct {
 	Addr          string
 	MaxConns      int
 	MaxFrameBytes int
-	IdleEnabled   bool
-	IdleTimeout   time.Duration
+	// MaxVinsPerConn 单连接可注册的车辆 VIN 数上限(平台链路的 0x05 平台标识不计数)。
+	MaxVinsPerConn int
+	// LogLines 导出环形缓冲保留行数。
+	LogLines    int
+	IdleEnabled bool
+	IdleTimeout time.Duration
 }
 
 func DefaultConfig(addr string) Config {
-	return Config{Addr: addr, MaxConns: 64, MaxFrameBytes: 8192, IdleEnabled: true, IdleTimeout: 60 * time.Second}
+	return Config{
+		Addr: addr, MaxConns: 64, MaxFrameBytes: 8192,
+		MaxVinsPerConn: 128, LogLines: 500,
+		IdleEnabled: true, IdleTimeout: 60 * time.Second,
+	}
 }
 
 func normalizeHooks(h Hooks) Hooks {

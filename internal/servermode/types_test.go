@@ -10,8 +10,22 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.MaxConns != 64 || cfg.MaxFrameBytes != 8192 {
 		t.Fatalf("默认上限错误: %+v", cfg)
 	}
+	if cfg.MaxVinsPerConn != 128 || cfg.LogLines != 500 {
+		t.Fatalf("默认扩展参数错误: %+v", cfg)
+	}
 	if !cfg.IdleEnabled || cfg.IdleTimeout != 60*time.Second {
 		t.Fatalf("默认空闲配置错误: %+v", cfg)
+	}
+}
+
+func TestNewFillsNonPositiveConfig(t *testing.T) {
+	srv := New(Config{}, Hooks{})
+	cfg := srv.cfgSnapshot()
+	if cfg.MaxConns != 64 || cfg.MaxFrameBytes != 8192 || cfg.MaxVinsPerConn != 128 || cfg.LogLines != 500 {
+		t.Fatalf("非正数配置未回落默认值: %+v", cfg)
+	}
+	if srv.buf.cap != cfg.LogLines {
+		t.Fatalf("环形缓冲容量 = %d, want cfg.LogLines=%d", srv.buf.cap, cfg.LogLines)
 	}
 }
 

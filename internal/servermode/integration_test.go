@@ -297,3 +297,59 @@ func TestIntegrationDuplicateVIN(t *testing.T) {
 	base := frameCount(c, "0x07")
 	waitFor(t, 2*time.Second, func() bool { return frameCount(c, "0x07") > base })
 }
+
+// TestIntegrationPlatformCascade 企业平台级联端到端:engine.Client 平台模式
+// (0x05 平台登入 → 0x01 车辆登入 → ... → 0x04 车辆登出 → 0x06 平台登出)
+// 驱动本地 servermode,验证 0x05/0x06 会话语义与帧序。
+func TestIntegrationPlatformCascade(t *testing.T) {
+	h, c := newCollector(time.Now())
+	srv := startTestServer(t, DefaultConfig("127.0.0.1:0"), h)
+	host, port := splitHostPort(t, srv.Status().ListenAddr)
+
+	const pltVIN = "PLT00000000000001"
+	bus := engine.NewBus()
+	client := engine.NewClient(engine.Options{
+		Host: host, Port: port, Version: api.V2016,
+		VIN: vin17, ICCID: itICCID, SubsystemCodes: []string{"1"},
+		PlatformMode: true, PlatformVIN: pltVIN,
+		PlatformUser: "entuser", PlatformPass: "entpass",
+		HeartbeatInterval: 200 * time.Millisecond,
+		LoginTimeout:      2 * time.Second,
+	}, bus)
+	if err := client.Connect(context.Background()); err != nil {
+		t.Fatalf("企业平台连接+登入失败: %v", err)
+	}
+
+	waitFor(t, time.Second, func() bool { return frameCount(c, "0x05") >= 1 })
+	waitFor(t, time.Second, func() bool { return frameCount(c, "0x01") >= 1 })
+	waitFor(t, time.Second, func() bool { return frameCount(c, "0x07") >= 1 })
+
+	// 平台标识会话在线
+	waitFor(t, 2*time.Second, func() bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		for _, s := range c.sessions {
+			if s.VIN == pltVIN && s.Online {
+				return true
+			}
+		}
+		return false
+	})
+
+	client.Disconnect()
+	waitFor(t, 2*time.Second, func() bool { return frameCount(c, "0x04") >= 1 })
+	waitFor(t, 2*time.Second, func() bool { return frameCount(c, "0x06") >= 1 })
+
+	// 帧序:0x05 → 0x01 → 0x04 → 0x06
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	idx := map[string]int{"0x05": -1, "0x01": -1, "0x04": -1, "0x06": -1}
+	for i, f := range c.frames {
+		if _, ok := idx[f.Cmd]; ok && idx[f.Cmd] < 0 {
+			idx[f.Cmd] = i
+		}
+	}
+	if idx["0x05"] < 0 || idx["0x05"] >= idx["0x01"] || idx["0x01"] >= idx["0x04"] || idx["0x04"] >= idx["0x06"] {
+		t.Fatalf("级联帧序异常: %+v", idx)
+	}
+}

@@ -22,13 +22,26 @@ type Server struct {
 	cancel  context.CancelFunc
 }
 
-// New 创建服务(未启动)。/hooks 经 normalizeHooks 填充默认值。
+// New 创建服务(未启动)。/hooks 经 normalizeHooks 填充默认值;
+// 非正数配置项回落默认值(与 DefaultConfig 同值),保证零值 Config 可直接使用。
 func New(cfg Config, hooks Hooks) *Server {
+	if cfg.MaxConns <= 0 {
+		cfg.MaxConns = 64
+	}
+	if cfg.MaxFrameBytes <= 0 {
+		cfg.MaxFrameBytes = 8192
+	}
+	if cfg.MaxVinsPerConn <= 0 {
+		cfg.MaxVinsPerConn = 128
+	}
+	if cfg.LogLines <= 0 {
+		cfg.LogLines = 500
+	}
 	return &Server{
 		cfg:      cfg,
 		hooks:    normalizeHooks(hooks),
 		registry: NewRegistry(),
-		buf:      newRing(500),
+		buf:      newRing(cfg.LogLines),
 		conns:    map[*conn]struct{}{},
 	}
 }
@@ -146,6 +159,8 @@ func (s *Server) ExportLines() []string { return s.buf.snapshot() }
 func (s *Server) ClearLog() { s.buf.clear() }
 
 // removeConn 连接退出清理 + offline 事件。
+// 平台链路(0x05)可能注册多个会话(平台标识 + 各车辆),断开须逐一注销;
+// 车辆直连 vins 只有一个,行为与旧版单 VIN 注销一致。
 func (s *Server) removeConn(c *conn) {
 	s.mu.Lock()
 	delete(s.conns, c)
@@ -153,9 +168,15 @@ func (s *Server) removeConn(c *conn) {
 	_ = c.nc.Close()
 	// 仅已登入连接才注销会话:被拒的重复登入连接 vin 已置位但未 authed,
 	// 若按 vin 注销会误删原会话(评审 watch-out)
-	if c.authed {
-		if _, ok := s.registry.Remove(c.vin); ok {
-			s.hooks.OnSession(SessionEvent{VIN: c.vin, Peer: c.nc.RemoteAddr().String(), Online: false, LastSeen: s.hooks.Now()})
+	if !c.authed {
+		return
+	}
+	for _, vin := range c.vins {
+		if _, ok := s.registry.Remove(vin); ok {
+			s.hooks.OnSession(SessionEvent{
+				VIN: vin, Peer: c.nc.RemoteAddr().String(), Online: false,
+				LastSeen: s.hooks.Now(), Platform: c.platform,
+			})
 		}
 	}
 }
@@ -205,6 +226,6 @@ func (s *Server) WriteFrameVIN(vin string, cmd byte, raw []byte, summary string)
 	if target == nil {
 		return fmt.Errorf("车辆 %s 不在线或未登入", vin)
 	}
-	target.writeFrame(cmd, raw, summary)
+	target.writeFrame(vin, cmd, raw, summary)
 	return nil
 }

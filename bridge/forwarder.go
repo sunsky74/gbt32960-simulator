@@ -17,23 +17,37 @@ type Forwarder struct {
 
 	bufMu  sync.Mutex
 	buffer []engine.Event // 环形缓冲,超出容量丢弃最旧
+	cap    int            // 导出缓冲容量(SetCap 运行中可调)
 }
 
-const exportBufferCap = 50000
+const defaultExportBufferCap = 50000
 
 // NewForwarder 创建转发器。
 func NewForwarder(rt *Runtime) *Forwarder {
-	return &Forwarder{rt: rt, buffer: make([]engine.Event, 0, 1024)}
+	return &Forwarder{rt: rt, buffer: make([]engine.Event, 0, 1024), cap: defaultExportBufferCap}
 }
 
 // mirror 把事件写入导出缓冲(环形,超出容量丢最旧)。
 func (f *Forwarder) mirror(e engine.Event) {
 	f.bufMu.Lock()
 	defer f.bufMu.Unlock()
-	if len(f.buffer) >= exportBufferCap {
-		f.buffer = f.buffer[len(f.buffer)-exportBufferCap+1:]
+	if len(f.buffer) >= f.cap {
+		f.buffer = f.buffer[len(f.buffer)-f.cap+1:]
 	}
 	f.buffer = append(f.buffer, e)
+}
+
+// SetCap 运行中调整导出缓冲容量,超出的旧事件立即裁剪,仅保留最近 n 条。
+func (f *Forwarder) SetCap(n int) {
+	if n <= 0 {
+		return // 容量非法忽略(调用方 SettingsService 已做范围校验)
+	}
+	f.bufMu.Lock()
+	defer f.bufMu.Unlock()
+	f.cap = n
+	if len(f.buffer) > n {
+		f.buffer = f.buffer[len(f.buffer)-n:]
+	}
 }
 
 // Snapshot 返回过滤后的副本。kinds 为空返回全部。

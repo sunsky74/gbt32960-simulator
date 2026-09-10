@@ -9,10 +9,10 @@ import (
 func TestRegistryDuplicateLogin(t *testing.T) {
 	r := NewRegistry()
 	now := time.Unix(1_700_000_000, 0)
-	if !r.Register(vin17, "1.2.3.4:5", now) {
+	if !r.Register(vin17, "1.2.3.4:5", now, false) {
 		t.Fatal("首次登入应成功")
 	}
-	if r.Register(vin17, "5.6.7.8:9", now.Add(time.Second)) {
+	if r.Register(vin17, "5.6.7.8:9", now.Add(time.Second), false) {
 		t.Fatal("同 VIN 重复登入应被拒绝")
 	}
 	s := r.Snapshot()
@@ -24,7 +24,7 @@ func TestRegistryDuplicateLogin(t *testing.T) {
 func TestRegistryRemoveAndTouch(t *testing.T) {
 	r := NewRegistry()
 	now := time.Unix(1_700_000_000, 0)
-	r.Register(vin17, "p", now)
+	r.Register(vin17, "p", now, false)
 	r.Touch(vin17, now.Add(time.Minute))
 	if got := r.Snapshot()[0].LastSeen; !got.Equal(now.Add(time.Minute)) {
 		t.Fatalf("Touch 未刷新: %v", got)
@@ -35,7 +35,7 @@ func TestRegistryRemoveAndTouch(t *testing.T) {
 	if _, ok := r.Remove(vin17); ok {
 		t.Fatal("重复 Remove 应失败")
 	}
-	if r.Register(vin17, "p2", now) != true {
+	if r.Register(vin17, "p2", now, false) != true {
 		t.Fatal("登出后应可重新登入")
 	}
 }
@@ -47,7 +47,7 @@ func TestRegistryConcurrent(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			r.Register(vin17, "p", time.Now())
+			r.Register(vin17, "p", time.Now(), false)
 			r.Touch(vin17, time.Now())
 			r.Snapshot()
 		}()
