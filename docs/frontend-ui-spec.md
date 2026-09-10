@@ -112,7 +112,7 @@
 
 | 形态 | 规格 | 实例 |
 |---|---|---|
-| antd `a-tag`（卡片头 extra） | 默认尺寸 + 语义色字符串（"red"/"blue"/无色） | 报警 red / 状态 blue / 轨迹无色"规划中" |
+| antd `a-tag`（卡片头 extra） | 默认尺寸 + 语义色字符串（"red"/"blue"/无色） | 报警 red / 状态 blue / 轨迹:回放中 blue、未导入无色(已导入显示格式 GPX/XLSX/CSV) |
 | antd `a-badge`（连接状态） | status 点 + 文本 | success/processing/default |
 | 自绘 `.sr-badge`（SettingRow） | **10px** 字号、padding 2px 5px、radius 3px、tertiary 字 + elevated 底 + subtle 边框 | "规划中" |
 | 自绘 `.dd-ok/.dd-off`（扩展页详情） | ●/○ 前缀 + primary/tertiary 色 | "● 已启用 / ○ 已禁用" |
