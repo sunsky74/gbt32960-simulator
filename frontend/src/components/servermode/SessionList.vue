@@ -58,6 +58,7 @@ function onlineDur(s: SessionRow): string {
         <div class="sess-top">
           <span class="sess-dot" :class="{ on: s.online }" />
           <span class="sess-vin">{{ s.vin || '(未登入)' }}</span>
+          <a-tag v-if="s.platform" color="geekblue" class="sess-platform-tag">平台链路</a-tag>
         </div>
         <div class="sess-sub">{{ s.peer }}</div>
         <div class="sess-meta">
@@ -73,3 +74,12 @@ function onlineDur(s: SessionRow): string {
     </div>
   </aside>
 </template>
+
+<style scoped>
+.sess-platform-tag {
+  margin-left: 4px;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 16px;
+}
+</style>

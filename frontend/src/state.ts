@@ -11,6 +11,7 @@ import {
 } from './api/backend'
 import type { bridge } from '../wailsjs/go/models'
 import * as ExtService from '../wailsjs/go/bridge/ExtService'
+import { appSettings } from './composables/useAppSettings'
 
 export const store = reactive({
   connState: 'idle',
@@ -24,6 +25,11 @@ export const store = reactive({
   consoleEvents: [] as ConsoleEvent[],
   consolePaused: false,
   consoleFilter: 'all' as 'all' | 'tx' | 'rx' | 'conn' | 'error',
+  // 周期上报状态(RealTimePanel 与 TrackCard 共享:导入轨迹默认开启后需同步)
+  autoReport: false,
+  autoInterval: 10,
+  // 轨迹回放激活中(RealTimePanel 据此锁定位置组编辑)
+  trackActive: false,
 })
 
 const MAX_CONSOLE_EVENTS = 10000
@@ -36,8 +42,9 @@ export function applySchema(list: GroupSchema[]) {
 export function pushConsoleEvents(batch: ConsoleEvent[]) {
   if (store.consolePaused) return
   store.consoleEvents.push(...batch)
-  if (store.consoleEvents.length > MAX_CONSOLE_EVENTS) {
-    store.consoleEvents.splice(0, store.consoleEvents.length - MAX_CONSOLE_EVENTS)
+  const cap = appSettings.consoleEventCap || MAX_CONSOLE_EVENTS
+  if (store.consoleEvents.length > cap) {
+    store.consoleEvents.splice(0, store.consoleEvents.length - cap)
   }
 }
 

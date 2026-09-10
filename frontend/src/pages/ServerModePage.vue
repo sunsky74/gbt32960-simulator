@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { message, Modal } from 'ant-design-vue'
 import {
   CaretRightOutlined, ClearOutlined, DownloadOutlined, SendOutlined, SettingOutlined, StopOutlined,
 } from '@ant-design/icons-vue'
 import * as ServerService from '../../wailsjs/go/bridge/ServerService'
 import * as ParserService from '../../wailsjs/go/bridge/ParserService'
-import { EventsOn } from '../../wailsjs/runtime/runtime'
+import { onWailsEvent } from '../api/events'
 import ResizableDivider from '../components/layout/ResizableDivider.vue'
 import ResizableDividerCol from '../components/layout/ResizableDividerCol.vue'
 import SessionList from '../components/servermode/SessionList.vue'
@@ -16,6 +16,7 @@ import { RENDER_CAP, fmtDuration, type SessionRow, type StreamRow } from '../com
 import {
   bitsArrayOf, bitOptions, boolOf, hexOf, numOf, setBitsArray, setBool, setEnum, setHex, setNum,
 } from '../composables/useFieldHelpers'
+import { appSettings } from '../composables/useAppSettings'
 import type { FieldSchema } from '../api/backend'
 
 // ---------- 平台下发:扩展包 down 命令模板 ----------
@@ -71,7 +72,10 @@ function openExtCmdModal() {
   extCmdOpen.value = true
 }
 
-const cfg = reactive({ ip: '127.0.0.1', port: 32960, idleEnabled: true, idleSeconds: 60 })
+const cfg = reactive({
+  ip: '127.0.0.1', port: 32960, idleEnabled: true, idleSeconds: 60,
+  maxConns: 64, maxFrameBytes: 8192, logLines: 500, maxVinsPerConn: 128,
+})
 const running = ref(false)
 const listenAddr = ref('')
 const sessions = ref<SessionRow[]>([])
@@ -93,11 +97,19 @@ const uptimeText = computed(() =>
 let frameSeq = 0
 let offs: Array<() => void> = []
 
+function unsubscribe() {
+  offs.forEach((off) => off())
+  offs = []
+}
+
 type StreamRowInput = Partial<Omit<StreamRow, 'id' | 'time' | 'kind' | 'dir'>> & {
   time?: string
   kind: StreamRow['kind']
   dir?: StreamRow['dir']
 }
+
+// 报文流渲染上限:设置页「外观 → 服务端报文流保留行数」可调,缺省回落 RENDER_CAP(默认行为不变)
+const renderCap = computed(() => appSettings.packetStreamCap || RENDER_CAP)
 
 function pushRow(p: StreamRowInput) {
   frames.value = [
@@ -108,34 +120,39 @@ function pushRow(p: StreamRowInput) {
       id: ++frameSeq,
       time: p.time ?? new Date().toISOString(),
     },
-  ].slice(-RENDER_CAP)
+  ].slice(-renderCap.value)
 }
 
 function upsertSession(row: SessionRow) {
   const i = sessions.value.findIndex((s) => s.vin === row.vin)
   if (i >= 0) sessions.value.splice(i, 1, row)
-  else sessions.value = [row, ...sessions.value].slice(0, RENDER_CAP)
+  else sessions.value = [row, ...sessions.value].slice(0, renderCap.value)
 }
 
 function subscribe() {
+  // 先清理旧订阅,保证 activate 循环中重复调用也不会双重订阅
+  unsubscribe()
   offs = [
-    EventsOn('server:status', (st: { running: boolean; listenAddr: string }) => {
+    onWailsEvent('server:status', (st) => {
       running.value = st.running
       listenAddr.value = st.listenAddr ?? ''
       if (st.running && startedAt.value === null) startedAt.value = Date.now()
       if (!st.running) startedAt.value = null
     }),
     // 上下线事件合成紫色 Link 行插入报文流(VIN + peer)
-    EventsOn('server:session', (e: { vin: string; peer: string; online: boolean }) => {
+    onWailsEvent('server:session', (e) => {
       const nowIso = new Date().toISOString()
       const i = sessions.value.findIndex((s) => s.vin === e.vin)
       if (e.online) {
         // 新连接:重置计数,loginAt 取事件到达时刻(Sessions 快照才有真实 loginAt)
         upsertSession({
-          vin: e.vin, peer: e.peer, online: true,
+          vin: e.vin, peer: e.peer, online: true, platform: e.platform,
           loginAt: nowIso, lastSeen: nowIso, rxCount: 0, txCount: 0,
         })
-        pushRow({ kind: 'link', dir: 'link', vin: e.vin, peer: e.peer, summary: `客户端上线 ${e.peer}` })
+        pushRow({
+          kind: 'link', dir: 'link', vin: e.vin, peer: e.peer,
+          summary: `${e.platform ? '平台' : '客户端'}上线 ${e.peer}`, platform: e.platform,
+        })
       } else {
         // 离线会话保留显示(灰化),报文仍可按其 VIN 过滤
         if (i >= 0) {
@@ -145,37 +162,43 @@ function subscribe() {
         pushRow({ kind: 'link', dir: 'link', vin: e.vin, peer: e.peer, summary: `客户端离线 ${e.peer}` })
       }
     }),
-    EventsOn(
-      'server:frame',
-      (e: {
-        time: string; vin: string; cmd: string; hex: string; summary: string
-        kind: StreamRow['kind']; unauthed?: boolean; dir?: string
-      }) => {
-        const dir: StreamRow['dir'] = e.dir === 'tx' ? 'tx' : 'rx'
-        pushRow({
-          time: e.time, vin: e.vin, cmd: e.cmd, hex: e.hex, summary: e.summary,
-          kind: e.kind, dir, unauthed: e.unauthed,
-        })
-        // 会话 RX/TX 计数与最后活跃联动
-        if (e.vin) {
-          const i = sessions.value.findIndex((s) => s.vin === e.vin)
-          if (i >= 0) {
-            const s = sessions.value[i]
-            sessions.value.splice(i, 1, {
-              ...s,
-              lastSeen: e.time,
-              rxCount: s.rxCount + (dir === 'rx' ? 1 : 0),
-              txCount: s.txCount + (dir === 'tx' ? 1 : 0),
-            })
-          }
+    onWailsEvent('server:frame', (e) => {
+      const dir: StreamRow['dir'] = e.dir === 'tx' ? 'tx' : 'rx'
+      pushRow({
+        time: e.time, vin: e.vin, cmd: e.cmd, hex: e.hex, summary: e.summary,
+        kind: e.kind, dir, unauthed: e.unauthed, platform: e.platform,
+      })
+      // 会话 RX/TX 计数与最后活跃联动
+      if (e.vin) {
+        const i = sessions.value.findIndex((s) => s.vin === e.vin)
+        if (i >= 0) {
+          const s = sessions.value[i]
+          sessions.value.splice(i, 1, {
+            ...s,
+            lastSeen: e.time,
+            rxCount: s.rxCount + (dir === 'rx' ? 1 : 0),
+            txCount: s.txCount + (dir === 'tx' ? 1 : 0),
+          })
         }
-      },
-    ),
+      }
+    }),
     // server:warn → 红色 Error 行
-    EventsOn('server:warn', (e: { note: string; hex?: string }) => {
-      pushRow({ kind: 'warn', dir: 'link', hex: e.hex ?? '', summary: e.note })
+    onWailsEvent('server:warn', (e) => {
+      pushRow({ kind: 'warn', dir: 'link', hex: e.hex, summary: e.note })
     }),
   ]
+}
+
+function startTick() {
+  stopTick()
+  tickTimer = window.setInterval(() => (now.value = Date.now()), 1000)
+}
+
+function stopTick() {
+  if (tickTimer !== undefined) {
+    window.clearInterval(tickTimer)
+    tickTimer = undefined
+  }
 }
 
 async function loadCfg() {
@@ -326,29 +349,52 @@ function initSplit() {
   clampSessW()
 }
 
-onMounted(async () => {
-  tickTimer = window.setInterval(() => (now.value = Date.now()), 1000)
-  // 先初始化分割与监听:纯浏览器调试(无 window.runtime)时布局仍可用
-  initSplit()
-  window.addEventListener('resize', onWindowResize)
-  subscribe()
-  await loadCfg()
+// ---------- KeepAlive 生命周期 ----------
+// App.vue 用的是无 include 的 <KeepAlive>:切页只触发 onDeactivated/onActivated,
+// onUnmounted 不会执行。因此事件订阅与 tickTimer 全部收口到 onActivated 这一条
+// 路径(onMounted 不订阅),onDeactivated 时暂停,onUnmounted 仅兜底清理;
+// activate 前先清理旧订阅/旧定时器,保证多次切换不泄漏、不重复。
+// 取舍:停用期间到达的 server:frame 等事件不在前端缓存(高频帧缓存无意义),
+// Go 侧仍持有 500 行导出环形缓冲与 Sessions 快照,重新激活时以快照补齐,
+// 停用窗口内的报文流会有缺口。
+
+async function resyncSnapshots() {
   const st = await ServerService.Status().catch(() => null)
-  if (st?.running) {
-    running.value = true
-    listenAddr.value = st.listenAddr
-    startedAt.value = Date.now()
+  if (st) {
+    running.value = st.running
+    listenAddr.value = st.running ? st.listenAddr : ''
+    if (st.running && startedAt.value === null) startedAt.value = Date.now()
+    if (!st.running) startedAt.value = null
   }
   // 快照行全部是活会话(注册表只存在线会话),补 online: true(评审 m3)
   const snap = (await ServerService.Sessions().catch(() => [])) ?? []
   sessions.value = snap.map((s: Omit<SessionRow, 'online'>) => ({ ...s, online: true }))
+}
+
+onMounted(async () => {
+  // 先初始化分割与监听:纯浏览器调试(无 window.runtime)时布局仍可用
+  initSplit()
+  window.addEventListener('resize', onWindowResize)
+  await loadCfg()
   parserPacks.value = (await ParserService.ParserPacks().catch(() => [])) ?? []
 })
 
+onActivated(() => {
+  // KeepAlive 首次挂载也会触发 onActivated:订阅只在此建立,天然只有一份
+  startTick()
+  subscribe()
+  void resyncSnapshots()
+})
+
+onDeactivated(() => {
+  stopTick()
+  unsubscribe()
+})
+
 onUnmounted(() => {
-  if (tickTimer !== undefined) clearInterval(tickTimer)
+  stopTick()
+  unsubscribe()
   window.removeEventListener('resize', onWindowResize)
-  offs.forEach((off) => off())
 })
 </script>
 
@@ -522,6 +568,24 @@ onUnmounted(() => {
             class="cfg-num" :disabled="!cfg.idleEnabled"
           />
         </div>
+        <div class="cfg-group-title">高级参数</div>
+        <p class="cfg-group-hint">停止服务后修改,重新启动生效</p>
+        <div class="cfg-item">
+          <span class="form-label">最大连接数</span>
+          <a-input-number v-model:value="cfg.maxConns" size="small" :min="1" :max="512" class="cfg-num" />
+        </div>
+        <div class="cfg-item">
+          <span class="form-label">单帧上限(字节)</span>
+          <a-input-number v-model:value="cfg.maxFrameBytes" size="small" :min="512" :max="65536" class="cfg-num" />
+        </div>
+        <div class="cfg-item">
+          <span class="form-label">日志保留行数</span>
+          <a-input-number v-model:value="cfg.logLines" size="small" :min="100" :max="10000" class="cfg-num" />
+        </div>
+        <div class="cfg-item">
+          <span class="form-label">平台链路 VIN 上限</span>
+          <a-input-number v-model:value="cfg.maxVinsPerConn" size="small" :min="1" :max="1024" class="cfg-num" />
+        </div>
       </div>
       <a-alert
         v-if="running"
@@ -556,6 +620,21 @@ onUnmounted(() => {
   color: var(--text-secondary);
   font-size: 13px;
   margin-bottom: 12px;
+}
+
+/* 配置抽屉分组标题与提示(高级参数) */
+.cfg-group-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+
+.cfg-group-hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .extcmd-fields {

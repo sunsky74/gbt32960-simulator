@@ -21,11 +21,18 @@ export function initConnConfig() {
   }
 }
 
-// 激活档案切换后,同步表单
+// 激活档案切换后,同步表单。omitempty 字段(extensionPack/platformVin 等)
+// 在无值档案的 JSON 里不存在,Object.assign 不会覆盖——须先显式清空,
+// 否则表单残留上一档案的值,保存时会被静默带回。
 watch(
   () => store.config,
   (v) => {
     if (v) {
+      cfg.extensionPack = ''
+      cfg.platformMode = false
+      cfg.platformVin = ''
+      cfg.platformUser = ''
+      cfg.platformPass = ''
       Object.assign(cfg, v)
       if (v.tls) Object.assign(cfg.tls, v.tls)
     }
@@ -48,6 +55,10 @@ export function resetToNewProfile(n: number) {
     reportInterval: 10,
     reissueOffsetSec: 60,
     extensionPack: '',
+    platformMode: false,
+    platformVin: '',
+    platformUser: '',
+    platformPass: '',
     tls: { enabled: false, ca: '', clientCert: '', clientKey: '', serverName: '', insecure: false },
   })
 }

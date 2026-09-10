@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
+import { QuestionCircleOutlined } from '@ant-design/icons-vue'
 import CollapsibleCard from '../layout/CollapsibleCard.vue'
 import { cfg } from '../../composables/useConnConfig'
 import { formRef, rules, saveOnly, onVersionChange } from '../../composables/useConnActions'
@@ -61,6 +62,33 @@ onMounted(refreshPacks)
         />
       </a-form-item>
 
+      <a-space direction="vertical" size="small" class="switch-row">
+        <a-switch v-model:checked="cfg.platformMode" size="small" />
+        <span class="switch-label">
+          企业平台级联
+          <a-tooltip :mouse-enter-delay="1" placement="right">
+            <template #title>
+              <div>0x05 平台登入 → 车辆数据转发 → 0x06 平台登出</div>
+              <div>连接后先以平台身份登入,再转发车辆数据;</div>
+              <div>数据帧保持车辆 VIN,心跳/校时使用平台标识</div>
+            </template>
+            <QuestionCircleOutlined class="hint-icon" />
+          </a-tooltip>
+        </span>
+      </a-space>
+      <template v-if="cfg.platformMode">
+        <a-form-item label="平台标识 VIN" name="platformVin">
+          <a-input v-model:value="cfg.platformVin" :maxlength="17" placeholder="17 位,由目标平台颁发" />
+        </a-form-item>
+        <a-form-item label="平台账号" name="platformUser">
+          <a-input v-model:value="cfg.platformUser" :maxlength="12" placeholder="≤12 位,不足自动填充" />
+        </a-form-item>
+        <a-form-item label="平台密码" name="platformPass">
+          <a-input-password v-model:value="cfg.platformPass" :maxlength="20" placeholder="≤20 位,不足自动填充" />
+        </a-form-item>
+        <span class="field-hint">连接后先以平台身份登入,再转发车辆数据(车辆 VIN);心跳/校时使用平台标识</span>
+      </template>
+
       <a-form-item label="心跳间隔" name="heartbeatSec">
         <a-input-number
           v-model:value="cfg.heartbeatSec"
@@ -116,3 +144,17 @@ onMounted(refreshPacks)
     </a-space>
   </div>
 </template>
+
+<style scoped>
+.switch-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hint-icon {
+  font-size: 12px;
+  opacity: 0.55;
+  cursor: help;
+}
+</style>

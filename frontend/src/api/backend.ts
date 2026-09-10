@@ -1,7 +1,6 @@
 import * as ConnectionService from '../../wailsjs/go/bridge/ConnectionService'
 import * as MessageService from '../../wailsjs/go/bridge/MessageService'
 import * as ConsoleService from '../../wailsjs/go/bridge/ConsoleService'
-import { EventsOn } from '../../wailsjs/runtime/runtime'
 import { bridge, engine, schema } from '../../wailsjs/go/models'
 
 export { ConnectionService, MessageService, ConsoleService }
@@ -73,9 +72,8 @@ export function stateToPayload(groups: GroupsState, order: string[]): GroupsPayl
   return payload
 }
 
-export function onConsoleEvents(handler: (batch: ConsoleEvent[]) => void): () => void {
-  const off = EventsOn('console:events', (batch: ConsoleEvent[]) => handler(batch))
-  return () => {
-    off()
-  }
-}
+/**
+ * console:events 订阅(兼容导出):实现已收口到 api/events.ts,
+ * 此处仅转发以维持既有 import 路径可用。
+ */
+export { onConsoleEvents } from './events'

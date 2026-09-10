@@ -7,6 +7,10 @@ export interface AppSettings {
   themeMode: 'dark' | 'light' | 'auto'
   animations: boolean
   restoreLastPage: boolean
+  // 前端本地性能上限:服务端报文流保留行数(渲染/内存开销)
+  packetStreamCap: number
+  // 前端本地性能上限:客户端控制台保留事件条数(内存开销)
+  consoleEventCap: number
 }
 
 const SETTINGS_KEY = 'app-settings'
@@ -16,6 +20,29 @@ const DEFAULTS: AppSettings = {
   themeMode: 'dark',
   animations: true,
   restoreLastPage: true,
+  packetStreamCap: 200,
+  consoleEventCap: 10000,
+}
+
+// 数值档位边界(与设置页下拉选项一致;旧数据越界时钳回区间)
+const PACKET_STREAM_CAP_RANGE = { min: 100, max: 2000 } as const
+const CONSOLE_EVENT_CAP_RANGE = { min: 1000, max: 50000 } as const
+
+// 数值钳制:非法值回落默认,越界值压回允许区间(读写两路共用,坏值不落盘)。
+export function clampNum(value: unknown, min: number, max: number, fallback: number): number {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n) || n <= 0) return fallback
+  return Math.min(max, Math.max(min, n))
+}
+
+function clampCaps(v: AppSettings): AppSettings {
+  v.packetStreamCap = clampNum(
+    v.packetStreamCap, PACKET_STREAM_CAP_RANGE.min, PACKET_STREAM_CAP_RANGE.max, DEFAULTS.packetStreamCap,
+  )
+  v.consoleEventCap = clampNum(
+    v.consoleEventCap, CONSOLE_EVENT_CAP_RANGE.min, CONSOLE_EVENT_CAP_RANGE.max, DEFAULTS.consoleEventCap,
+  )
+  return v
 }
 
 function load(): AppSettings {
@@ -23,7 +50,7 @@ function load(): AppSettings {
     const raw = localStorage.getItem(SETTINGS_KEY)
     if (!raw) return { ...DEFAULTS }
     const saved = JSON.parse(raw) as Partial<AppSettings>
-    return { ...DEFAULTS, ...saved }
+    return clampCaps({ ...DEFAULTS, ...saved })
   } catch {
     return { ...DEFAULTS }
   }
@@ -32,6 +59,8 @@ function load(): AppSettings {
 export const appSettings = reactive<AppSettings>(load())
 
 function persist() {
+  // 持久化前兜底钳制:任何路径写入的坏值都不落盘
+  clampCaps(appSettings)
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(appSettings))
 }
 
@@ -71,6 +100,12 @@ watch(
 
 watch(
   () => appSettings.restoreLastPage,
+  () => persist(),
+)
+
+// 性能上限档位:变更即持久化(与上方各设置项同一模式)
+watch(
+  () => [appSettings.packetStreamCap, appSettings.consoleEventCap] as const,
   () => persist(),
 )
 

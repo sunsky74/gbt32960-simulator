@@ -8,6 +8,8 @@ import {
 import { markRaw, type Component } from 'vue'
 import { appSettings, resetAppSettings } from '../composables/useAppSettings'
 import * as SystemService from '../../wailsjs/go/bridge/SystemService'
+import * as SettingsService from '../../wailsjs/go/bridge/SettingsService'
+import { bridge } from '../../wailsjs/go/models'
 import SettingRow from '../components/settings/SettingRow.vue'
 
 // ---------- 分类注册表:左侧导航 + 右侧内容一一对应 ----------
@@ -37,12 +39,41 @@ const CTRL_W = '180px' // 下拉/输入类控件统一宽度,禁止被 flex 拉�
 // ---------- 数据与存储:后端只读路径 ----------
 const storagePaths = ref<Record<string, string> | null>(null)
 
+// ---------- 控制台导出缓冲(bridge.SettingsService,后端持久化) ----------
+const consoleExportCap = ref<number | null>(null)
+
+async function loadExportCap() {
+  try {
+    const s = await SettingsService.GetAppSettings()
+    consoleExportCap.value = s.consoleExportCap
+  } catch {
+    consoleExportCap.value = null
+  }
+}
+
+async function saveExportCap(v: number | string | null) {
+  const n = typeof v === 'number' ? v : Number(v)
+  if (!Number.isFinite(n) || n <= 0) return
+  try {
+    await SettingsService.SetAppSettings(bridge.AppSettings.createFrom({ consoleExportCap: n }))
+    message.success('已保存')
+  } catch (e) {
+    message.error('保存失败: ' + String(e))
+    void loadExportCap()
+  }
+}
+
+// 外观 → 界面:性能上限档位选项(与 useAppSettings 的钳制区间一致)
+const packetStreamCapOptions = [100, 200, 500, 1000, 2000].map((v) => ({ value: v, label: String(v) }))
+const consoleEventCapOptions = [1000, 5000, 10000, 50000].map((v) => ({ value: v, label: String(v) }))
+
 onMounted(async () => {
   try {
     storagePaths.value = await SystemService.StoragePaths()
   } catch {
     storagePaths.value = null
   }
+  void loadExportCap()
 })
 
 async function openDir(path?: string) {
@@ -157,6 +188,26 @@ const shortcuts = [
                   <a-switch v-model:checked="appSettings.animations" size="small" />
                 </template>
               </SettingRow>
+              <SettingRow title="服务端报文流保留行数" description="服务端模式报文流最多渲染的行数;数值越大渲染与内存开销越高">
+                <template #action>
+                  <a-select
+                    v-model:value="appSettings.packetStreamCap"
+                    size="small"
+                    :options="packetStreamCapOptions"
+                    :style="{ width: CTRL_W }"
+                  />
+                </template>
+              </SettingRow>
+              <SettingRow title="控制台保留条数" description="客户端控制台最多保留的事件条数;数值越大内存占用越高">
+                <template #action>
+                  <a-select
+                    v-model:value="appSettings.consoleEventCap"
+                    size="small"
+                    :options="consoleEventCapOptions"
+                    :style="{ width: CTRL_W }"
+                  />
+                </template>
+              </SettingRow>
               <SettingRow title="界面密度" badge="规划中" disabled description="紧凑 / 默认 / 宽松三档全局间距">
                 <template #action>
                   <a-select size="small" disabled value="默认" :style="{ width: CTRL_W }" />
@@ -262,6 +313,18 @@ const shortcuts = [
               <SettingRow title="最大历史记录数量" badge="规划中" disabled description="超出后自动淘汰最旧记录">
                 <template #action>
                   <a-select size="small" disabled value="100" :style="{ width: CTRL_W }" />
+                </template>
+              </SettingRow>
+              <SettingRow title="控制台导出缓冲条数" description="客户端控制台导出保留的事件条数;数值越大内存占用越高">
+                <template #action>
+                  <a-input-number
+                    v-model:value="consoleExportCap"
+                    size="small"
+                    :min="1000" :max="500000"
+                    :style="{ width: CTRL_W }"
+                    :disabled="consoleExportCap === null"
+                    @change="saveExportCap"
+                  />
                 </template>
               </SettingRow>
               <SettingRow title="清理缓存与历史数据" badge="规划中" disabled description="清除界面缓存与解析历史(不影响连接档案与扩展包)">

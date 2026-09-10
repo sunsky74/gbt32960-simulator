@@ -28,14 +28,24 @@ const previewOpen = ref(false)
 const previewHex = ref('')
 const previewCmd = ref('')
 
-const autoReport = ref(false)
-const autoInterval = ref(10)
 const reissueCount = ref(10)
 const reissueOffset = ref(180)
 const reissueInterval = ref(10)
 
+// 周期上报状态存于 store:轨迹导入/回放会开启周期上报,需跨组件同步。
+const autoReport = computed(() => store.autoReport)
+const autoInterval = computed({
+  get: () => store.autoInterval,
+  set: (v: number) => {
+    store.autoInterval = v
+  },
+})
+
 const schemaOrder = computed(() => store.schema.map((g) => g.key))
 const online = computed(() => store.connState === 'online')
+
+// 轨迹回放期间位置组由轨迹点驱动,锁定编辑(含组启停开关)。
+const locLocked = (g: GroupSchema) => g.key === 'location' && store.trackActive
 
 function ensureGroup(g: GroupSchema) {
   if (!store.groups[g.key]) {
@@ -123,17 +133,18 @@ async function sendReissue() {
 async function toggleAutoReport(checked: boolean) {
   try {
     await MessageService.SetAutoReport(checked, autoInterval.value)
+    store.autoReport = checked
     message.success(checked ? `周期上报已开启 (每 ${autoInterval.value}s)` : '周期上报已停止')
   } catch (e) {
-    autoReport.value = false
+    store.autoReport = false
     message.error(String(e))
   }
 }
 
 async function onIntervalChange(v: number | string | null | undefined) {
-  autoInterval.value = typeof v === 'number' ? v : Number(v) || 10
-  if (autoReport.value) {
-    await MessageService.SetAutoReport(true, autoInterval.value)
+  store.autoInterval = typeof v === 'number' ? v : Number(v) || 10
+  if (store.autoReport) {
+    await MessageService.SetAutoReport(true, store.autoInterval)
   }
 }
 </script>
@@ -155,7 +166,7 @@ async function onIntervalChange(v: number | string | null | undefined) {
         <div class="zone-body">
           <div class="report-bar">
             <span class="report-item">
-              <a-switch v-model:checked="autoReport" size="small" @change="toggleAutoReport" />
+              <a-switch :checked="store.autoReport" size="small" @change="toggleAutoReport" />
               <span class="report-label">周期上报</span>
             </span>
             <span class="report-label">间隔</span>
@@ -174,10 +185,11 @@ async function onIntervalChange(v: number | string | null | undefined) {
             <a-collapse-panel v-for="g in store.schema" :key="g.key">
               <template #header>
                 <span class="group-title">{{ g.title }}</span>
-                <a-tag v-if="g.multiple" color="blue" class="row-tag">{{ ensureGroup(g).rows.length }} 行</a-tag>
+                <a-tag v-if="locLocked(g)" color="blue" class="row-tag">轨迹回放中 · 不可编辑</a-tag>
+                <a-tag v-else-if="g.multiple" color="blue" class="row-tag">{{ ensureGroup(g).rows.length }} 行</a-tag>
               </template>
               <template #extra>
-                <a-switch v-model:checked="ensureGroup(g).enabled" size="small" @click.stop />
+                <a-switch v-model:checked="ensureGroup(g).enabled" size="small" :disabled="locLocked(g)" @click.stop />
               </template>
 
               <div class="group-body">
@@ -194,6 +206,7 @@ async function onIntervalChange(v: number | string | null | undefined) {
                           :value="numOf(row, f.key)"
                           size="small"
                           :options="enumOptions(f)"
+                          :disabled="locLocked(g)"
                           @change="(v: unknown) => setEnum(row, f.key, v)"
                         />
                       </div>
@@ -206,6 +219,7 @@ async function onIntervalChange(v: number | string | null | undefined) {
                           :step="f.kind === 'int' ? 1 : 0.1"
                           :min="f.min"
                           :max="f.max"
+                          :disabled="locLocked(g)"
                           style="width: 100%"
                           @change="(v: number | string | null | undefined) => setNum(row, f.key, v)"
                         />
@@ -227,6 +241,7 @@ async function onIntervalChange(v: number | string | null | undefined) {
                         <a-switch
                           :checked="boolOf(row, f.key)"
                           size="small"
+                          :disabled="locLocked(g)"
                           @change="(v: unknown) => setBool(row, f.key, v)"
                         />
                       </div>

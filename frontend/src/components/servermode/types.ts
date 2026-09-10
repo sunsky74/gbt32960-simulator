@@ -15,6 +15,7 @@ export interface StreamRow {
   dir: FrameDir
   unauthed?: boolean
   peer?: string // link 行:对端地址
+  platform?: boolean // 平台链路(0x05 登入建立)的帧/会话
 }
 
 export interface SessionRow {
@@ -25,9 +26,11 @@ export interface SessionRow {
   lastSeen: string
   rxCount: number
   txCount: number
+  platform?: boolean // 平台链路会话(0x05 登入建立)
 }
 
-// 前端渲染上限(后端环形 500,spec §5.4)
+// 前端渲染上限的默认值/回落值(可在设置页「外观 → 服务端报文流保留行数」调整;
+// 后端环形 500,spec §5.4)
 export const RENDER_CAP = 200
 
 // 服务端已知命令字名称(与 internal/servermode/conn.go 处理器矩阵一致)
@@ -36,6 +39,8 @@ const GB32960_CMD_NAMES: Record<string, string> = {
   '0X02': '实时上报',
   '0X03': '补发上报',
   '0X04': '登出',
+  '0X05': '平台登入',
+  '0X06': '平台登出',
   '0X07': '心跳',
   '0X08': '校时',
 }
