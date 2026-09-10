@@ -43,6 +43,13 @@ type Options struct {
 	ICCID          string
 	SubsystemCodes []string // 可充电储能子系统编码(登录报文)
 
+	// 企业平台级联模式:TCP 建链后先发 0x05 平台登入(帧头 VIN = PlatformVIN,
+	// 体含账号/密码),车辆数据照常转发(车辆 VIN),断开时补发 0x06 平台登出。
+	PlatformMode bool
+	PlatformVIN  string
+	PlatformUser string
+	PlatformPass string
+
 	HeartbeatInterval time.Duration // 0x07 心跳间隔,0=不发
 	LoginTimeout      time.Duration // 登录应答超时
 	LoginRetries      int           // 登录重试次数
@@ -166,12 +173,30 @@ func cmdName(rt any) string {
 	return "unknown"
 }
 
-// writeFrame 加锁写帧并发 TX 事件。
+// connVIN 连接级帧(平台登入/登出/心跳/校时)使用的帧头 VIN:
+// 企业平台级联模式下为平台标识,否则为车辆 VIN。
+func (c *Client) connVIN() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.opts.PlatformMode {
+		return c.opts.PlatformVIN
+	}
+	return c.opts.VIN
+}
+
+// writeFrame 以车辆 VIN 发帧(车辆登入/登出/数据上报/下行应答)。
 func (c *Client) writeFrame(ctx context.Context, cmd byte, body model.MessageBody) error {
+	c.mu.Lock()
+	vin := c.opts.VIN
+	c.mu.Unlock()
+	return c.writeFrameAs(ctx, vin, cmd, body)
+}
+
+// writeFrameAs 以指定 VIN 加锁写帧并发 TX 事件。
+func (c *Client) writeFrameAs(ctx context.Context, vin string, cmd byte, body model.MessageBody) error {
 	c.mu.Lock()
 	conn := c.conn
 	version := c.opts.Version
-	vin := c.opts.VIN
 	c.mu.Unlock()
 	if conn == nil {
 		return errors.New("gbt32960-sim: not connected")
@@ -274,6 +299,13 @@ func (c *Client) doConnect(ctx context.Context) error {
 	go c.readLoop(ctx)
 	go c.heartbeatLoop(ctx)
 
+	// 企业平台级联:先 0x05 平台登入(重试口径与车辆登入一致)
+	if c.opts.PlatformMode {
+		if err := c.platformLoginPhase(ctx); err != nil {
+			return err
+		}
+	}
+
 	// 登录(带重试)
 	c.setState(StateLoggingIn)
 	var loginErr error
@@ -364,9 +396,79 @@ func (c *Client) sendLogout(ctx context.Context) {
 	_, _ = c.waitAck(logoutCtx, 0x04, 500*time.Millisecond)
 }
 
+// platformLoginPhase 发送 0x05 平台登入并等待应答(重试口径与车辆登入一致)。
+func (c *Client) platformLoginPhase(ctx context.Context) error {
+	c.setState(StateLoggingIn)
+	c.bus.Emit(Event{Kind: EventConn, Message: "正在平台登入 (0x05) ..."})
+	var perr error
+	for attempt := 1; attempt <= c.opts.LoginRetries; attempt++ {
+		if err := c.sendPlatformLogin(ctx); err != nil {
+			perr = err
+			break
+		}
+		ack, err := c.waitAck(ctx, 0x05, c.opts.LoginTimeout)
+		if err == nil {
+			if ack.resp != types.ResponseSuccess {
+				perr = fmt.Errorf("平台拒绝登入: %s", responseText(ack.resp))
+				c.bus.Emit(Event{Kind: EventError, Message: perr.Error()})
+				break
+			}
+			perr = nil
+			break
+		}
+		perr = err
+		if errors.Is(err, context.Canceled) {
+			break
+		}
+		c.bus.Emit(Event{Kind: EventError, Message: fmt.Sprintf("平台登入应答超时(第 %d/%d 次)", attempt, c.opts.LoginRetries)})
+	}
+	if perr != nil {
+		return perr
+	}
+	c.bus.Emit(Event{Kind: EventConn, Message: "平台登入成功 (0x05)"})
+	return nil
+}
+
+// sendPlatformLogin 发送 0x05 平台登入(帧头 VIN = 平台标识;账号/密码为
+// 协议定长字段,编解码器自动空格填充)。2025 复用同一线格式。
+func (c *Client) sendPlatformLogin(ctx context.Context) error {
+	bean, serial := BeanTimeNow(), int(c.nextSerial())
+	user, pass := c.opts.PlatformUser, c.opts.PlatformPass
+	var body model.MessageBody
+	if c.opts.Version == api.V2025 {
+		body = &mdl25.PlatformLoginV2025{
+			BeanTime: bean, SerialNum: serial,
+			Username: user, Password: pass, Cipher: byte(types.EncryptionNone),
+		}
+	} else {
+		body = &mdl.PlatformLogin{
+			BeanTime: bean, SerialNum: serial,
+			Username: user, Password: pass, Cipher: byte(types.EncryptionNone),
+		}
+	}
+	return c.writeFrameAs(ctx, c.connVIN(), 0x05, body)
+}
+
+// sendPlatformLogout 发送 0x06 平台登出(尽力而为,与车辆登出同口径)。
+func (c *Client) sendPlatformLogout(ctx context.Context) {
+	logoutCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	var body model.MessageBody
+	if c.opts.Version == api.V2025 {
+		body = &mdl25.PlatformLogoutV2025{BeanTime: BeanTimeNow(), SerialNum: int(c.nextSerial())}
+	} else {
+		body = &mdl.PlatformLogout{BeanTime: BeanTimeNow(), SerialNum: int(c.nextSerial())}
+	}
+	if err := c.writeFrameAs(logoutCtx, c.connVIN(), 0x06, body); err != nil {
+		c.bus.Emit(Event{Kind: EventError, Message: "发送平台登出失败: " + err.Error()})
+		return
+	}
+	_, _ = c.waitAck(logoutCtx, 0x06, 500*time.Millisecond)
+}
+
 // sendClockSync 发送 0x08 校时请求。
 func (c *Client) sendClockSync(ctx context.Context) {
-	if err := c.writeFrame(ctx, 0x08, emptyBody{v: c.opts.Version}); err == nil {
+	if err := c.writeFrameAs(ctx, c.connVIN(), 0x08, emptyBody{v: c.opts.Version}); err == nil {
 		c.bus.Emit(Event{Kind: EventConn, Message: "已发送校时请求 (0x08)"})
 	}
 }
@@ -383,6 +485,9 @@ func (c *Client) Disconnect() {
 	}
 
 	c.sendLogout(context.Background())
+	if c.opts.PlatformMode {
+		c.sendPlatformLogout(context.Background())
+	}
 
 	c.closeConn()
 	if cancel != nil {
@@ -580,7 +685,7 @@ func (c *Client) heartbeatLoop(ctx context.Context) {
 			if c.State() != StateOnline {
 				continue
 			}
-			if err := c.writeFrame(ctx, 0x07, emptyBody{v: c.opts.Version}); err != nil {
+			if err := c.writeFrameAs(ctx, c.connVIN(), 0x07, emptyBody{v: c.opts.Version}); err != nil {
 				return
 			}
 		}

@@ -8,28 +8,35 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sunsky74/gb32960/api"
 	"gbt32960-simulator/internal/engine"
 	"gbt32960-simulator/internal/store"
 	"gbt32960-simulator/internal/tlsconf"
+	"github.com/sunsky74/gb32960/api"
 )
 
 // ConnectionConfig 连接配置(持久化 + 引擎 Options 的来源)。
 type ConnectionConfig struct {
-	Name            string        `json:"name"`
-	Host            string        `json:"host"`
-	Port            int           `json:"port"`
-	Version         string        `json:"version"` // "2016" | "2025"
-	VIN             string        `json:"vin"`
-	ICCID           string        `json:"iccid"`
-	SubsystemCodes  []string      `json:"subsystemCodes"`
-	HeartbeatSec    int           `json:"heartbeatSec"`    // 0x07 间隔,0=不发,默认 30
-	AutoClockSync   bool          `json:"autoClockSync"`   // 登录后自动校时
-	AutoReconnect   bool          `json:"autoReconnect"`   // 断线重连
-	ReportInterval  int           `json:"reportInterval"`  // 周期上报间隔秒,0=不发,默认 10
-	ReissueOffsetSec int          `json:"reissueOffsetSec"` // 补发时间戳偏移(秒)
-	ExtensionPack   string        `json:"extensionPack,omitempty"` // 绑定的扩展包 id(空=不使用)
-	TLS             tlsconf.Config `json:"tls"`
+	Name             string   `json:"name"`
+	Host             string   `json:"host"`
+	Port             int      `json:"port"`
+	Version          string   `json:"version"` // "2016" | "2025"
+	VIN              string   `json:"vin"`
+	ICCID            string   `json:"iccid"`
+	SubsystemCodes   []string `json:"subsystemCodes"`
+	HeartbeatSec     int      `json:"heartbeatSec"`     // 0x07 间隔,0=不发,默认 30
+	AutoClockSync    bool     `json:"autoClockSync"`    // 登录后自动校时
+	AutoReconnect    bool     `json:"autoReconnect"`    // 断线重连
+	ReportInterval   int      `json:"reportInterval"`   // 周期上报间隔秒,0=不发,默认 10
+	ReissueOffsetSec int      `json:"reissueOffsetSec"` // 补发时间戳偏移(秒)
+
+	// 企业平台级联:0x05 平台登入(平台 VIN/账号/密码)→ 车辆数据转发 → 0x06 平台登出。
+	PlatformMode bool   `json:"platformMode"`
+	PlatformVIN  string `json:"platformVin,omitempty"`  // 平台标识(17 位,目标平台颁发)
+	PlatformUser string `json:"platformUser,omitempty"` // 平台账号(协议定长 12 字节,自动填充)
+	PlatformPass string `json:"platformPass,omitempty"` // 平台密码(协议定长 20 字节,自动填充)
+
+	ExtensionPack string         `json:"extensionPack,omitempty"` // 绑定的扩展包 id(空=不使用)
+	TLS           tlsconf.Config `json:"tls"`
 }
 
 const (
@@ -264,6 +271,10 @@ func (s *ConnectionService) Connect(cfg ConnectionConfig) error {
 		VIN:               cfg.VIN,
 		ICCID:             cfg.ICCID,
 		SubsystemCodes:    cfg.SubsystemCodes,
+		PlatformMode:      cfg.PlatformMode,
+		PlatformVIN:       cfg.PlatformVIN,
+		PlatformUser:      cfg.PlatformUser,
+		PlatformPass:      cfg.PlatformPass,
 		HeartbeatInterval: time.Duration(cfg.HeartbeatSec) * time.Second,
 		AutoClockSync:     cfg.AutoClockSync,
 		AutoReconnect:     cfg.AutoReconnect,
@@ -297,6 +308,8 @@ func validateConn(cfg *ConnectionConfig) error {
 	cfg.Host = strings.TrimSpace(cfg.Host)
 	cfg.VIN = strings.TrimSpace(cfg.VIN)
 	cfg.ICCID = strings.TrimSpace(cfg.ICCID)
+	cfg.PlatformVIN = strings.TrimSpace(cfg.PlatformVIN)
+	cfg.PlatformUser = strings.TrimSpace(cfg.PlatformUser)
 	if cfg.Host == "" {
 		return fmt.Errorf("IP 地址不能为空")
 	}
@@ -311,6 +324,20 @@ func validateConn(cfg *ConnectionConfig) error {
 	}
 	if cfg.Version != "2016" && cfg.Version != "2025" {
 		return fmt.Errorf("协议版本必须为 2016 或 2025")
+	}
+	if cfg.PlatformMode {
+		if len(cfg.PlatformVIN) != 17 {
+			return fmt.Errorf("平台标识 VIN 必须为 17 位(由目标平台颁发),当前 %d 位", len(cfg.PlatformVIN))
+		}
+		if cfg.PlatformUser == "" {
+			return fmt.Errorf("平台账号不能为空")
+		}
+		if len(cfg.PlatformUser) > 12 {
+			return fmt.Errorf("平台账号最长 12 位,当前 %d 位", len(cfg.PlatformUser))
+		}
+		if len(cfg.PlatformPass) > 20 {
+			return fmt.Errorf("平台密码最长 20 位,当前 %d 位", len(cfg.PlatformPass))
+		}
 	}
 	return nil
 }
