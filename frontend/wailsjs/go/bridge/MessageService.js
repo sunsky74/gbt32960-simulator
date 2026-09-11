@@ -30,12 +30,12 @@ export function RespondAck(arg1, arg2) {
   return window['go']['bridge']['MessageService']['RespondAck'](arg1, arg2);
 }
 
-export function RespondRemoteSecondLayer(arg1, arg2) {
-  return window['go']['bridge']['MessageService']['RespondRemoteSecondLayer'](arg1, arg2);
-}
-
 export function RespondParamQuery(arg1, arg2) {
   return window['go']['bridge']['MessageService']['RespondParamQuery'](arg1, arg2);
+}
+
+export function RespondRemoteSecondLayer(arg1, arg2) {
+  return window['go']['bridge']['MessageService']['RespondRemoteSecondLayer'](arg1, arg2);
 }
 
 export function SaveGroups(arg1) {

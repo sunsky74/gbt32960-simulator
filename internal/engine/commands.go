@@ -14,7 +14,7 @@ var extCommands = struct {
 	cmds map[api.GBTVersion]map[byte]string
 }{cmds: map[api.GBTVersion]map[byte]string{}}
 
-// remoteBuiltin 私有远控 0x8A 私有命令(迁移自原硬编码,AC-3:行为不变)。
+// remoteBuiltin 私有远控 0x8A 命令(迁移自原硬编码,AC-3:行为不变)。
 const remoteCmdCode = 0x8A
 
 const remoteCmdName = "REMOTE_CONTROL"
@@ -46,7 +46,7 @@ func RegisterCommandIfAbsent(v api.GBTVersion, code byte, name string) {
 	}
 }
 
-// ResetExtCommands 清除全部扩展命令并恢复 私有远控 内置条目(换绑/解绑时调用)。
+// ResetExtCommands 清除全部扩展命令并恢复私有远控内置条目(换绑/解绑时调用)。
 func ResetExtCommands() {
 	extCommands.mu.Lock()
 	defer extCommands.mu.Unlock()

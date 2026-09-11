@@ -579,7 +579,7 @@ func (s *MessageService) version() api.GBTVersion {
 type ParamRespondRow = engine.ParamResponseRow
 
 // RespondAck 对平台下行命令发送应答码(空载荷)。适用 0x81/0x82 标准应答
-// 与 私有远控 0x8A 第一层 ACK。respCode: 0x01 成功 / 0x02 错误 / ...
+// 与私有远控 0x8A 第一层 ACK。respCode: 0x01 成功 / 0x02 错误 / ...
 func (s *MessageService) RespondAck(cmd byte, respCode byte) error {
 	c := s.rt.CurrentClient()
 	if c == nil || c.State() != engine.StateOnline {
@@ -597,7 +597,7 @@ func (s *MessageService) RespondParamQuery(rows []ParamRespondRow, respCode byte
 	return c.RespondParamQuery(rows, types.ResponseType(respCode))
 }
 
-// RespondRemoteSecondLayer 发送 私有远控 0x8A 第二层业务应答(回显表21头+信息体)。
+// RespondRemoteSecondLayer 发送私有远控 0x8A 第二层业务应答(回显表21头+信息体)。
 func (s *MessageService) RespondRemoteSecondLayer(headerHex string, bodyHex string) error {
 	c := s.rt.CurrentClient()
 	if c == nil || c.State() != engine.StateOnline {

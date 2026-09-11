@@ -49,7 +49,7 @@
 
 ```jsonc
 {
-  "meta": { "id": "private-telemetry", "label": "私有远控 私有遥测", "vendor": "私有远控", "baseVersion": "2016" },
+  "meta": { "id": "private-telemetry", "label": "私有遥测", "vendor": "示例", "baseVersion": "2016" },
   "realtime": {
     "appendUnits": [
       {

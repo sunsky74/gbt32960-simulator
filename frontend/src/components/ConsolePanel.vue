@@ -73,7 +73,7 @@ function downlinkSummary(e: ConsoleEvent): string {
     case 'control':
       return `控制命令 ${d.controlHex ?? ''}`
     case 'remote':
-      return `私有远控 远控 流水号=${d.serialNumber} 信息类型=0x${(d.infoTypeFlag ?? 0).toString(16)} 体=${d.bodyHex ?? ''}`
+      return `私有远控 流水号=${d.serialNumber} 信息类型=0x${(d.infoTypeFlag ?? 0).toString(16)} 体=${d.bodyHex ?? ''}`
     default:
       return ''
   }

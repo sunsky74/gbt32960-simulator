@@ -19,7 +19,7 @@ func TestCommandForRegisteredExactCode(t *testing.T) {
 		t.Fatal("Reset 后自定义命令应清除")
 	}
 	if name, ok := extCommandName(api.V2016, 0x8A); !ok || name != "REMOTE_CONTROL" {
-		t.Fatal("私有远控 内置条目应保留(AC-3)")
+		t.Fatal("私有远控内置条目应保留(AC-3)")
 	}
 }
 

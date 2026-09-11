@@ -18,9 +18,9 @@ export function Preview():Promise<bridge.PreviewResult>;
 
 export function RespondAck(arg1:number,arg2:number):Promise<void>;
 
-export function RespondRemoteSecondLayer(arg1:string,arg2:string):Promise<void>;
-
 export function RespondParamQuery(arg1:Array<engine.ParamResponseRow>,arg2:number):Promise<void>;
+
+export function RespondRemoteSecondLayer(arg1:string,arg2:string):Promise<void>;
 
 export function SaveGroups(arg1:schema.GroupsPayload):Promise<void>;
 

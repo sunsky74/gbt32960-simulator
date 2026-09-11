@@ -1,0 +1,24 @@
+{
+  "meta": {"id": "remote-ack-fixture", "label": "应答夹具", "baseVersion": "2016"},
+  "realtime": {"appendUnits": []},
+  "commands": [{
+    "key": "ackRemoteLock", "label": "0x8A/0x09 锁车限速 应答", "code": 138, "direction": "up", "trigger": "manual", "remoteSub": 9,
+    "body": {"type": "fields", "fields": [
+      {"key": "serialNumber", "label": "命令流水号", "type": "u16"},
+      {"key": "lockStatus", "label": "锁车状态", "type": "bits", "bits": [
+        {"index": 0, "label": "锁车状态(bit0)"}, {"index": 1, "label": "锁车状态(bit1)"},
+        {"index": 2, "label": "限速状态"}, {"index": 3, "label": "通信状态(bit0)"},
+        {"index": 4, "label": "通信状态(bit1)"}, {"index": 5, "label": "通信状态(bit2)"}
+      ]},
+      {"key": "speedLevelStatus", "label": "限速等级状态", "type": "bits", "bits": [
+        {"index": 0, "label": "L0"}, {"index": 1, "label": "L1"}, {"index": 2, "label": "L2"}, {"index": 3, "label": "L3"},
+        {"index": 4, "label": "E0"}, {"index": 5, "label": "E1"}, {"index": 6, "label": "E2"}, {"index": 7, "label": "E3"}
+      ]},
+      {"key": "speedValueStatus", "label": "限速速度状态", "type": "bits", "bits": [
+        {"index": 0, "label": "V0"}, {"index": 1, "label": "V1"}, {"index": 2, "label": "V2"}, {"index": 3, "label": "V3"},
+        {"index": 4, "label": "W0"}, {"index": 5, "label": "W1"}, {"index": 6, "label": "W2"}, {"index": 7, "label": "W3"}
+      ]},
+      {"key": "faultList", "label": "故障列表", "type": "tail"}
+    ]}
+  }]
+}

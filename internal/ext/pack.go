@@ -20,7 +20,7 @@ type Meta struct {
 
 // 扩展包应用范围取值。
 const (
-	// ScopeClient 客户端模拟:实时追加单元 + 私有命令 + 私有远控 应答模板。
+	// ScopeClient 客户端模拟:实时追加单元 + 私有命令 + 私有远控应答模板。
 	ScopeClient = "client"
 	// ScopeParser 报文解析:解析页可选用该包解码自定义数据单元。
 	ScopeParser = "parser"
@@ -61,7 +61,7 @@ type AppendUnit struct {
 }
 
 // Command 私有命令帧声明(Phase 3 实现发送,Phase 1 仅定义与校验)。
-// RemoteSub > 0 时表示 私有远控 0x8A 远程控制应答模板(命令码固定 0x8A,
+// RemoteSub > 0 时表示私有远控 0x8A 应答模板(命令码固定 0x8A,
 // 子指令码 = RemoteSub,发送帧走应答标志 0x01,载荷 = 表21头 + 应答体)。
 // RespType 声明发送帧的应答标志(见 ResponseType 取值);ServerReply 声明
 // 服务端模式(scope 含 server)对该命令请求帧的自动应答规则。

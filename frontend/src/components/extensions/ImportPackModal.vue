@@ -179,7 +179,7 @@ defineExpose({ open, clearError })
               <tr><td class="k">key / label</td><td>命令键(同包唯一,禁冒号、禁与标准组键同名) / 显示名</td></tr>
               <tr><td class="k">code</td><td>命令码,上行预留区:2016 为 <code>0x09~0x7F</code>,2025 为 <code>0x0C~0x7F</code></td></tr>
               <tr><td class="k">direction / trigger</td><td><code>"up"</code> / <code>manual</code> · <code>periodic</code> · <code>manual+periodic</code></td></tr>
-              <tr><td class="k">body.type</td><td><code>fields</code> 平铺字段表(单行);<code>realtimeLike</code> 与实时报文同构(6B 时间 + TLV 单元,单元结构同第 2 节);<code>remoteAck</code> 0x8A 远控应答模板(仅 2016,详见完整文档)</td></tr>
+              <tr><td class="k">body.type</td><td><code>fields</code> 平铺字段表(单行);<code>realtimeLike</code> 与实时报文同构(6B 时间 + TLV 单元,单元结构同第 2 节);<code>remoteSub</code> 0x8A 远控应答模板(配合 fields,仅 2016,详见完整文档)</td></tr>
             </tbody>
           </table>
 

@@ -23,7 +23,7 @@ type DownlinkParam struct {
 }
 
 // DownlinkInfo 平台下行命令的解析结果。
-// 标准 0x80/0x81/0x82 与 私有远控 私有 0x8A(两层应答远控)。
+// 标准 0x80/0x81/0x82 与私有远控 0x8A(两层应答远控)。
 type DownlinkInfo struct {
 	Cmd  byte   `json:"cmd"`
 	Kind string `json:"kind"` // query|setup|control|remote
@@ -41,7 +41,7 @@ type DownlinkInfo struct {
 	BodyHex      string `json:"bodyHex,omitempty"`
 }
 
-// 私有远控 表21 头长度: 命令时间(6B) + 流水号(2B) + 命令总数(1B) + 信息类型标志(1B)。
+// 远控表21 头长度: 命令时间(6B) + 流水号(2B) + 命令总数(1B) + 信息类型标志(1B)。
 const remoteHeaderLen = 10
 
 // ParseDownlink 解析平台下行的 payload。cmd 不在已知集合时返回 nil。
@@ -171,7 +171,7 @@ func BuildParamQueryResponse(rows []ParamResponseRow) ([]byte, error) {
 	return w.Bytes(), nil
 }
 
-// BuildRemoteSecondLayer 组装 私有远控 0x8A 第二层业务应答载荷:
+// BuildRemoteSecondLayer 组装私有远控 0x8A 第二层业务应答载荷:
 // 回显表21头(10B,来自下行) + 用户编辑的信息体 hex。
 func BuildRemoteSecondLayer(headerHex, bodyHex string) ([]byte, error) {
 	header, err := hex.DecodeString(strings.TrimSpace(headerHex))
@@ -204,7 +204,7 @@ func downlinkInfo(wireCmd byte, pm *frame.ProtocolMessage) *DownlinkInfo {
 // ---------------------------------------------------------------- Client 应答入口
 
 // RespondAck 发送指定命令的应答帧(空载荷),用于 0x81/0x82 标准应答
-// 与 私有远控 0x8A 第一层 ACK。
+// 与私有远控 0x8A 第一层 ACK。
 func (c *Client) RespondAck(cmd byte, respType types.ResponseType) error {
 	return c.writeFrameWithResponse(cmd, respType, nil)
 }
@@ -224,7 +224,7 @@ func (c *Client) RespondParamQuery(rows []ParamResponseRow, respType types.Respo
 	return c.writeFrameWithResponse(0x80, respType, payload)
 }
 
-// RespondRemoteSecondLayer 发送 私有远控 0x8A 第二层业务应答(命令包形式,载荷=回显头+信息体)。
+// RespondRemoteSecondLayer 发送私有远控 0x8A 第二层业务应答(命令包形式,载荷=回显头+信息体)。
 func (c *Client) RespondRemoteSecondLayer(headerHex, bodyHex string) error {
 	payload, err := BuildRemoteSecondLayer(headerHex, bodyHex)
 	if err != nil {
@@ -233,7 +233,7 @@ func (c *Client) RespondRemoteSecondLayer(headerHex, bodyHex string) error {
 	return c.writeFrameWithResponse(0x8A, types.ResponseCommand, payload)
 }
 
-// RespondRemoteAck 发送 私有远控 0x8A 单应答包(应答标志 0x01,载荷=表21头+应答体)。
+// RespondRemoteAck 发送私有远控 0x8A 单应答包(应答标志 0x01,载荷=表21头+应答体)。
 // 与 2026-09-02 真实车端回执模型对齐:一个应答包完成执行与应答。
 func (c *Client) RespondRemoteAck(payload []byte) error {
 	return c.writeFrameWithResponse(0x8A, types.ResponseSuccess, payload)

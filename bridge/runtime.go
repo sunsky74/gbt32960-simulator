@@ -98,7 +98,7 @@ func (rt *Runtime) SetPackStates(disabled map[string]bool) {
 	rt.syncExtCommands(rt.pack)
 }
 
-// syncExtCommands 按激活包同步引擎命令注册表:先重置(保留 私有远控 内置),再注册包内命令。
+// syncExtCommands 按激活包同步引擎命令注册表:先重置(保留私有远控内置),再注册包内命令。
 // 挂接在 SetConnCfg/SetPacks——包激活的唯一入口,查询接口(GetSchema)不携带副作用。
 // scope 未声明 client 的包不进入客户端链路(仅用于报文解析等场景)。
 // 同码多命令先到先得(首个 label 作为该码的显示名);down 模板是服务端下发用,不注册。

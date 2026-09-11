@@ -108,11 +108,12 @@
 | `trigger` | 触发方式 | `"manual"`(仅手动)/ `"periodic"`(仅周期)/ `"manual+periodic"`(手动+周期) |
 | `body` | 命令体 | 见下 |
 
-`body.type` 三种:
+`body.type` 两种:
 
 - **`fields`**:平铺字段表,表单为**单行**。`body.fields` 至少一个字段。
 - **`realtimeLike`**:与实时报文同构(命令体 = 6 字节时间 + 若干 TLV)。`body.units` 至少一个单元,单元结构与 §3.2 完全一致;`multiple: true` 时**多行,每行一个 TLV**。
-- **`remoteAck`(0x8A 远程控制应答模板)**:命令 `code` 固定 `138`(0x8A)、`direction: "up"`,额外声明 `remoteSub`(子指令码 0x01~0x11,私有远控 私有远控协议)。发送时走**应答标志 0x01**,载荷 = 表21头(命令时间 6B + 流水号 2B + 命令总数 1 + 子指令码 1B)+ 应答体平铺字段。**约定**:`body.fields` 首字段必须为 `{"key": "serialNumber", "type": "u16"}`(编码时提取填入表21头流水号,用于回显下行请求);应答体尾部可用一个 `type: "tail"` 字段承载变长的故障列表(hex: 故障总数 N 1B + N×4B,无故障填 `00`)。仅 2016 版支持。
+
+另有 **0x8A 远控应答模板**:命令 `code` 固定 `138`(0x8A)、`direction: "up"`,`body.type` 为 `fields` 并额外声明 `remoteSub`(子指令码 0x01~0x11,私有远控协议)。发送时走**应答标志 0x01**,载荷 = 表21头(命令时间 6B + 流水号 2B + 命令总数 1 + 子指令码 1B)+ 应答体平铺字段。**约定**:`body.fields` 首字段必须为 `{"key": "serialNumber", "type": "u16"}`(编码时提取填入表21头流水号,用于回显下行请求);应答体尾部可用一个 `type: "tail"` 字段承载变长的故障列表(hex: 故障总数 N 1B + N×4B,无故障填 `00`)。仅 2016 版支持。
 
 ```json
 {

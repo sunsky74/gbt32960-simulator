@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/sunsky74/gb32960/api"
-	_ "github.com/sunsky74/gb32960/codec/all"
 	"github.com/sunsky74/gb32960/codec"
+	_ "github.com/sunsky74/gb32960/codec/all"
 	"github.com/sunsky74/gb32960/frame"
 	"github.com/sunsky74/gb32960/types"
 	"github.com/sunsky74/gb32960/utils"
