@@ -129,7 +129,7 @@
 }
 ```
 
-完整示例见 `docs/extpack/local-pack-v16.json`(私有远控 2016 实时扩展 11 单元 + 0x8A 远控 16 个子指令应答模板)。
+完整示例见 `docs/extpack/sample-pack.json`(基础结构示例);客户专属的完整扩展包不随仓库分发。
 
 ```json
 "commands": [
