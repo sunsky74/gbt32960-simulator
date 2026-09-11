@@ -23,10 +23,10 @@ const (
 type Event struct {
 	Time    time.Time `json:"time"`
 	Kind    EventKind `json:"kind"`
-	Message string    `json:"message"`          // conn/error 的人类可读文本
+	Message string    `json:"message"`           // conn/error 的人类可读文本
 	Cmd     string    `json:"cmd,omitempty"`     // 如 "0x01 VEHICLE_LOGIN"
 	Hex     string    `json:"hex,omitempty"`     // tx/rx 完整帧 hex
-	Decoded any       `json:"decoded,omitempty"` // 解码后的 payload(JSON 可序列化)
+	Decoded any       `json:"decoded,omitempty"` // Decoded 由 bridge 转发层填充(tx/rx 帧的中文键解析树);引擎自身不再赋值
 	Bytes   int       `json:"bytes,omitempty"`   // 帧字节数
 	// Downlink 非空表示这是平台下行的 0x80/0x81/0x82/0x8A 命令,前端据此展示"应答"入口。
 	Downlink *DownlinkInfo `json:"downlink,omitempty"`

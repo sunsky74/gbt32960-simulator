@@ -37,8 +37,8 @@ type ByteIssue struct {
 // Result 解析结果。
 type Result struct {
 	TotalBytes   int         `json:"totalBytes"`
-	Version      string      `json:"version"`     // V2016 / V2025
-	VersionByte  string      `json:"versionByte"` // "##" / "$$"
+	Version      string      `json:"version"`      // V2016 / V2025
+	VersionByte  string      `json:"versionByte"`  // "##" / "$$"
 	Command      string      `json:"command"`      // 如 "0x01 车辆登入"
 	ResponseType string      `json:"responseType"` // 如 "0xFE 命令" / "0x01 成功"
 	VIN          string      `json:"vin"`
@@ -47,6 +47,7 @@ type Result struct {
 	Fields       []Field     `json:"fields"`
 	Warnings     []string    `json:"warnings"`
 	Issues       []ByteIssue `json:"issues,omitempty"`
+	Tree         any         `json:"tree,omitempty"` // 有序中文键树(控制台嵌套 JSON 渲染用)
 }
 
 // NormalizeHex 清洗输入:去掉空格/换行/逗号/冒号/0x 前缀,校验 hex 合法性与偶数长度。
@@ -180,6 +181,7 @@ func parse(input string, pack *ext.Pack) (*Result, error) {
 
 	// 按 Offset 稳定排序(BCC 行在数据单元后追加过)
 	sortFields(r.Fields)
+	r.Tree = buildTree(r)
 	return r, nil
 }
 

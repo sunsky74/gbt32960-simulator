@@ -374,6 +374,7 @@ export namespace parser {
 	    fields: Field[];
 	    warnings: string[];
 	    issues?: ByteIssue[];
+	    tree?: any;
 	
 	    static createFrom(source: any = {}) {
 	        return new Result(source);
@@ -392,6 +393,7 @@ export namespace parser {
 	        this.fields = this.convertValues(source["fields"], Field);
 	        this.warnings = source["warnings"];
 	        this.issues = this.convertValues(source["issues"], ByteIssue);
+	        this.tree = source["tree"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

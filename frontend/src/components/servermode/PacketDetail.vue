@@ -5,6 +5,7 @@ import * as ParserService from '../../../wailsjs/go/bridge/ParserService'
 import type { parser as parserNs } from '../../../wailsjs/go/models'
 import ByteGridView, { type ByteHover, type ByteRange } from '../parser/ByteGridView.vue'
 import FieldTableView from '../parser/FieldTableView.vue'
+import JsonTree from '../JsonTree.vue'
 import ResizableDividerCol from '../layout/ResizableDividerCol.vue'
 import { fmtMs, type StreamRow } from './types'
 
@@ -32,6 +33,9 @@ async function parse(hex: string) {
     message.error('解析失败: ' + String(e))
   }
 }
+
+// ---------- 右栏视图切换:字段表(默认)/ JSON 解析树;切换帧不重置 ----------
+const view = ref<'fields' | 'json'>('fields')
 
 // 切换详情帧:重置解析与联动;kind≠normal(未知/加密/告警)不解析,仅展示 hex 与说明
 watch(
@@ -246,15 +250,42 @@ onBeforeUnmount(() => window.removeEventListener('resize', onWindowResize))
         <div class="detail-right">
           <div class="col-head">
             协议解析
-            <span class="col-hint">{{ parseResult?.fields.length ?? 0 }} 个字段 · 悬停/点击联动字节</span>
+            <span v-if="view === 'fields'" class="col-hint">
+              {{ parseResult?.fields.length ?? 0 }} 个字段 · 悬停/点击联动字节
+            </span>
+            <span v-else class="col-hint">JSON 解析树 · 与字段表同源</span>
+            <div class="spacer" />
+            <a-button
+              size="small"
+              class="view-toggle"
+              :type="view === 'fields' ? 'primary' : 'default'"
+              @click="view = 'fields'"
+            >
+              字段表
+            </a-button>
+            <a-button
+              size="small"
+              class="view-toggle"
+              :type="view === 'json' ? 'primary' : 'default'"
+              @click="view = 'json'"
+            >
+              JSON
+            </a-button>
           </div>
-          <div class="col-body">
+          <div v-if="view === 'fields'" class="col-body">
             <FieldTableView
               :fields="parseResult?.fields ?? []"
               :active="activeRange"
               @hover="onFieldHover"
               @pin="onFieldPin"
             />
+          </div>
+          <div v-else class="col-body">
+            <!-- JSON 视图:与字段表同源(parseResult.tree);解析中/失败时给空态提示 -->
+            <div v-if="parseResult" class="json-body">
+              <JsonTree :value="parseResult.tree" />
+            </div>
+            <div v-else class="json-empty">无解析结果</div>
           </div>
         </div>
       </div>
@@ -303,3 +334,27 @@ onBeforeUnmount(() => window.removeEventListener('resize', onWindowResize))
     </div>
   </section>
 </template>
+
+<style scoped>
+/* 右栏 JSON 视图:滚动语义与字段表一致(flex 撑满 + 溢出滚动),留白参照 col-head 的 16px 侧距 */
+.json-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 16px;
+}
+
+.json-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* 头部切换按钮:不参与 flex 收缩,保持紧凑 */
+.view-toggle {
+  flex: none;
+}
+</style>

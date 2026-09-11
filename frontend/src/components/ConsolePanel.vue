@@ -4,6 +4,7 @@ import { store, showToast } from '../state'
 import { ConsoleService, type ConsoleEvent, type DownlinkInfo } from '../api/backend'
 import * as MessageService from '../../wailsjs/go/bridge/MessageService'
 import { engine } from '../../wailsjs/go/models'
+import JsonTree from './JsonTree.vue'
 
 const listEl = ref<HTMLElement | null>(null)
 const autoScroll = ref(true)
@@ -222,7 +223,9 @@ async function clearConsole() {
         <div v-if="expandedIdx === i && (e.hex || e.decoded)" class="row-detail">
           <div class="detail-title" @click.stop="copyHex(e.hex)">HEX(点击复制)</div>
           <div class="detail-hex">{{ e.hex }}</div>
-          <pre v-if="e.decoded" class="detail-json">{{ JSON.stringify(e.decoded, null, 2) }}</pre>
+          <div v-if="e.decoded" class="detail-json">
+            <JsonTree :value="e.decoded" />
+          </div>
         </div>
       </div>
       <div v-if="visible().length === 0" class="console-empty">

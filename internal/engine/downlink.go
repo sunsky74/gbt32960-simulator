@@ -270,11 +270,10 @@ func (c *Client) writeFrameWithResponse(cmd byte, respType types.ResponseType, p
 	}
 
 	c.bus.Emit(Event{
-		Kind:    EventTx,
-		Cmd:     cmdName(rt) + " [应答:" + responseText(respType) + "]",
-		Hex:     utils.BytesToHex(raw),
-		Bytes:   len(raw),
-		Decoded: map[string]any{"payloadHex": utils.BytesToHex(payload)},
+		Kind:  EventTx,
+		Cmd:   cmdName(rt) + " [应答:" + responseText(respType) + "]",
+		Hex:   utils.BytesToHex(raw),
+		Bytes: len(raw),
 	})
 	return nil
 }

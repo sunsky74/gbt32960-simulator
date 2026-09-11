@@ -8,7 +8,22 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
 	"gbt32960-simulator/internal/engine"
+	"gbt32960-simulator/internal/parser"
 )
+
+// DecodeEvent 为 tx/rx 帧事件补上中文键保序解析树;其余事件原样返回。
+// 解析失败时保持 Decoded 为空,不记日志不 panic——控制台展示容错优先。
+func DecodeEvent(e engine.Event) engine.Event {
+	if (e.Kind != engine.EventTx && e.Kind != engine.EventRx) || e.Hex == "" {
+		return e
+	}
+	res, err := parser.Parse(e.Hex)
+	if err != nil {
+		return e
+	}
+	e.Decoded = res.Tree
+	return e
+}
 
 // Forwarder 订阅共享事件总线,按 100ms 窗口批量推送给前端,
 // 同时把事件镜像进环形缓冲供导出使用。
@@ -85,7 +100,7 @@ func (f *Forwarder) Start(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case e := <-events:
-			batch = append(batch, e)
+			batch = append(batch, DecodeEvent(e))
 		}
 
 		timer := time.NewTimer(100 * time.Millisecond)
@@ -96,7 +111,7 @@ func (f *Forwarder) Start(ctx context.Context) {
 				if !ok {
 					break drain
 				}
-				batch = append(batch, e)
+				batch = append(batch, DecodeEvent(e))
 			case <-timer.C:
 				break drain
 			case <-ctx.Done():

@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -220,26 +219,12 @@ func (c *Client) writeFrameAs(ctx context.Context, vin string, cmd byte, body mo
 	}
 
 	c.bus.Emit(Event{
-		Kind:    EventTx,
-		Cmd:     name,
-		Hex:     utils.BytesToHex(raw),
-		Bytes:   len(raw),
-		Decoded: jsonable(body),
+		Kind:  EventTx,
+		Cmd:   name,
+		Hex:   utils.BytesToHex(raw),
+		Bytes: len(raw),
 	})
 	return nil
-}
-
-// jsonable 把 payload 转成可 JSON 序列化的对象(已经是普通结构体则原样返回)。
-func jsonable(body model.MessageBody) any {
-	b, err := json.Marshal(body)
-	if err != nil {
-		return nil
-	}
-	var m map[string]any
-	if err := json.Unmarshal(b, &m); err != nil {
-		return nil
-	}
-	return m
 }
 
 // ---------------------------------------------------------------- 连接生命周期
@@ -597,11 +582,6 @@ func (c *Client) handleFrame(raw []byte) {
 	pm := msg.(*frame.ProtocolMessage)
 	_ = pm.DecodePayload() // 尽力解码 payload,失败不影响帧级展示
 
-	var decoded any
-	if pm.Payload != nil {
-		decoded = jsonable(pm.Payload)
-	}
-
 	name := "unknown"
 	if code, ok := frame.CommandCode(pm.RequestType); ok {
 		cmdLabel := ""
@@ -635,7 +615,6 @@ func (c *Client) handleFrame(raw []byte) {
 		Cmd:      name + respSuffix,
 		Hex:      utils.BytesToHex(raw),
 		Bytes:    len(raw),
-		Decoded:  decoded,
 		Downlink: downlinkInfo(raw[2], pm),
 	})
 
