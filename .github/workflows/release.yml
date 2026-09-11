@@ -1,0 +1,103 @@
+name: release
+
+# 推送 v* 标签时:三平台矩阵构建 → 汇总产物 → 创建 GitHub Release
+# 前置条件:协议库 github.com/sunsky74/gb32960 已发布,go.mod 按版本号引用(而非本地 replace)
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # 创建 Release 必需
+
+env:
+  NODE_OPTIONS: "--max-old-space-size=4096" # 前端构建防 OOM(wails 官方文档推荐)
+  WAILS_VERSION: "v2.15.0" # wails CLI 固定版本,勿用 latest
+  APP_NAME: "gbt32960-simulator" # 与 wails.json outputfilename 一致
+
+jobs:
+  build:
+    name: build (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # out 为各平台产物路径(upload-artifact 用);app 名与 wails.json outputfilename 一致
+        include:
+          - { os: ubuntu-latest, platform: linux/amd64, artifact: linux-amd64, out: "build/bin/gbt32960-simulator" }
+          - { os: windows-latest, platform: windows/amd64, artifact: windows-amd64, out: "build/bin/*.exe" }
+          - { os: macos-latest, platform: darwin/universal, artifact: macos-universal, out: "build/bin/*.zip" }
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.25' # wails v2.15.0 要求 go 1.25.0
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Linux 依赖 (ubuntu-latest = 24.04 → WebKitGTK 4.1)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev build-essential pkg-config libegl1
+
+      - name: 安装 NSIS (windows-latest 已不再预装)
+        if: runner.os == 'Windows'
+        run: choco install nsis -y --no-progress
+        shell: pwsh
+
+      - name: 安装 Wails CLI
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+        shell: bash
+
+      # 说明:main 包没有 version 变量时,-X main.version 会被链接器静默忽略;
+      # 需要版本戳可在 main.go 增加 var version string 并在界面中展示。
+      - name: 构建 (linux/amd64)
+        if: runner.os == 'Linux'
+        run: wails build -platform linux/amd64 -clean -trimpath -tags webkit2_41 -ldflags "-X main.version=${GITHUB_REF_NAME}"
+        shell: bash
+
+      - name: 构建 (windows/amd64 + NSIS 安装包)
+        if: runner.os == 'Windows'
+        run: wails build -platform windows/amd64 -clean -trimpath -nsis -webview2 download -ldflags "-X main.version=${GITHUB_REF_NAME}"
+        shell: bash
+
+      - name: 构建 (darwin universal)
+        if: runner.os == 'macOS'
+        run: wails build -platform darwin/universal -clean -trimpath -ldflags "-X main.version=${GITHUB_REF_NAME}"
+        shell: bash
+
+      - name: 打包 macOS .app (ditto 保留 bundle 符号链接/权限)
+        if: runner.os == 'macOS'
+        run: ditto -c -k --keepParent "build/bin/${APP_NAME}.app" "build/bin/${APP_NAME}.app.zip"
+        shell: bash
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wails-${{ matrix.artifact }}
+          path: ${{ matrix.out }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: wails-*
+          merge-multiple: true
+          path: release
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: release/**
+          fail_on_unmatched_files: true
+          generate_release_notes: true

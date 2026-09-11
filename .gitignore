@@ -5,6 +5,8 @@ frontend/package.json.md5
 
 # ---- 编译产物(wails build / go build 输出) ----
 build/bin/
+# 发布产物走 GitHub Releases,不提交二进制(历史遗留的 release/ 文件不再跟踪)
+release/
 *.app
 *.dmg
 *.exe

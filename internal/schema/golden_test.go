@@ -16,7 +16,7 @@ import (
 )
 
 // loadGolden 读取生产报文金标准 hex。
-// 来源: project4j gb32960-go/golden/layer_a —— 真实国标终端发出、网关日志采集的报文。
+// 来源: 协议库 golden 测试集 —— 真实国标终端发出、网关日志采集的报文。
 func loadGolden(t *testing.T, name string) []byte {
 	t.Helper()
 	b, err := os.ReadFile("testdata/" + name)

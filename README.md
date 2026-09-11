@@ -67,14 +67,16 @@ go test ./...
 
 # 打包生产应用(输出 build/bin/)
 wails build
+
+# 发布:推送 v* 标签(如 v0.1.0)即触发三平台自动构建并创建 Release(见 .github/workflows/release.yml)
 ```
 
 ## 依赖说明
 
-协议库通过本地 `replace` 引用(Java project4j 中 gateway-connect-gbt32960 的 Go 移植版,同步演进):
+协议层由独立库 [`github.com/sunsky74/gb32960`](https://github.com/sunsky74/gb32960) 提供(GB/T 32960 帧编解码与数据模型),通过 `go.mod` 版本号引用,无需本地路径。
+
+本地联调协议库时,可用 `replace` 临时指向本地克隆:
 
 ```
-replace github.com/sunsky74/gb32960 => /Users/sunsky/code/java/template/project4j/gb32960-go
+replace github.com/sunsky74/gb32960 => /path/to/gb32960
 ```
-
-在其他机器构建前,需先克隆 project4j 并将 `go.mod` 中的 replace 路径指向本地位置。
