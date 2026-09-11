@@ -3,13 +3,10 @@ module gbt32960-simulator
 go 1.25.0
 
 require (
-	github.com/sunsky74/gb32960 v0.0.0
+	github.com/sunsky74/gb32960 v0.1.0
 	github.com/wailsapp/wails/v2 v2.15.0
 	github.com/xuri/excelize/v2 v2.11.0
 )
-
-// 协议库本地引用:Java driver 的 Go 移植(与 project4j 内 gateway-connect-gbt32960 同步演进)
-replace github.com/sunsky74/gb32960 => /Users/sunsky/code/java/template/project4j/gb32960-go
 
 require (
 	git.sr.ht/~jackmordaunt/go-toast/v2 v2.0.3 // indirect
@@ -46,5 +43,3 @@ require (
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.39.0 // indirect
 )
-
-// replace github.com/wailsapp/wails/v2 v2.15.0 => /Users/sunsky/develop/go_repository/pkg/mod
