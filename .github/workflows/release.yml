@@ -47,9 +47,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev build-essential pkg-config libegl1
 
-      - name: 安装 NSIS (windows-latest 已不再预装)
+      - name: 安装 NSIS (windows-latest 已不再预装;须显式写入 PATH,否则 makensis 不可见)
         if: runner.os == 'Windows'
-        run: choco install nsis -y --no-progress
+        run: |
+          choco install nsis -y --no-progress
+          Add-Content -Path $env:GITHUB_PATH -Value "C:\Program Files (x86)\NSIS"
         shell: pwsh
 
       - name: 安装 Wails CLI
