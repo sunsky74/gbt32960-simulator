@@ -20,6 +20,9 @@ type App struct {
 	track     *bridge.TrackService
 	forwarder *bridge.Forwarder
 	settings  *bridge.SettingsService
+
+	// fwdCancel 取消事件转发 goroutine(shutdown 时先停转发,再断开连接)。
+	fwdCancel context.CancelFunc
 }
 
 // NewApp 创建应用装配(在 wails.Run 之前,保证 Bind 可用)。
@@ -52,11 +55,17 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	bridge.WireContexts(ctx, a.console, a.extsvc, a.sys, a.server, a.track)
-	go a.forwarder.Start(ctx)
+	fwdCtx, cancel := context.WithCancel(ctx)
+	a.fwdCancel = cancel
+	go a.forwarder.Start(fwdCtx)
 }
 
-// shutdown wails 退出回调:优雅登出并断开。
+// shutdown wails 退出回调:先停事件转发(此后事件不再推送/镜像),
+// 再优雅登出并断开。
 func (a *App) shutdown(ctx context.Context) {
+	if a.fwdCancel != nil {
+		a.fwdCancel()
+	}
 	if c := a.rt.CurrentClient(); c != nil {
 		c.Disconnect()
 	}

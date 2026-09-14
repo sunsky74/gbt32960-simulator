@@ -33,13 +33,23 @@ type Forwarder struct {
 	bufMu  sync.Mutex
 	buffer []engine.Event // 环形缓冲,超出容量丢弃最旧
 	cap    int            // 导出缓冲容量(SetCap 运行中可调)
+
+	// done 在 Start 完全停止(转发循环退出 + 总线退订)后关闭,
+	// 供调用方确认停止完成(当前由测试消费;shutdown 可选择等待)。
+	done     chan struct{}
+	doneOnce sync.Once
 }
 
 const defaultExportBufferCap = 50000
 
 // NewForwarder 创建转发器。
 func NewForwarder(rt *Runtime) *Forwarder {
-	return &Forwarder{rt: rt, buffer: make([]engine.Event, 0, 1024), cap: defaultExportBufferCap}
+	return &Forwarder{
+		rt:     rt,
+		buffer: make([]engine.Event, 0, 1024),
+		cap:    defaultExportBufferCap,
+		done:   make(chan struct{}),
+	}
 }
 
 // mirror 把事件写入导出缓冲(环形,超出容量丢最旧)。
@@ -90,8 +100,12 @@ func (f *Forwarder) Clear() {
 }
 
 // Start 阻塞转发直到 ctx 取消。应在 app startup 的 goroutine 中启动。
+// 返回前关闭 done,供调用方确认已停止。
 func (f *Forwarder) Start(ctx context.Context) {
 	events, stop := f.rt.Bus().Subscribe(512)
+	// defer 后进先出:先注册 done 关闭、后退订,执行时退订在前、done 在后——
+	// done 关闭即代表转发循环已退出且总线订阅已解除。
+	defer f.doneOnce.Do(func() { close(f.done) })
 	defer stop()
 
 	for {
@@ -116,8 +130,10 @@ func (f *Forwarder) Start(ctx context.Context) {
 				break drain
 			case <-ctx.Done():
 				timer.Stop()
-				if len(batch) > 0 {
-					runtime.EventsEmit(ctx, "console:events", batch)
+				// 关闭中不再向前端推送,但已积压的批量仍镜像进导出缓冲,
+				// 供退出前导出(前端随后即关闭,emit 已无意义)。
+				for _, e := range batch {
+					f.mirror(e)
 				}
 				return
 			}
