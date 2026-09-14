@@ -5,17 +5,11 @@ import (
 	"math"
 	"regexp"
 	"strings"
+
+	"gbt32960-simulator/internal/schema"
 )
 
 var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{1,63}$`)
-
-// reservedGroupKeys 标准报文组键(与 internal/schema 的 V2016Groups/V2025Groups 同步,协议冻结不会变)。
-// 扩展命令/追加单元的组键若与之同名,会在 GetSchema 合并时与标准组冲突(键重叠导致配置错乱)。
-var reservedGroupKeys = map[string]bool{
-	"vehicle": true, "motor": true, "fuelcell": true, "engine": true, "location": true,
-	"extremum": true, "alarm": true, "voltage": true, "temperature": true,
-	"minparallel": true, "batterytemp": true, "fcstack": true, "supercap": true, "supercapextremum": true,
-}
 
 // 标准数据单元类型码(拒绝)。私有可用区两版本均为 0x80~0xFE(库的自定义 TLV 区)。
 // 2025 的 0x30/0x31/0x32 为 燃料电池电堆/超级电容/超容极值,0xFF 为签名数据。
@@ -84,7 +78,7 @@ func validateUnit(path string, u AppendUnit, base string, keys map[string]bool, 
 	if strings.Contains(u.Key, ":") {
 		return verrf(path+".key", "键不能包含冒号(与命令组键命名空间冲突): %q", u.Key)
 	}
-	if reservedGroupKeys[u.Key] {
+	if schema.IsStandardGroupKey(u.Key) {
 		return verrf(path+".key", "键与标准报文组冲突(保留键): %q", u.Key)
 	}
 	if keys[u.Key] {
@@ -177,7 +171,7 @@ func validateCommand(path string, c Command, base string, keys map[string]bool, 
 	if strings.Contains(c.Key, ":") {
 		return verrf(path+".key", "键不能包含冒号(与命令组键命名空间冲突): %q", c.Key)
 	}
-	if reservedGroupKeys[c.Key] {
+	if schema.IsStandardGroupKey(c.Key) {
 		return verrf(path+".key", "键与标准报文组冲突(保留键): %q", c.Key)
 	}
 	if keys[c.Key] {
