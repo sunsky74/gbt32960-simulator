@@ -28,9 +28,9 @@ func CompileField(f FieldSpec) schema.FieldSchema {
 	out := schema.FieldSchema{Key: f.Key, Label: f.Label, Unit: f.Unit, ScaleNote: scaleNote(f)}
 	switch f.Type {
 	case "u8", "u16", "u32", "i8", "i16", "i32":
-		rng := numericRange[f.Type]
+		rng := NumericRange(f.Type)
 		lo, hi := rng[0], rng[1]
-		scale, offset := scaleOf(f)
+		scale, offset := ScaleOf(f)
 		if scale == 1 { // 仓库约定:无 scale → int;×0.1 类 → float(如 speed/mileage)
 			out.Kind = "int"
 		} else {
@@ -58,7 +58,7 @@ func CompileField(f FieldSpec) schema.FieldSchema {
 }
 
 func scaleNote(f FieldSpec) string {
-	scale, offset := scaleOf(f)
+	scale, offset := ScaleOf(f)
 	if scale == 1 && offset == 0 {
 		return ""
 	}

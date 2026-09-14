@@ -110,11 +110,9 @@ func extUnitWidth(u *ext.AppendUnit) int {
 	total := 0
 	for _, f := range u.Fields {
 		switch f.Type {
-		case "u8", "i8":
-			total++
-		case "u16", "i16":
-			total += 2
-		case "u32", "i32", "f32":
+		case "u8", "i8", "u16", "i16", "u32", "i32":
+			total += ext.NumericSize(f.Type)
+		case "f32":
 			total += 4
 		case "bytes":
 			total += f.Length
@@ -170,7 +168,7 @@ func extField(w *walker, f ext.FieldSpec) bool {
 }
 
 func extNumeric(w *walker, f ext.FieldSpec) bool {
-	size := map[string]int{"u8": 1, "i8": 1, "u16": 2, "i16": 2, "u32": 4, "i32": 4}[f.Type]
+	size := ext.NumericSize(f.Type)
 	b := w.take(size)
 	if b == nil {
 		return false
@@ -198,7 +196,7 @@ func extNumeric(w *walker, f ext.FieldSpec) bool {
 			v = raw
 		}
 	}
-	scale, offset := extScaleOf(f)
+	scale, offset := ext.ScaleOf(f)
 	phys := trimFloat(float64(v)*scale + offset)
 	w.emit(f.Label, f.Type, b, fmt.Sprint(v), phys, "-", f.Unit)
 	return true
@@ -248,15 +246,4 @@ func extBits(w *walker, f ext.FieldSpec) bool {
 	}
 	w.emit(f.Label, "bits", b, fmt.Sprintf("0x%0*X", size*2, b), "-", trans, f.Unit)
 	return true
-}
-
-func extScaleOf(f ext.FieldSpec) (scale, offset float64) {
-	scale, offset = 1, 0
-	if f.Scale != nil {
-		scale = *f.Scale
-	}
-	if f.Offset != nil {
-		offset = *f.Offset
-	}
-	return
 }

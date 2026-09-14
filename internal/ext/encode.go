@@ -31,6 +31,12 @@ var numericRange = map[string][2]float64{
 
 var numericSize = map[string]int{"u8": 1, "i8": 1, "u16": 2, "i16": 2, "u32": 4, "i32": 4}
 
+// NumericSize 返回数值类型的线宽(字节):u8/i8=1、u16/i16=2、u32/i32=4;未知类型返回 0。
+func NumericSize(typeName string) int { return numericSize[typeName] }
+
+// NumericRange 返回数值类型的线值范围 [最小值, 最大值];未知类型返回零值。
+func NumericRange(typeName string) [2]float64 { return numericRange[typeName] }
+
 // EncodeFields 按声明顺序把一行配置编码为字节(不含任何头)。
 func EncodeFields(fields []FieldSpec, row schema.RowValue) ([]byte, error) {
 	out := make([]byte, 0, 64)
@@ -75,7 +81,9 @@ func encodeTail(f FieldSpec, row schema.RowValue) ([]byte, error) {
 	return b, nil
 }
 
-func scaleOf(f FieldSpec) (scale, offset float64) {
+// ScaleOf 返回字段的线值↔物理值换算参数:物理值 = 线值×scale + offset。
+// 未配置 Scale/Offset 时取默认 scale=1、offset=0。
+func ScaleOf(f FieldSpec) (scale, offset float64) {
 	scale, offset = 1, 0
 	if f.Scale != nil {
 		scale = *f.Scale
@@ -98,7 +106,7 @@ func encodeNumeric(f FieldSpec, row schema.RowValue) ([]byte, error) {
 	if math.IsNaN(phys) || math.IsInf(phys, 0) {
 		return nil, fmt.Errorf("值不是有限数值: %v", v)
 	}
-	scale, offset := scaleOf(f)
+	scale, offset := ScaleOf(f)
 	if f.Type == "f32" {
 		if scale != 1 || offset != 0 {
 			return nil, fmt.Errorf("f32 不支持 scale/offset")
@@ -113,7 +121,7 @@ func encodeNumeric(f FieldSpec, row schema.RowValue) ([]byte, error) {
 		return nil, fmt.Errorf("物理值 %v 换算后不是整数线值(最近线值 %v)", phys, wire)
 	}
 	iv := int64(wire)
-	r := numericRange[f.Type]
+	r := NumericRange(f.Type)
 	if float64(iv) < r[0] || float64(iv) > r[1] {
 		return nil, fmt.Errorf("线值 %d 超出 %s 范围 [%v, %v]", iv, f.Type, r[0], r[1])
 	}
@@ -121,7 +129,7 @@ func encodeNumeric(f FieldSpec, row schema.RowValue) ([]byte, error) {
 }
 
 func putInt(t string, v int64) []byte {
-	size := numericSize[t]
+	size := NumericSize(t)
 	out := make([]byte, size)
 	for i := 0; i < size; i++ {
 		out[size-1-i] = byte(v >> (8 * i))

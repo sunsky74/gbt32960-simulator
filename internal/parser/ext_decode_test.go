@@ -2,6 +2,8 @@ package parser
 
 import (
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -92,6 +94,113 @@ func TestParseWithPackRoundTrip(t *testing.T) {
 	// 未匹配单元(0x81)按通用展示
 	if f := findField(r.Fields, "自定义数据单元 0x81 数据"); f == nil || f.RawValue != "cafe" {
 		t.Errorf("未匹配单元展示 = %+v", f)
+	}
+}
+
+// TestParseWithPackAllFieldKindsRoundTrip 覆盖 DSL 全部字段类型:
+// 数值类(u8/i8/u16/i16/u32/i32 带 scale/offset 变体)、f32、bits(2B/4B)、bytes、tail。
+// 由 ext.EncodeUnit 编码 → 解析器解码,断言线值(原始展示)与物理值(浮点容差)与输入一致。
+func TestParseWithPackAllFieldKindsRoundTrip(t *testing.T) {
+	fields := []ext.FieldSpec{
+		{Key: "u8", Label: "U8", Type: "u8"},
+		{Key: "u8s", Label: "U8缩放", Type: "u8", Scale: pf(0.5)},
+		{Key: "i8", Label: "I8偏移", Type: "i8", Offset: pf(40)},
+		{Key: "u16", Label: "U16缩放", Type: "u16", Scale: pf(0.1)},
+		{Key: "i16", Label: "I16缩放偏移", Type: "i16", Scale: pf(2), Offset: pf(-100)},
+		{Key: "u32", Label: "U32缩放", Type: "u32", Scale: pf(0.001)},
+		{Key: "i32", Label: "I32", Type: "i32"},
+		{Key: "f32", Label: "F32", Type: "f32"},
+		{Key: "bits", Label: "位组", Type: "bits", Bits: []ext.BitSpec{
+			{Index: 0, Label: "锁车"}, {Index: 9, Label: "限速"},
+		}},
+		{Key: "bits4", Label: "位组4B", Type: "bits", Bits: []ext.BitSpec{
+			{Index: 0, Label: "上电"}, {Index: 20, Label: "预留"},
+		}},
+		{Key: "bytes", Label: "定长", Type: "bytes", Length: 3},
+		{Key: "tail", Label: "尾部", Type: "tail"},
+	}
+	unit := ext.AppendUnit{Key: "allkinds", Title: "全类型遥测", UnitCode: 0x82, Fields: fields}
+	row := schema.RowValue{
+		"u8": 255, "u8s": 20, "i8": -40,
+		"u16": 12.3, "i16": 150, "u32": 123456.789, "i32": -2000000000,
+		"f32":   3.14159,
+		"bits":  map[string]any{"bit0": true, "bit9": true},
+		"bits4": map[string]any{"bit0": false, "bit20": true},
+		"bytes": "1a2b3c", "tail": "deadbeef",
+	}
+
+	tlv, err := ext.EncodeUnit(unit, row)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := append([]byte{0x1A, 0x09, 0x03, 0x0B, 0x10, 0x1E}, tlv...)
+	pack := &ext.Pack{
+		Meta:     ext.Meta{ID: "allkinds", Label: "全类型测试包", BaseVersion: "2016"},
+		Realtime: ext.Realtime{AppendUnits: []ext.AppendUnit{unit}},
+	}
+	r, err := ParseWithPack(buildRealtimeFrame(payload), pack)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Warnings) != 0 {
+		t.Fatalf("warnings = %v", r.Warnings)
+	}
+	if len(r.Issues) != 0 {
+		t.Fatalf("issues = %v", r.Issues)
+	}
+
+	numeric := []struct {
+		name, raw string
+		want      float64
+	}{
+		{"U8", "255", 255},
+		{"U8缩放", "40", 20},
+		{"I8偏移", "-80", -40},
+		{"U16缩放", "123", 12.3},
+		{"I16缩放偏移", "125", 150},
+		{"U32缩放", "123456789", 123456.789},
+		{"I32", "-2000000000", -2000000000},
+	}
+	for _, c := range numeric {
+		f := findField(r.Fields, c.name)
+		if f == nil {
+			t.Fatalf("缺少字段 %s", c.name)
+		}
+		if f.RawValue != c.raw {
+			t.Errorf("%s 线值 = %q, want %q", c.name, f.RawValue, c.raw)
+		}
+		got, err := strconv.ParseFloat(f.OffsetVal, 64)
+		if err != nil {
+			t.Errorf("%s 物理值 %q 不是数值: %v", c.name, f.OffsetVal, err)
+			continue
+		}
+		if math.Abs(got-c.want) > 1e-3 {
+			t.Errorf("%s 物理值 = %v, want %v", c.name, got, c.want)
+		}
+	}
+
+	f32f := findField(r.Fields, "F32")
+	if f32f == nil {
+		t.Fatal("缺少字段 F32")
+	}
+	if want := fmt.Sprintf("0x%08X", math.Float32bits(float32(3.14159))); f32f.RawValue != want {
+		t.Errorf("F32 线值 = %q, want %q", f32f.RawValue, want)
+	}
+	if got, err := strconv.ParseFloat(f32f.OffsetVal, 64); err != nil || math.Abs(got-3.14159) > 1e-3 {
+		t.Errorf("F32 物理值 = %q (err=%v), want ≈3.14159", f32f.OffsetVal, err)
+	}
+
+	if f := findField(r.Fields, "位组"); f == nil || f.RawValue != "0x0102" || f.Translate != "开: 锁车 / 限速" {
+		t.Errorf("位组 = %+v", f)
+	}
+	if f := findField(r.Fields, "位组4B"); f == nil || f.RawValue != "0x00001000" || f.Translate != "开: 预留" {
+		t.Errorf("位组4B = %+v", f)
+	}
+	if f := findField(r.Fields, "定长"); f == nil || f.RawValue != "1a2b3c" || f.Length != 3 {
+		t.Errorf("定长 = %+v", f)
+	}
+	if f := findField(r.Fields, "尾部"); f == nil || f.RawValue != "deadbeef" || f.Length != 4 {
+		t.Errorf("尾部 = %+v", f)
 	}
 }
 
