@@ -243,6 +243,8 @@ func (c *Client) writeFrameAs(ctx context.Context, vin string, cmd byte, body mo
 // ---------------------------------------------------------------- 连接生命周期
 
 // Connect 建链并自动登录。阻塞直到登录成功或失败。
+// ctx 控制整个连接生命期(拨号/会话派生/自动重连资格),取消将中止本次连接;
+// 持续运行的模拟器通常传入 context.Background()。
 func (c *Client) Connect(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -250,7 +252,7 @@ func (c *Client) Connect(ctx context.Context) error {
 	if c.State() != StateIdle {
 		return fmt.Errorf("gbt32960-sim: current state is %s, disconnect first", c.State())
 	}
-	cctx, cancel := context.WithCancel(context.Background())
+	cctx, cancel := context.WithCancel(ctx)
 	c.mu.Lock()
 	c.cancel = cancel
 	c.lifeCtx = cctx
