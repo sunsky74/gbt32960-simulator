@@ -258,6 +258,10 @@ func (c *Client) Connect(ctx context.Context) error {
 
 	if err := c.doConnect(cctx); err != nil {
 		cancel()
+		c.mu.Lock()
+		c.cancel = nil
+		c.lifeCtx = nil
+		c.mu.Unlock()
 		c.closeConn()
 		c.setState(StateIdle)
 		return err

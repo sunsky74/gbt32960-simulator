@@ -30,7 +30,11 @@ func (c *Config) Build() (*tls.Config, error) {
 		MinVersion:         tls.VersionTLS12,
 	}
 
-	if ca := loadPEM(c.CA); len(ca) > 0 {
+	ca, err := loadPEM(c.CA)
+	if err != nil {
+		return nil, fmt.Errorf("CA 证书: %w", err)
+	}
+	if len(ca) > 0 {
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(ca) {
 			return nil, fmt.Errorf("CA 证书解析失败(既不是有效文件也不是 PEM 内容)")
@@ -39,8 +43,14 @@ func (c *Config) Build() (*tls.Config, error) {
 	}
 
 	if c.ClientCert != "" || c.ClientKey != "" {
-		certPEM := loadPEM(c.ClientCert)
-		keyPEM := loadPEM(c.ClientKey)
+		certPEM, err := loadPEM(c.ClientCert)
+		if err != nil {
+			return nil, fmt.Errorf("客户端证书: %w", err)
+		}
+		keyPEM, err := loadPEM(c.ClientKey)
+		if err != nil {
+			return nil, fmt.Errorf("客户端私钥: %w", err)
+		}
 		if certPEM == nil || keyPEM == nil {
 			return nil, fmt.Errorf("客户端证书/私钥缺失或不可读")
 		}
@@ -58,17 +68,18 @@ func looksLikePEM(s string) bool {
 	return strings.Contains(s, "-----BEGIN")
 }
 
-// loadPEM 输入可以是 PEM 内容或文件路径;空串返回 nil。
-func loadPEM(s string) []byte {
+// loadPEM 输入可以是 PEM 内容或文件路径;空串返回 (nil, nil)。
+func loadPEM(s string) ([]byte, error) {
 	if s == "" {
-		return nil
+		return nil, nil
 	}
 	if looksLikePEM(s) {
-		return []byte(s)
+		return []byte(s), nil
 	}
-	b, err := os.ReadFile(strings.TrimSpace(s))
+	path := strings.TrimSpace(s)
+	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("读取 %s: %w", path, err)
 	}
-	return b
+	return b, nil
 }

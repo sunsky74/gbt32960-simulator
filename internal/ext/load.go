@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,9 +23,14 @@ func LoadFile(path string) (*Pack, error) {
 // LoadText 从 JSON 文本加载并完整校验一个扩展包(粘贴导入共用入口)。
 // name 仅用于错误前缀展示。
 func LoadText(text, name string) (*Pack, error) {
+	dec := json.NewDecoder(strings.NewReader(text))
+	dec.DisallowUnknownFields()
 	var p Pack
-	if err := json.Unmarshal([]byte(text), &p); err != nil {
+	if err := dec.Decode(&p); err != nil {
 		return nil, fmt.Errorf("%s: JSON 语法错误: %w", name, err)
+	}
+	if _, err := dec.Token(); err != io.EOF {
+		return nil, fmt.Errorf("%s: JSON 语法错误: 顶层 JSON 之后存在多余内容", name)
 	}
 	if err := Validate(&p); err != nil {
 		return nil, fmt.Errorf("%s: %w", name, err)

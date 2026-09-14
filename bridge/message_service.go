@@ -794,9 +794,12 @@ func (s *MessageService) stopExtReportIfOwn(key string, own chan struct{}) {
 }
 
 func (s *MessageService) startExtReport(key string, interval time.Duration) {
-	s.stopExtReport(key)
-	stop := make(chan struct{})
 	s.extMu.Lock()
+	if old, ok := s.extStops[key]; ok {
+		close(old)
+		delete(s.extStops, key)
+	}
+	stop := make(chan struct{})
 	s.extStops[key] = stop
 	s.extMu.Unlock()
 	go func() {

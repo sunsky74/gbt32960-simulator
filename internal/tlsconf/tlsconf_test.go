@@ -19,6 +19,8 @@ import (
 
 const (
 	errCA       = "CA 证书解析失败"
+	errCARead   = "CA 证书: 读取"
+	errCertRead = "客户端证书: 读取"
 	errMaterial = "客户端证书/私钥缺失或不可读"
 	errPair     = "客户端证书装配失败"
 )
@@ -162,15 +164,11 @@ func TestConfigBuild(t *testing.T) {
 			wantErr: errCA,
 		},
 		{
-			name: "CA 路径不存在且非 PEM:构建期静默忽略",
+			name: "CA 文件不可读:报读取错误而不再静默忽略",
 			config: func(t *testing.T) *Config {
 				return &Config{Enabled: true, CA: filepath.Join(t.TempDir(), "missing-ca.pem")}
 			},
-			check: func(t *testing.T, cfg *tls.Config) {
-				if cfg.RootCAs != nil {
-					t.Fatal("不可读 CA 被 loadPEM 丢弃,不应装配 RootCAs")
-				}
-			},
+			wantErr: errCARead,
 		},
 		{
 			name: "CA 形似 PEM 但解析失败",
@@ -239,7 +237,7 @@ func TestConfigBuild(t *testing.T) {
 					ClientKey:  filepath.Join(dir, "missing.key"),
 				}
 			},
-			wantErr: errMaterial,
+			wantErr: errCertRead,
 		},
 		{
 			name: "证书与私钥不配对",
@@ -307,6 +305,57 @@ func TestConfigBuild(t *testing.T) {
 	}
 }
 
+// TestBuildUnreadableMaterialsReportFileError 回归 ⑨:材料文件不可读时,
+// 必须报出"读取 <路径>"的文件读取错误,与"内容非法/解析失败"可区分。
+func TestBuildUnreadableMaterialsReportFileError(t *testing.T) {
+	dir := t.TempDir()
+	missingCA := filepath.Join(dir, "missing-ca.pem")
+	missingCert := filepath.Join(dir, "missing-cert.pem")
+	missingKey := filepath.Join(dir, "missing-key.pem")
+	valid := genSelfSignedCert(t, "client")
+
+	tests := []struct {
+		name   string
+		cfg    *Config
+		substr []string
+	}{
+		{
+			name:   "CA 文件不可读",
+			cfg:    &Config{Enabled: true, CA: missingCA},
+			substr: []string{"CA 证书", "读取", missingCA},
+		},
+		{
+			name:   "客户端证书文件不可读",
+			cfg:    &Config{Enabled: true, ClientCert: missingCert, ClientKey: string(valid.keyPEM)},
+			substr: []string{"客户端证书", "读取", missingCert},
+		},
+		{
+			name:   "客户端私钥文件不可读",
+			cfg:    &Config{Enabled: true, ClientCert: string(valid.certPEM), ClientKey: missingKey},
+			substr: []string{"客户端私钥", "读取", missingKey},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := tc.cfg.Build()
+			if err == nil {
+				t.Fatal("应报文件读取错误")
+			}
+			if cfg != nil {
+				t.Fatalf("出错时应返回 nil config, got %+v", cfg)
+			}
+			for _, s := range tc.substr {
+				if !strings.Contains(err.Error(), s) {
+					t.Fatalf("err = %q, 应包含 %q", err, s)
+				}
+			}
+			if strings.Contains(err.Error(), "解析失败") {
+				t.Fatalf("文件读取失败不应被误报为解析失败: %q", err)
+			}
+		})
+	}
+}
+
 func TestLoadPEM(t *testing.T) {
 	pemText := "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n"
 	dir := t.TempDir()
@@ -314,22 +363,40 @@ func TestLoadPEM(t *testing.T) {
 	if err := os.WriteFile(filePath, []byte(pemText), 0o600); err != nil {
 		t.Fatalf("写入测试文件失败: %v", err)
 	}
+	missing := filepath.Join(dir, "nope.pem")
 
 	tests := []struct {
-		name string
-		in   string
-		want []byte
+		name    string
+		in      string
+		want    []byte
+		wantErr string
 	}{
-		{name: "空串返回 nil", in: "", want: nil},
+		{name: "空串返回 nil,nil", in: ""},
 		{name: "PEM 内容原样返回", in: pemText, want: []byte(pemText)},
 		{name: "文件路径读取内容", in: filePath, want: []byte(pemText)},
 		{name: "路径首尾空白被裁剪", in: "\n " + filePath + " \n", want: []byte(pemText)},
-		{name: "文件不存在返回 nil", in: filepath.Join(dir, "nope.pem"), want: nil},
-		{name: "非 PEM 且非文件返回 nil", in: "just-a-string", want: nil},
+		{name: "文件不存在报读取错误并含路径", in: missing, wantErr: missing},
+		{name: "非 PEM 且非文件路径报读取错误", in: "just-a-string", wantErr: "just-a-string"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := loadPEM(tc.in); !bytes.Equal(got, tc.want) {
+			got, err := loadPEM(tc.in)
+			if tc.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("loadPEM(%q) err = %v, want 包含 %q", tc.in, err, tc.wantErr)
+				}
+				if !strings.HasPrefix(err.Error(), "读取 ") {
+					t.Fatalf("loadPEM(%q) err = %v, want 文件读取错误", tc.in, err)
+				}
+				if got != nil {
+					t.Fatalf("出错时应返回 nil, got %q", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("loadPEM(%q) error = %v", tc.in, err)
+			}
+			if !bytes.Equal(got, tc.want) {
 				t.Fatalf("loadPEM(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})

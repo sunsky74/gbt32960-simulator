@@ -78,6 +78,11 @@ func (s *Server) acceptLoop(ln net.Listener, ctx context.Context) {
 				return
 			default:
 				s.hooks.OnWarn(WarnEvent{Note: "accept: " + err.Error()})
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(50 * time.Millisecond):
+				}
 				continue
 			}
 		}

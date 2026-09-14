@@ -49,6 +49,25 @@ func TestLoadFileFailures(t *testing.T) {
 			t.Fatal("未知类型应在静态校验拦截;若未来放宽静态校验,干跑必须兜底")
 		}
 	})
+	t.Run("未知字段被拒绝", func(t *testing.T) {
+		src, _ := os.ReadFile(filepath.Join("testdata", "demo.json"))
+		// 顶层未知字段(声明式校验器必须拒绝,防止字段名拼写错误被静默忽略)
+		top := strings.Replace(string(src), `"meta":`, `"unknownTop": 1, "meta":`, 1)
+		if _, err := LoadFile(write("unknown-top.json", top)); err == nil || !strings.Contains(err.Error(), "JSON 语法错误") {
+			t.Fatalf("顶层未知字段应被拒绝, err = %v", err)
+		}
+		// 嵌套未知字段(meta 内,如 scopes 误拼)
+		nested := strings.Replace(string(src), `"baseVersion": "2016"`, `"baseVersion": "2016", "unknownKey": true`, 1)
+		if _, err := LoadFile(write("unknown-nested.json", nested)); err == nil || !strings.Contains(err.Error(), "JSON 语法错误") {
+			t.Fatalf("嵌套未知字段应被拒绝, err = %v", err)
+		}
+	})
+	t.Run("顶层多余内容被拒绝", func(t *testing.T) {
+		src, _ := os.ReadFile(filepath.Join("testdata", "demo.json"))
+		if _, err := LoadFile(write("trailing.json", string(src)+`{"extra":1}`)); err == nil || !strings.Contains(err.Error(), "JSON 语法错误") {
+			t.Fatalf("顶层多余内容应被拒绝, err = %v", err)
+		}
+	})
 	t.Run("文件不存在", func(t *testing.T) {
 		if _, err := LoadFile(filepath.Join(dir, "nope.json")); err == nil {
 			t.Fatal("应报错")
