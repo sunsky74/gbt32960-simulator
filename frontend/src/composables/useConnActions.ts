@@ -3,7 +3,15 @@ import { message } from 'ant-design-vue'
 import type { FormInstance, Rule } from 'ant-design-vue/es/form'
 import * as ConnectionService from '../../wailsjs/go/bridge/ConnectionService'
 import { cfg } from './useConnConfig'
-import { loadProfiles, refreshState, reloadSchemaForVersion, reloadSchemaPreservingGroups, savedBinding, store, syncSavedBinding } from '../state'
+import {
+  loadProfiles,
+  refreshState,
+  reloadSchemaForVersion,
+  reloadSchemaPreservingGroups,
+  savedBinding,
+  store,
+  syncSavedBinding,
+} from '../state'
 
 // 连接表单实例(顶栏按钮与连接配置卡共用同一份校验)
 export const formRef = ref<FormInstance>()

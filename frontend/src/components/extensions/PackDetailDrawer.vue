@@ -107,24 +107,26 @@ defineExpose({ invalidateJson })
     <template v-if="pack">
       <!-- 页签切换(segmented 风格) -->
       <div class="dd-tabs">
-        <button
-          class="dd-tab"
-          :class="{ active: detailTab === 'info' }"
-          @click="switchDetailTab('info')"
-        >基本信息</button>
-        <button
-          class="dd-tab"
-          :class="{ active: detailTab === 'json' }"
-          @click="switchDetailTab('json')"
-        >JSON 配置</button>
+        <button class="dd-tab" :class="{ active: detailTab === 'info' }" @click="switchDetailTab('info')">
+          基本信息
+        </button>
+        <button class="dd-tab" :class="{ active: detailTab === 'json' }" @click="switchDetailTab('json')">
+          JSON 配置
+        </button>
       </div>
 
       <!-- ===== 基本信息:轻卡片 Key-Value ===== -->
       <div v-if="detailTab === 'info'" class="dd-body">
         <div class="dd-card">
-          <div class="dd-kv"><span class="dd-k">ID</span><span class="dd-v mono">{{ pack.id }}</span></div>
-          <div class="dd-kv"><span class="dd-k">厂商</span><span class="dd-v">{{ pack.vendor || '-' }}</span></div>
-          <div class="dd-kv"><span class="dd-k">协议基准</span><span class="dd-v">GB/T 32960-{{ pack.baseVersion }}</span></div>
+          <div class="dd-kv">
+            <span class="dd-k">ID</span><span class="dd-v mono">{{ pack.id }}</span>
+          </div>
+          <div class="dd-kv">
+            <span class="dd-k">厂商</span><span class="dd-v">{{ pack.vendor || '-' }}</span>
+          </div>
+          <div class="dd-kv">
+            <span class="dd-k">协议基准</span><span class="dd-v">GB/T 32960-{{ pack.baseVersion }}</span>
+          </div>
           <div class="dd-kv">
             <span class="dd-k">应用范围</span>
             <span class="dd-v">
@@ -147,8 +149,12 @@ defineExpose({ invalidateJson })
               {{ pack.id === boundId ? '已绑定当前档案' : '未绑定' }}
             </span>
           </div>
-          <div class="dd-kv"><span class="dd-k">实时数据单元</span><span class="dd-v">{{ pack.unitCount }} 个</span></div>
-          <div class="dd-kv"><span class="dd-k">私有命令</span><span class="dd-v">{{ pack.commandCount }} 条</span></div>
+          <div class="dd-kv">
+            <span class="dd-k">实时数据单元</span><span class="dd-v">{{ pack.unitCount }} 个</span>
+          </div>
+          <div class="dd-kv">
+            <span class="dd-k">私有命令</span><span class="dd-v">{{ pack.commandCount }} 条</span>
+          </div>
         </div>
 
         <p v-if="pack.id !== boundId" class="dd-hint">在「客户端模拟 → 连接配置 → 扩展包」中绑定后生效。</p>
@@ -159,25 +165,21 @@ defineExpose({ invalidateJson })
             class="dd-btn"
             :loading="switchingId === pack.id"
             @click="emit('toggle', pack.id, pack.label, false)"
-          >禁用扩展包</a-button>
+            >禁用扩展包</a-button
+          >
           <a-button
             v-else
             class="dd-btn"
             :loading="switchingId === pack.id"
             @click="emit('toggle', pack.id, pack.label, true)"
-          >启用扩展包</a-button>
+            >启用扩展包</a-button
+          >
           <a-button class="dd-btn dd-btn-danger" @click="emit('delete', pack.id, pack.label)">删除扩展包</a-button>
         </div>
       </div>
 
       <!-- ===== JSON 配置:高亮代码块 + 复制 ===== -->
-      <PackJsonPanel
-        v-else
-        :html="detailJsonHtml"
-        :loading="packJsonLoading"
-        :error="packJsonError"
-        @copy="copyJson"
-      />
+      <PackJsonPanel v-else :html="detailJsonHtml" :loading="packJsonLoading" :error="packJsonError" @copy="copyJson" />
     </template>
   </a-drawer>
 </template>
@@ -202,7 +204,10 @@ defineExpose({ invalidateJson })
   font-size: 12px;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .dd-tab:hover {
@@ -301,7 +306,9 @@ defineExpose({ invalidateJson })
 .dd-btn-danger {
   color: var(--error-color, #ff4d4f);
   border-color: var(--border-subtle);
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .dd-btn-danger:hover {

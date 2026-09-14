@@ -6,8 +6,20 @@ import { stateToPayload } from '../api/backend'
 import * as MessageService from '../../wailsjs/go/bridge/MessageService'
 import { store } from '../state'
 import {
-  addArrayItem, arrayValues, bitOptions, bitsArrayOf, boolOf, defaultFor,
-  hexOf, numOf, setArrayValue, setBitsArray, setBool, setEnum, setHex, setNum,
+  addArrayItem,
+  arrayValues,
+  bitOptions,
+  bitsArrayOf,
+  boolOf,
+  defaultFor,
+  hexOf,
+  numOf,
+  setArrayValue,
+  setBitsArray,
+  setBool,
+  setEnum,
+  setHex,
+  setNum,
 } from '../composables/useFieldHelpers'
 import ExtensionCommands from './ExtensionCommands.vue'
 
@@ -211,7 +223,9 @@ async function onIntervalChange(v: number | string | null | undefined) {
                       </div>
 
                       <div v-else-if="f.kind === 'int' || f.kind === 'float'" class="field">
-                        <span class="field-label">{{ f.label }}<em v-if="f.unit"> ({{ f.unit }})</em></span>
+                        <span class="field-label"
+                          >{{ f.label }}<em v-if="f.unit"> ({{ f.unit }})</em></span
+                        >
                         <a-input-number
                           :value="numOf(row, f.key)"
                           size="small"
@@ -225,7 +239,9 @@ async function onIntervalChange(v: number | string | null | undefined) {
                       </div>
 
                       <div v-else-if="f.kind === 'bytes'" class="field">
-                        <span class="field-label">{{ f.label }}<em v-if="f.length"> ({{ f.length }}B hex)</em></span>
+                        <span class="field-label"
+                          >{{ f.label }}<em v-if="f.length"> ({{ f.length }}B hex)</em></span
+                        >
                         <a-input
                           :value="hexOf(row, f.key)"
                           class="hex-input"
@@ -256,7 +272,9 @@ async function onIntervalChange(v: number | string | null | undefined) {
                       </div>
 
                       <div v-else-if="f.kind === 'array_float'" class="field field-array">
-                        <span class="field-label">{{ f.label }}<em v-if="f.unit"> ({{ f.unit }})</em></span>
+                        <span class="field-label"
+                          >{{ f.label }}<em v-if="f.unit"> ({{ f.unit }})</em></span
+                        >
                         <div class="array-editor">
                           <a-space v-for="(_, ai) in arrayValues(row, f.key)" :key="ai" size="small">
                             <a-input-number
@@ -267,7 +285,9 @@ async function onIntervalChange(v: number | string | null | undefined) {
                             />
                             <a-button size="small" type="text" @click="removeArrayItem(row, f.key, ai)">×</a-button>
                           </a-space>
-                          <a-button size="small" type="dashed" @click="addArrayItem(row, f.key)">＋ {{ f.itemLabel }}</a-button>
+                          <a-button size="small" type="dashed" @click="addArrayItem(row, f.key)"
+                            >＋ {{ f.itemLabel }}</a-button
+                          >
                         </div>
                       </div>
                     </template>
@@ -294,13 +314,7 @@ async function onIntervalChange(v: number | string | null | undefined) {
 
             <a-form layout="vertical" class="reissue-form">
               <a-form-item label="起始时间偏移">
-                <a-input-number
-                  v-model:value="reissueOffset"
-                  :min="0"
-                  :max="86400"
-                  addon-after="秒"
-                  class="w-200"
-                />
+                <a-input-number v-model:value="reissueOffset" :min="0" :max="86400" addon-after="秒" class="w-200" />
                 <span class="field-hint">第一条的采集时间 = 当前时间 − 偏移</span>
               </a-form-item>
               <a-form-item label="补发条数">
@@ -308,13 +322,7 @@ async function onIntervalChange(v: number | string | null | undefined) {
                 <span class="field-hint">模拟离线期间采集的报文条数</span>
               </a-form-item>
               <a-form-item label="补发间隔">
-                <a-input-number
-                  v-model:value="reissueInterval"
-                  :min="1"
-                  :max="3600"
-                  addon-after="秒"
-                  class="w-200"
-                />
+                <a-input-number v-model:value="reissueInterval" :min="1" :max="3600" addon-after="秒" class="w-200" />
                 <span class="field-hint">每条的时间戳按此间隔逐条前移</span>
               </a-form-item>
             </a-form>
@@ -329,7 +337,7 @@ async function onIntervalChange(v: number | string | null | undefined) {
       </a-tab-pane>
     </a-tabs>
 
-      <a-modal v-model:open="previewOpen" title="报文预览" :footer="null" width="760px">
+    <a-modal v-model:open="previewOpen" title="报文预览" :footer="null" width="760px">
       <a-typography-text type="secondary">{{ previewCmd }} — 完整帧 HEX(点击即可复制)</a-typography-text>
       <a-typography-paragraph copyable code class="preview-hex">{{ previewHex }}</a-typography-paragraph>
     </a-modal>

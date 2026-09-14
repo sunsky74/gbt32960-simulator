@@ -95,7 +95,11 @@ async function toggleEnabled(id: string, label: string, enabled: boolean) {
   switchingId.value = id
   try {
     await ExtService.SetPackEnabled(id, enabled)
-    message.success(enabled ? `已启用「${label}」` : `已停用「${label}」${boundId.value === id ? ',运行时不再生效,重新启用自动恢复' : ''}`)
+    message.success(
+      enabled
+        ? `已启用「${label}」`
+        : `已停用「${label}」${boundId.value === id ? ',运行时不再生效,重新启用自动恢复' : ''}`,
+    )
     await refreshSchemaIfBound(id)
     await refresh()
     if (detailPack.value?.id === id) {
@@ -170,7 +174,9 @@ onMounted(refresh)
     <div class="ext-scroll">
       <a-empty
         v-if="filteredPacks.length === 0"
-        :description="store.packs.length === 0 ? '暂无扩展包。点击右上角「导入扩展包」安装能力。' : '没有符合过滤条件的扩展包'"
+        :description="
+          store.packs.length === 0 ? '暂无扩展包。点击右上角「导入扩展包」安装能力。' : '没有符合过滤条件的扩展包'
+        "
         class="ext-empty"
       />
       <div v-else class="ext-grid">

@@ -260,23 +260,23 @@ onUnmounted(() => {
     </header>
 
     <main class="layout">
-    <section ref="leftEl" class="left">
-      <div class="left-top" :style="{ height: topHeight + 'px' }">
-        <RealTimePanel />
-      </div>
-      <ResizableDivider :min-px="MIN_PANEL_PX" @drag="onDividerDrag" />
-      <div class="left-bottom">
-        <ConsolePanel />
-      </div>
-    </section>
+      <section ref="leftEl" class="left">
+        <div class="left-top" :style="{ height: topHeight + 'px' }">
+          <RealTimePanel />
+        </div>
+        <ResizableDivider :min-px="MIN_PANEL_PX" @drag="onDividerDrag" />
+        <div class="left-bottom">
+          <ConsolePanel />
+        </div>
+      </section>
 
-    <aside class="right">
-      <ConnectionCard />
-      <StateCard />
-      <AlarmCard />
-      <VehicleCard />
-      <TrackCard />
-    </aside>
+      <aside class="right">
+        <ConnectionCard />
+        <StateCard />
+        <AlarmCard />
+        <VehicleCard />
+        <TrackCard />
+      </aside>
     </main>
   </div>
 </template>

@@ -1,8 +1,8 @@
 // ConsolePanel 集成测试:详情行内的 JsonTree 渲染与冒泡隔离
 // Mock 约定:api/backend 与 wailsjs 绑定仅保证模块可导入,测试不触发任何后端调用;
 // 数据通过 store.consoleEvents 直接注入(与 console:events 事件推送后的形态一致)
-import {beforeEach, describe, expect, it, vi} from 'vitest'
-import {mount} from '@vue/test-utils'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { mount } from '@vue/test-utils'
 
 vi.mock('../../wailsjs/runtime/runtime', () => ({
   EventsOn: vi.fn(),
@@ -37,16 +37,25 @@ vi.mock('../api/backend', () => ({
 }))
 
 import ConsolePanel from './ConsolePanel.vue'
-import {store} from '../state'
+import { store } from '../state'
 
 // 模拟车辆登入帧:根层原始值 + 嵌套容器(与 Go 桥解码输出形态一致)
 const decoded = {
   起始符: '##',
-  命令单元: {命令标识: 'x', 应答标志: 'y'},
+  命令单元: { 命令标识: 'x', 应答标志: 'y' },
 }
 
 // 未注册的 ant-design-vue 全局组件统一 stub,消除解析警告(测试断言不依赖它们)
-const antStubs = ['a-button', 'a-input', 'a-checkbox', 'a-modal', 'a-select', 'a-radio-group', 'a-radio-button', 'a-radio']
+const antStubs = [
+  'a-button',
+  'a-input',
+  'a-checkbox',
+  'a-modal',
+  'a-select',
+  'a-radio-group',
+  'a-radio-button',
+  'a-radio',
+]
 
 describe('ConsolePanel 详情 JsonTree', () => {
   beforeEach(() => {
@@ -65,7 +74,7 @@ describe('ConsolePanel 详情 JsonTree', () => {
   })
 
   it('点击行展开详情,JsonTree 渲染根层键与折叠摘要', async () => {
-    const wrapper = mount(ConsolePanel, {global: {stubs: antStubs}})
+    const wrapper = mount(ConsolePanel, { global: { stubs: antStubs } })
     expect(wrapper.find('.row-detail').exists()).toBe(false)
     await wrapper.find('.console-row').trigger('click')
     expect(wrapper.find('.row-detail').exists()).toBe(true)
@@ -78,7 +87,7 @@ describe('ConsolePanel 详情 JsonTree', () => {
   })
 
   it('点击树内容器行不冒泡:详情块保留(行保持展开)且子树展开', async () => {
-    const wrapper = mount(ConsolePanel, {global: {stubs: antStubs}})
+    const wrapper = mount(ConsolePanel, { global: { stubs: antStubs } })
     await wrapper.find('.console-row').trigger('click')
     await wrapper.find('.jt-container').trigger('click')
     // 树行点击未触发宿主行的折叠切换

@@ -39,12 +39,8 @@ const status = reactive<ReplayStatus>({
 
 const online = computed(() => store.connState === 'online')
 const canStart = computed(() => !!info.value && online.value && !status.running)
-const percent = computed(() =>
-  status.total > 0 ? Math.round((status.index / status.total) * 100) : 0,
-)
-const tagText = computed(() =>
-  status.running ? '回放中' : info.value ? info.value.format.toUpperCase() : '未导入',
-)
+const percent = computed(() => (status.total > 0 ? Math.round((status.index / status.total) * 100) : 0))
+const tagText = computed(() => (status.running ? '回放中' : info.value ? info.value.format.toUpperCase() : '未导入'))
 
 let timer: number | undefined
 
@@ -157,9 +153,7 @@ onBeforeUnmount(stopPolling)
     <a-button size="small" block :loading="importing" @click="importFile">
       导入轨迹文件 (.gpx / .xlsx / .csv)
     </a-button>
-    <div v-if="info" class="track-file">
-      {{ info.name }} · {{ info.count }} 点
-    </div>
+    <div v-if="info" class="track-file">{{ info.name }} · {{ info.count }} 点</div>
 
     <div class="track-controls">
       <span class="label">循环</span>
@@ -179,9 +173,7 @@ onBeforeUnmount(stopPolling)
       <a-progress :percent="percent" size="small" status="active" />
       <div class="track-meta">
         {{ status.index }}/{{ status.total }} 点
-        <template v-if="status.index > 0">
-          · {{ status.lng.toFixed(6) }}, {{ status.lat.toFixed(6) }}
-        </template>
+        <template v-if="status.index > 0"> · {{ status.lng.toFixed(6) }}, {{ status.lat.toFixed(6) }} </template>
       </div>
     </template>
     <div v-if="status.lastError" class="track-error">{{ status.lastError }}</div>

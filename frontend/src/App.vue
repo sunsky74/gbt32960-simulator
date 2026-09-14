@@ -30,7 +30,6 @@ const activePage = computed(() => allNavItems.value.find((i) => i.key === active
 // Dark 为现有基准(逐字保留),Light 为新增主题;auto 模式取系统偏好,随 themeMode 实时切换。
 const { resolvedMode } = useTheme()
 const antdTheme = computed(() => antdThemes[resolvedMode.value])
-
 </script>
 
 <template>

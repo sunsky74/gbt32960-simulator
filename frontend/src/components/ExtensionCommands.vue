@@ -6,7 +6,15 @@ import { stateToPayload } from '../api/backend'
 import * as MessageService from '../../wailsjs/go/bridge/MessageService'
 import { store } from '../state'
 import {
-  bitOptions, bitsArrayOf, defaultFor, hexOf, numOf, setBitsArray, setEnum, setHex, setNum,
+  bitOptions,
+  bitsArrayOf,
+  defaultFor,
+  hexOf,
+  numOf,
+  setBitsArray,
+  setEnum,
+  setHex,
+  setNum,
 } from '../composables/useFieldHelpers'
 
 const reports = ref<Record<string, { on: boolean; interval: number }>>({})
@@ -109,7 +117,14 @@ async function onReportIntervalChange(g: GroupSchema) {
           <div v-for="(row, ri) in ensureGroup(g).rows" :key="ri" class="group-row">
             <div class="row-head">
               <span v-if="g.multiple" class="row-label">第 {{ ri + 1 }} 行</span>
-              <a-button v-if="g.multiple && ensureGroup(g).rows.length > 1" size="small" type="text" danger @click="removeRow(g, ri)">删除行</a-button>
+              <a-button
+                v-if="g.multiple && ensureGroup(g).rows.length > 1"
+                size="small"
+                type="text"
+                danger
+                @click="removeRow(g, ri)"
+                >删除行</a-button
+              >
             </div>
             <div class="fields-grid">
               <template v-for="f in g.fields" :key="f.key">
@@ -123,7 +138,9 @@ async function onReportIntervalChange(g: GroupSchema) {
                   />
                 </div>
                 <div v-else-if="f.kind === 'int' || f.kind === 'float'" class="field">
-                  <span class="field-label">{{ f.label }}<em v-if="f.unit"> ({{ f.unit }})</em></span>
+                  <span class="field-label"
+                    >{{ f.label }}<em v-if="f.unit"> ({{ f.unit }})</em></span
+                  >
                   <a-input-number
                     :value="numOf(row, f.key)"
                     size="small"
@@ -135,7 +152,9 @@ async function onReportIntervalChange(g: GroupSchema) {
                   />
                 </div>
                 <div v-else-if="f.kind === 'bytes'" class="field">
-                  <span class="field-label">{{ f.label }}<em v-if="f.length"> ({{ f.length }}B hex)</em></span>
+                  <span class="field-label"
+                    >{{ f.label }}<em v-if="f.length"> ({{ f.length }}B hex)</em></span
+                  >
                   <a-input
                     :value="hexOf(row, f.key)"
                     class="hex-input"
@@ -158,7 +177,11 @@ async function onReportIntervalChange(g: GroupSchema) {
           </div>
           <a-button v-if="g.multiple" size="small" type="dashed" block @click="addRow(g)">＋ 添加一行</a-button>
           <div class="extcmd-actions">
-            <a-switch v-model:checked="reportOf(cmdKeyOf(g)).on" size="small" @change="(v: unknown) => toggleReport(g, v === true)" />
+            <a-switch
+              v-model:checked="reportOf(cmdKeyOf(g)).on"
+              size="small"
+              @change="(v: unknown) => toggleReport(g, v === true)"
+            />
             <span class="report-label">周期上报</span>
             <a-input-number
               v-model:value="reportOf(cmdKeyOf(g)).interval"

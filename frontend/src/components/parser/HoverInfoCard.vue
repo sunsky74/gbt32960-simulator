@@ -52,21 +52,39 @@ const hoverByteDec = computed(() => {
   <div v-if="card" class="byte-card" :style="cardStyle">
     <template v-if="card.source === 'field' && card.field">
       <div class="bc-name">{{ card.field.name }}</div>
-      <div class="bc-kv"><span class="bc-k">Offset</span><span class="bc-v mono">{{ card.field.offset }}</span></div>
-      <div class="bc-kv"><span class="bc-k">Length</span><span class="bc-v mono">{{ card.field.length }}</span></div>
-      <div class="bc-kv"><span class="bc-k">类型</span><span class="bc-v mono">{{ card.field.type }}</span></div>
-      <div class="bc-kv"><span class="bc-k">HEX</span><span class="bc-v mono bc-hex">{{ truncHex(card.field.rawHex) }}</span></div>
-      <div class="bc-kv"><span class="bc-k">原始值</span><span class="bc-v mono">{{ card.field.rawValue }}</span></div>
+      <div class="bc-kv">
+        <span class="bc-k">Offset</span><span class="bc-v mono">{{ card.field.offset }}</span>
+      </div>
+      <div class="bc-kv">
+        <span class="bc-k">Length</span><span class="bc-v mono">{{ card.field.length }}</span>
+      </div>
+      <div class="bc-kv">
+        <span class="bc-k">类型</span><span class="bc-v mono">{{ card.field.type }}</span>
+      </div>
+      <div class="bc-kv">
+        <span class="bc-k">HEX</span><span class="bc-v mono bc-hex">{{ truncHex(card.field.rawHex) }}</span>
+      </div>
+      <div class="bc-kv">
+        <span class="bc-k">原始值</span><span class="bc-v mono">{{ card.field.rawValue }}</span>
+      </div>
       <div class="bc-kv">
         <span class="bc-k">解析值</span>
-        <span class="bc-v">{{ card.field.offsetVal }}<span v-if="card.field.unit" class="bc-u"> {{ card.field.unit }}</span></span>
+        <span class="bc-v"
+          >{{ card.field.offsetVal }}<span v-if="card.field.unit" class="bc-u"> {{ card.field.unit }}</span></span
+        >
       </div>
     </template>
     <template v-else>
       <div class="bc-name">字节 #{{ card.byte }}</div>
-      <div class="bc-kv"><span class="bc-k">Offset</span><span class="bc-v mono">{{ card.byte }}</span></div>
-      <div class="bc-kv"><span class="bc-k">HEX</span><span class="bc-v mono">{{ hoverByteHex }}</span></div>
-      <div class="bc-kv"><span class="bc-k">Decimal</span><span class="bc-v mono">{{ hoverByteDec }}</span></div>
+      <div class="bc-kv">
+        <span class="bc-k">Offset</span><span class="bc-v mono">{{ card.byte }}</span>
+      </div>
+      <div class="bc-kv">
+        <span class="bc-k">HEX</span><span class="bc-v mono">{{ hoverByteHex }}</span>
+      </div>
+      <div class="bc-kv">
+        <span class="bc-k">Decimal</span><span class="bc-v mono">{{ hoverByteDec }}</span>
+      </div>
       <div class="bc-kv">
         <span class="bc-k">所属字段</span>
         <span class="bc-v">{{ card.field?.name || '-' }}</span>

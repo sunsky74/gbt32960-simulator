@@ -37,10 +37,16 @@ export function clampNum(value: unknown, min: number, max: number, fallback: num
 
 function clampCaps(v: AppSettings): AppSettings {
   v.packetStreamCap = clampNum(
-    v.packetStreamCap, PACKET_STREAM_CAP_RANGE.min, PACKET_STREAM_CAP_RANGE.max, DEFAULTS.packetStreamCap,
+    v.packetStreamCap,
+    PACKET_STREAM_CAP_RANGE.min,
+    PACKET_STREAM_CAP_RANGE.max,
+    DEFAULTS.packetStreamCap,
   )
   v.consoleEventCap = clampNum(
-    v.consoleEventCap, CONSOLE_EVENT_CAP_RANGE.min, CONSOLE_EVENT_CAP_RANGE.max, DEFAULTS.consoleEventCap,
+    v.consoleEventCap,
+    CONSOLE_EVENT_CAP_RANGE.min,
+    CONSOLE_EVENT_CAP_RANGE.max,
+    DEFAULTS.consoleEventCap,
   )
   return v
 }

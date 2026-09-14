@@ -1,8 +1,8 @@
 // PacketDetail 右栏视图切换测试:字段表(默认)/ JSON 解析树
 // Mock 约定:ParserService.ParsePacket 返回含 tree 的解析结果(与 Go 桥输出形态一致);
 // ByteGridView/FieldTableView 与未注册的 ant-design-vue 组件统一 stub,聚焦视图切换逻辑
-import {describe, expect, it, vi} from 'vitest'
-import {flushPromises, mount} from '@vue/test-utils'
+import { describe, expect, it, vi } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
 
 vi.mock('../../../wailsjs/go/bridge/ParserService', () => ({
   ParsePacket: vi.fn(async () => ({
@@ -10,7 +10,7 @@ vi.mock('../../../wailsjs/go/bridge/ParserService', () => ({
     fields: [],
     tree: {
       起始符: '##',
-      命令单元: {命令标识: 1, 应答标志: 0},
+      命令单元: { 命令标识: 1, 应答标志: 0 },
       数据单元长度: 12,
     },
   })),
@@ -39,11 +39,11 @@ const stubs = {
 
 async function mountWithFrame(f: typeof frame | null) {
   const wrapper = mount(PacketDetail, {
-    props: {frame: f, parserPacks: []},
-    global: {stubs},
+    props: { frame: f, parserPacks: [] },
+    global: { stubs },
   })
   if (f) {
-    await wrapper.setProps({frame: {...f}})
+    await wrapper.setProps({ frame: { ...f } })
     await flushPromises()
   }
   return wrapper
@@ -76,7 +76,7 @@ describe('PacketDetail 视图切换', () => {
     const wrapper = await mountWithFrame(frame)
     await wrapper.findAll('.view-toggle')[1].trigger('click')
     // 模拟流中切换到另一帧:重新解析,视图仍是 JSON
-    await wrapper.setProps({frame: {...frame, hex: '23230200'}})
+    await wrapper.setProps({ frame: { ...frame, hex: '23230200' } })
     await flushPromises()
     expect(wrapper.find('.jt').exists()).toBe(true)
     expect(wrapper.find('.detail-right .col-hint').text()).toContain('JSON 解析树')

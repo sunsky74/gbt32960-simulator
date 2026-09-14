@@ -32,7 +32,11 @@ const rootEl = ref<HTMLElement | null>(null)
 const LEFT_MIN = 360
 const RIGHT_MIN = 480
 
-const { size: leftW, onDown: onSideBarDown, reset: resetSide } = useSplitter({
+const {
+  size: leftW,
+  onDown: onSideBarDown,
+  reset: resetSide,
+} = useSplitter({
   axis: 'x',
   bodyClass: 'dragging-ew',
   min: LEFT_MIN,
@@ -83,12 +87,7 @@ defineExpose({ flash, resetWidth })
       </div>
     </div>
 
-    <div
-      class="vbar"
-      title="拖拽调整左右宽度,双击恢复"
-      @pointerdown="onSideBarDown"
-      @dblclick="resetSide"
-    ></div>
+    <div class="vbar" title="拖拽调整左右宽度,双击恢复" @pointerdown="onSideBarDown" @dblclick="resetSide"></div>
 
     <div class="zone duo-right">
       <div class="zone-body duo-body">

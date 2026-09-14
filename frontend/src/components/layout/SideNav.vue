@@ -19,26 +19,14 @@ function onSelect(info: { key: string | number }) {
 </script>
 
 <template>
-  <aside
-    class="sidenav"
-    :class="{ collapsed }"
-    :style="{ '--nav-w': navWidth + 'px' }"
-  >
+  <aside class="sidenav" :class="{ collapsed }" :style="{ '--nav-w': navWidth + 'px' }">
     <div class="sidenav-brand" @click="emit('update:collapsed', !collapsed)">
       <ApiOutlined class="brand-icon" />
       <span v-if="!collapsed" class="brand-text">32960 工具</span>
-      <component
-        :is="collapsed ? MenuUnfoldOutlined : MenuFoldOutlined"
-        class="collapse-trigger"
-      />
+      <component :is="collapsed ? MenuUnfoldOutlined : MenuFoldOutlined" class="collapse-trigger" />
     </div>
 
-    <a-menu
-      mode="inline"
-      :inline-collapsed="collapsed"
-      :selected-keys="[activeNavKey]"
-      @click="onSelect"
-    >
+    <a-menu mode="inline" :inline-collapsed="collapsed" :selected-keys="[activeNavKey]" @click="onSelect">
       <a-menu-item v-for="item in navItems" :key="item.key">
         <component :is="item.icon" />
         <span>{{ item.title }}</span>
@@ -47,12 +35,7 @@ function onSelect(info: { key: string | number }) {
 
     <!-- 底部固定区:系统级入口(设置)下沉至此,与主菜单同为 a-menu 以继承统一样式/选中态/折叠 Tooltip -->
     <div class="sidenav-bottom">
-      <a-menu
-        mode="inline"
-        :inline-collapsed="collapsed"
-        :selected-keys="[activeNavKey]"
-        @click="onSelect"
-      >
+      <a-menu mode="inline" :inline-collapsed="collapsed" :selected-keys="[activeNavKey]" @click="onSelect">
         <a-menu-item v-for="item in bottomNavItems" :key="item.key">
           <component :is="item.icon" />
           <span>{{ item.title }}</span>

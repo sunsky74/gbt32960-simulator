@@ -1,11 +1,5 @@
 import { ref, markRaw, type Component } from 'vue'
-import {
-  AppstoreOutlined,
-  CarOutlined,
-  SearchOutlined,
-  DesktopOutlined,
-  SettingOutlined,
-} from '@ant-design/icons-vue'
+import { AppstoreOutlined, CarOutlined, SearchOutlined, DesktopOutlined, SettingOutlined } from '@ant-design/icons-vue'
 import ClientSimulatorPage from './pages/ClientSimulatorPage.vue'
 import PacketParserPage from './pages/PacketParserPage.vue'
 import ServerModePage from './pages/ServerModePage.vue'

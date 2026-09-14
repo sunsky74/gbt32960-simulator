@@ -2,7 +2,12 @@
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import {
-  CaretRightOutlined, ClearOutlined, DownloadOutlined, SendOutlined, SettingOutlined, StopOutlined,
+  CaretRightOutlined,
+  ClearOutlined,
+  DownloadOutlined,
+  SendOutlined,
+  SettingOutlined,
+  StopOutlined,
 } from '@ant-design/icons-vue'
 import * as ServerService from '../../wailsjs/go/bridge/ServerService'
 import * as ParserService from '../../wailsjs/go/bridge/ParserService'
@@ -51,9 +56,7 @@ const now = ref(Date.now())
 let tickTimer: number | undefined
 // 后端 Status 不含启动时刻,以前端首次观测到运行的时间近似(重启应用即重置)
 const startedAt = ref<number | null>(null)
-const uptimeText = computed(() =>
-  startedAt.value === null ? '-' : fmtDuration(startedAt.value, now.value),
-)
+const uptimeText = computed(() => (startedAt.value === null ? '-' : fmtDuration(startedAt.value, now.value)))
 
 let frameSeq = 0
 let offs: Array<() => void> = []
@@ -76,7 +79,11 @@ function pushRow(p: StreamRowInput) {
   frames.value = [
     ...frames.value,
     {
-      vin: '', cmd: '', hex: '', summary: '', dir: 'rx' as StreamRow['dir'],
+      vin: '',
+      cmd: '',
+      hex: '',
+      summary: '',
+      dir: 'rx' as StreamRow['dir'],
       ...p,
       id: ++frameSeq,
       time: p.time ?? new Date().toISOString(),
@@ -107,12 +114,22 @@ function subscribe() {
       if (e.online) {
         // 新连接:重置计数,loginAt 取事件到达时刻(Sessions 快照才有真实 loginAt)
         upsertSession({
-          vin: e.vin, peer: e.peer, online: true, platform: e.platform,
-          loginAt: nowIso, lastSeen: nowIso, rxCount: 0, txCount: 0,
+          vin: e.vin,
+          peer: e.peer,
+          online: true,
+          platform: e.platform,
+          loginAt: nowIso,
+          lastSeen: nowIso,
+          rxCount: 0,
+          txCount: 0,
         })
         pushRow({
-          kind: 'link', dir: 'link', vin: e.vin, peer: e.peer,
-          summary: `${e.platform ? '平台' : '客户端'}上线 ${e.peer}`, platform: e.platform,
+          kind: 'link',
+          dir: 'link',
+          vin: e.vin,
+          peer: e.peer,
+          summary: `${e.platform ? '平台' : '客户端'}上线 ${e.peer}`,
+          platform: e.platform,
         })
       } else {
         // 离线会话保留显示(灰化),报文仍可按其 VIN 过滤
@@ -126,8 +143,15 @@ function subscribe() {
     onWailsEvent('server:frame', (e) => {
       const dir: StreamRow['dir'] = e.dir === 'tx' ? 'tx' : 'rx'
       pushRow({
-        time: e.time, vin: e.vin, cmd: e.cmd, hex: e.hex, summary: e.summary,
-        kind: e.kind, dir, unauthed: e.unauthed, platform: e.platform,
+        time: e.time,
+        vin: e.vin,
+        cmd: e.cmd,
+        hex: e.hex,
+        summary: e.summary,
+        kind: e.kind,
+        dir,
+        unauthed: e.unauthed,
+        platform: e.platform,
       })
       // 会话 RX/TX 计数与最后活跃联动
       if (e.vin) {
@@ -307,9 +331,15 @@ onUnmounted(() => {
       <span class="server-status" :class="{ on: running }">{{ running ? '运行中' : '已停止' }}</span>
       <span class="server-proto">TCP</span>
       <span class="server-addr">{{ listenAddr || '未监听' }}</span>
-      <span class="server-stat">客户端 <b>{{ sessions.length }}</b></span>
-      <span class="server-stat">报文 <b>{{ frames.length }}</b></span>
-      <span class="server-stat">运行 <b>{{ uptimeText }}</b></span>
+      <span class="server-stat"
+        >客户端 <b>{{ sessions.length }}</b></span
+      >
+      <span class="server-stat"
+        >报文 <b>{{ frames.length }}</b></span
+      >
+      <span class="server-stat"
+        >运行 <b>{{ uptimeText }}</b></span
+      >
       <div class="spacer" />
       <a-button v-if="!running" type="primary" size="small" @click="startServer">
         <template #icon><CaretRightOutlined /></template>
@@ -351,12 +381,7 @@ onUnmounted(() => {
           :style="{ width: sessW + 'px' }"
           @select="onSelectSession"
         />
-        <ResizableDividerCol
-          :min-px="200"
-          :max-px="SESS_MAX_PX"
-          :right-min-px="MIN_STREAM_PX"
-          @drag="onSessDrag"
-        />
+        <ResizableDividerCol :min-px="200" :max-px="SESS_MAX_PX" :right-min-px="MIN_STREAM_PX" @drag="onSessDrag" />
         <PacketStream
           :frames="streamFrames"
           :running="running"

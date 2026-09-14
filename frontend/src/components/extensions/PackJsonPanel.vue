@@ -23,13 +23,7 @@ const emit = defineEmits<{
       </a-button>
     </div>
     <a-spin v-if="loading" class="dd-json-loading" />
-    <a-alert
-      v-else-if="error"
-      type="error"
-      show-icon
-      message="配置读取失败"
-      :description="error"
-    />
+    <a-alert v-else-if="error" type="error" show-icon message="配置读取失败" :description="error" />
     <!-- eslint-disable-next-line vue/no-v-html -- html 由本地 highlightJson(先 escapeHtml 再 token 着色)生成,内容已转义且来源为本地包文件 -->
     <pre v-else-if="html" class="dd-json" v-html="html"></pre>
     <p v-else class="dd-hint">暂无配置内容</p>

@@ -1,11 +1,11 @@
 // useFieldHelpers 纯函数冒烟测试(FieldSchema 经 import type 引入,运行时无 Wails 依赖)
-import {describe, expect, it} from 'vitest'
-import type {FieldSchema} from '../api/backend'
-import {defaultFor, hexOf, numOf, setHex, setNum} from './useFieldHelpers'
+import { describe, expect, it } from 'vitest'
+import type { FieldSchema } from '../api/backend'
+import { defaultFor, hexOf, numOf, setHex, setNum } from './useFieldHelpers'
 
 // 测试夹具仅需结构化字段;生成类的实例方法(convertValues)与测试无关,整体收窄断言
 function field(partial: Partial<FieldSchema>): FieldSchema {
-  return {key: 'f', label: '字段', kind: 'int', ...partial} as FieldSchema
+  return { key: 'f', label: '字段', kind: 'int', ...partial } as FieldSchema
 }
 
 describe('numOf / setNum', () => {
@@ -26,15 +26,15 @@ describe('numOf / setNum', () => {
 describe('hexOf / setHex', () => {
   it('合法 hex 小写化、去空白后往返', () => {
     const row: Record<string, unknown> = {}
-    const f = field({kind: 'bytes', length: 4})
+    const f = field({ kind: 'bytes', length: 4 })
     setHex(row, 'vin', f, ' AB cd ')
     expect(row['vin']).toBe('abcd')
     expect(hexOf(row, 'vin')).toBe('abcd')
   })
 
   it('空串清空、非法字符与超长被拒', () => {
-    const row: Record<string, unknown> = {vin: 'abcd'}
-    const f = field({kind: 'bytes', length: 2})
+    const row: Record<string, unknown> = { vin: 'abcd' }
+    const f = field({ kind: 'bytes', length: 2 })
 
     setHex(row, 'vin', f, 'zz99')
     expect(row['vin']).toBe('abcd') // 非法输入不写入
@@ -49,13 +49,22 @@ describe('hexOf / setHex', () => {
 
 describe('defaultFor', () => {
   it('各字段类型给出合理默认值', () => {
-    expect(defaultFor(field({kind: 'enum', enum: [{value: 2, label: 'B'}]}))).toBe(2)
-    expect(defaultFor(field({kind: 'bool'}))).toBe(false)
-    expect(defaultFor(field({kind: 'int', min: 5}))).toBe(5)
-    expect(defaultFor(field({kind: 'int'}))).toBe(0)
-    expect(defaultFor(field({kind: 'bytes', length: 3}))).toBe('000000')
-    expect(defaultFor(field({kind: 'array_float'}))).toEqual([])
-    expect(defaultFor(field({kind: 'bitgroup', bits: [{index: 0, label: 'a'}, {index: 1, label: 'b'}]})))
-      .toEqual({bit0: false, bit1: false})
+    expect(defaultFor(field({ kind: 'enum', enum: [{ value: 2, label: 'B' }] }))).toBe(2)
+    expect(defaultFor(field({ kind: 'bool' }))).toBe(false)
+    expect(defaultFor(field({ kind: 'int', min: 5 }))).toBe(5)
+    expect(defaultFor(field({ kind: 'int' }))).toBe(0)
+    expect(defaultFor(field({ kind: 'bytes', length: 3 }))).toBe('000000')
+    expect(defaultFor(field({ kind: 'array_float' }))).toEqual([])
+    expect(
+      defaultFor(
+        field({
+          kind: 'bitgroup',
+          bits: [
+            { index: 0, label: 'a' },
+            { index: 1, label: 'b' },
+          ],
+        }),
+      ),
+    ).toEqual({ bit0: false, bit1: false })
   })
 })

@@ -2,8 +2,14 @@
 import { computed, markRaw, onMounted, ref, type Component } from 'vue'
 import { message } from 'ant-design-vue'
 import {
-  ApiOutlined, CodeOutlined, DatabaseOutlined, ExperimentOutlined, GlobalOutlined,
-  SettingOutlined, SearchOutlined, ToolOutlined,
+  ApiOutlined,
+  CodeOutlined,
+  DatabaseOutlined,
+  ExperimentOutlined,
+  GlobalOutlined,
+  SettingOutlined,
+  SearchOutlined,
+  ToolOutlined,
 } from '@ant-design/icons-vue'
 import * as SystemService from '../../wailsjs/go/bridge/SystemService'
 import * as SettingsService from '../../wailsjs/go/bridge/SettingsService'
@@ -113,7 +119,6 @@ async function openDir(path?: string) {
       <div class="sb-scroll">
         <!-- 限宽内容容器:大屏不横向无限拉伸(VS Code 设置页风格) -->
         <div class="sb-content">
-
           <!-- ================ 常用 ================ -->
           <SettingsCommonPanel v-if="activeCategory === 'common'" />
 
@@ -147,7 +152,6 @@ async function openDir(path?: string) {
             :storage-paths="storagePaths"
             :open-dir="openDir"
           />
-
         </div>
       </div>
     </section>
@@ -206,7 +210,9 @@ async function openDir(path?: string) {
   font-size: 13px;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background-color 0.1s ease, color 0.1s ease;
+  transition:
+    background-color 0.1s ease,
+    color 0.1s ease;
 }
 
 .sn-item:hover {

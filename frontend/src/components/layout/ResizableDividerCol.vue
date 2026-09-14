@@ -36,10 +36,7 @@ function startDrag(e: PointerEvent) {
     const contentLeft = rect.left + padLeft
     const contentW = rect.width - padLeft - padRight - divider.offsetWidth
     const min = props.minPx
-    const max = Math.min(
-      props.maxPx ?? Number.POSITIVE_INFINITY,
-      contentW - (props.rightMinPx ?? props.minPx),
-    )
+    const max = Math.min(props.maxPx ?? Number.POSITIVE_INFINITY, contentW - (props.rightMinPx ?? props.minPx))
     if (max <= min) return
     const leftPx = Math.min(Math.max(ev.clientX - contentLeft, min), max)
     emit('drag', Math.round(leftPx))

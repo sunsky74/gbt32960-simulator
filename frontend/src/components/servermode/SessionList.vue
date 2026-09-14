@@ -17,9 +17,7 @@ const search = ref('')
 const visibleSessions = computed<SessionRow[]>(() => {
   const kw = search.value.trim().toLowerCase()
   if (!kw) return props.sessions
-  return props.sessions.filter(
-    (s) => s.vin.toLowerCase().includes(kw) || s.peer.toLowerCase().includes(kw),
-  )
+  return props.sessions.filter((s) => s.vin.toLowerCase().includes(kw) || s.peer.toLowerCase().includes(kw))
 })
 
 // 在线时长:loginAt 起算;离线会话停格在最后活跃时刻
@@ -37,13 +35,7 @@ function onlineDur(s: SessionRow): string {
   <aside class="zone session-zone">
     <header class="zone-head">
       <span class="zone-title">客户端会话</span>
-      <a-input-search
-        v-model:value="search"
-        size="small"
-        class="zone-search"
-        placeholder="搜索 VIN / IP"
-        allow-clear
-      />
+      <a-input-search v-model:value="search" size="small" class="zone-search" placeholder="搜索 VIN / IP" allow-clear />
       <span v-if="sessions.length" class="toolbar-count">{{ sessions.length }}</span>
     </header>
     <div class="session-list">
@@ -69,7 +61,9 @@ function onlineDur(s: SessionRow): string {
       </div>
       <div v-if="!visibleSessions.length" class="console-empty">
         <div class="console-empty-title">{{ sessions.length ? '无匹配会话' : '暂无客户端连接' }}</div>
-        <div class="console-empty-sub">{{ sessions.length ? '调整搜索关键字后重试' : '服务启动后,接入的客户端将显示在此' }}</div>
+        <div class="console-empty-sub">
+          {{ sessions.length ? '调整搜索关键字后重试' : '服务启动后,接入的客户端将显示在此' }}
+        </div>
       </div>
     </div>
   </aside>

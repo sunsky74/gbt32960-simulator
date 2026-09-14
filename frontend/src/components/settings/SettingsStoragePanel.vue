@@ -25,7 +25,12 @@ const historyPlanned: PlannedRow[] = [
   { title: '最大历史记录数量', description: '超出后自动淘汰最旧记录', control: 'select', value: '100' },
 ]
 const cleanPlanned: PlannedRow[] = [
-  { title: '清理缓存与历史数据', description: '清除界面缓存与解析历史(不影响连接档案与扩展包)', control: 'button', value: '清理' },
+  {
+    title: '清理缓存与历史数据',
+    description: '清除界面缓存与解析历史(不影响连接档案与扩展包)',
+    control: 'button',
+    value: '清理',
+  },
 ]
 </script>
 
@@ -52,7 +57,8 @@ const cleanPlanned: PlannedRow[] = [
         <a-input-number
           v-model:value="exportCap"
           size="small"
-          :min="1000" :max="500000"
+          :min="1000"
+          :max="500000"
           :style="{ width: CTRL_W }"
           :disabled="exportCap === null"
           @change="saveExportCap"

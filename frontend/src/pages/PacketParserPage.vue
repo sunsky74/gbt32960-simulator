@@ -121,11 +121,7 @@ function onFieldHover(r: ByteRange | null, pos?: { x: number; y: number }) {
   }
   // 同一字段区间内移动:仅跟随鼠标刷新信息卡片,不重建高亮(避免高频重扫)
   const cur = hovered.value
-  const same =
-    cur !== null &&
-    cur.source === 'field' &&
-    cur.range.start === r.start &&
-    cur.range.end === r.end
+  const same = cur !== null && cur.source === 'field' && cur.range.start === r.start && cur.range.end === r.end
   if (!same) hovered.value = { range: r, source: 'field', byte: null }
   if (pos) byteHover.value = { x: pos.x, y: pos.y, byte: r.start, field: findField(r.start), source: 'field' }
 }
@@ -147,7 +143,11 @@ const topZoneEl = ref<HTMLElement | null>(null)
 const TOP_MIN = 120
 const BOTTOM_MIN = 150
 
-const { size: topH, onDown: onTopBarDown, reset: resetTop } = useSplitter({
+const {
+  size: topH,
+  onDown: onTopBarDown,
+  reset: resetTop,
+} = useSplitter({
   axis: 'y',
   bodyClass: 'dragging-ns',
   min: TOP_MIN,
@@ -166,7 +166,10 @@ onMounted(() => {
 // ---------- 校验与解析 ----------
 // 去空白、0x 前缀与 , : - _ 分隔符(与 Go NormalizeHex 对齐)
 function strippedHex(): string {
-  return hexInput.value.replace(/\s+/g, '').replace(/0[xX]/g, '').replace(/[,:_-]/g, '')
+  return hexInput.value
+    .replace(/\s+/g, '')
+    .replace(/0[xX]/g, '')
+    .replace(/[,:_-]/g, '')
 }
 
 // 去空白与 0x 前缀后:必须全部是 hex 且长度为偶数
@@ -292,12 +295,7 @@ function doCopyHex() {
           />
         </div>
 
-        <div
-          class="hbar"
-          title="拖拽调整上下高度,双击恢复"
-          @pointerdown="onTopBarDown"
-          @dblclick="resetTop"
-        ></div>
+        <div class="hbar" title="拖拽调整上下高度,双击恢复" @pointerdown="onTopBarDown" @dblclick="resetTop"></div>
 
         <ParserDuoZone
           ref="duoEl"

@@ -15,13 +15,21 @@ const shortcuts = [
   <p class="cat-hint">以下为规划的快捷键方案;快捷键功能将在后续版本开放,当前尚未生效。</p>
   <table class="keys-table">
     <thead>
-      <tr><th>操作</th><th>快捷键</th><th>状态</th></tr>
+      <tr>
+        <th>操作</th>
+        <th>快捷键</th>
+        <th>状态</th>
+      </tr>
     </thead>
     <tbody>
       <tr v-for="s in shortcuts" :key="s.action">
         <td>{{ s.action }}</td>
-        <td><span class="key-cap mono">{{ s.key }}</span></td>
-        <td><span class="row-badge">{{ PLANNED }}</span></td>
+        <td>
+          <span class="key-cap mono">{{ s.key }}</span>
+        </td>
+        <td>
+          <span class="row-badge">{{ PLANNED }}</span>
+        </td>
       </tr>
     </tbody>
   </table>

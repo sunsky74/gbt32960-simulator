@@ -7,9 +7,7 @@ import { bitsArrayOf, ensureRow, fieldOf, setBitsArray } from '../../composables
 const row = computed(() => ensureRow('alarm'))
 const bitsField = computed(() => fieldOf('alarm', 'bits'))
 
-const options = computed(() =>
-  (bitsField.value?.bits ?? []).map((b) => ({ label: b.label, value: `bit${b.index}` })),
-)
+const options = computed(() => (bitsField.value?.bits ?? []).map((b) => ({ label: b.label, value: `bit${b.index}` })))
 </script>
 
 <template>

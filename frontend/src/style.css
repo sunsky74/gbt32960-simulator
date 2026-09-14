@@ -114,8 +114,9 @@ body,
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC',
-    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei',
+    sans-serif;
   font-size: 14px;
   color: var(--text-primary);
 }
@@ -262,7 +263,9 @@ body {
   height: 4px;
   border-radius: 999px;
   background: var(--divider-grip);
-  transition: background 0.15s, width 0.15s;
+  transition:
+    background 0.15s,
+    width 0.15s;
 }
 
 .resizable-divider:hover .divider-grip,
@@ -298,7 +301,9 @@ body {
   width: 4px;
   height: 36px;
   border-radius: 999px;
-  transition: background 0.15s, height 0.15s;
+  transition:
+    background 0.15s,
+    height 0.15s;
 }
 
 .resizable-divider-col:hover .divider-grip,
@@ -892,7 +897,6 @@ body {
   font-size: 12px;
 }
 
-
 /* ============================================================
    弹层蒙层(§11):antd 默认 rgba(0,0,0,0.45) 之上叠加轻微毛玻璃
    ============================================================ */
@@ -909,14 +913,30 @@ body {
 }
 
 /* 控件固定宽度档位(§5 档位表):替代模板内联 style="width" */
-.w-84 { width: 84px; }
-.w-110 { width: 110px; }
-.w-130 { width: 130px; }
-.w-160 { width: 160px; }
-.w-180 { width: 180px; }
-.w-200 { width: 200px; }
-.w-220 { width: 220px; }
-.w-300 { width: 300px; }
+.w-84 {
+  width: 84px;
+}
+.w-110 {
+  width: 110px;
+}
+.w-130 {
+  width: 130px;
+}
+.w-160 {
+  width: 160px;
+}
+.w-180 {
+  width: 180px;
+}
+.w-200 {
+  width: 200px;
+}
+.w-220 {
+  width: 220px;
+}
+.w-300 {
+  width: 300px;
+}
 
 /* ============================================================
    滚动条
@@ -1328,8 +1348,6 @@ html[data-no-anim] *::after {
   color: #a8071a;
 }
 
-
-
 :root[data-theme='light'] .st-warn {
   color: #a8071a;
 }
@@ -1581,10 +1599,18 @@ html[data-no-anim] *::after {
 }
 
 /* ---- 服务端模式:报文行特殊颜色(kind 区分,亮暗主题各自定义) ---- */
-.frame-unknown td { color: var(--c-unknown); }          /* 橙:未知命令字 */
-.frame-encrypted td { color: var(--c-encrypted); }        /* 紫:加密帧 */
-.frame-warn td { color: #cf1322; }             /* 红:服务端告警(空闲超时/超长/断开) */
-:root[data-theme='light'] .frame-warn td { color: #a8071a; }
+.frame-unknown td {
+  color: var(--c-unknown);
+} /* 橙:未知命令字 */
+.frame-encrypted td {
+  color: var(--c-encrypted);
+} /* 紫:加密帧 */
+.frame-warn td {
+  color: #cf1322;
+} /* 红:服务端告警(空闲超时/超长/断开) */
+:root[data-theme='light'] .frame-warn td {
+  color: #a8071a;
+}
 
 /* 未登入连接的报文:命令列灰色小标记(与 kind 颜色可叠加,不整行着色) */
 .unauthed-tag {

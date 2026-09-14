@@ -3,7 +3,16 @@ import { computed, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import * as ServerService from '../../../wailsjs/go/bridge/ServerService'
 import {
-  bitsArrayOf, bitOptions, boolOf, hexOf, numOf, setBitsArray, setBool, setEnum, setHex, setNum,
+  bitsArrayOf,
+  bitOptions,
+  boolOf,
+  hexOf,
+  numOf,
+  setBitsArray,
+  setBool,
+  setEnum,
+  setHex,
+  setNum,
 } from '../../composables/useFieldHelpers'
 import type { FieldSchema } from '../../api/backend'
 
@@ -79,9 +88,7 @@ defineExpose({ open })
     :ok-button-props="{ disabled: !activeExtCmd }"
     @ok="sendExtCmd"
   >
-    <p class="modal-hint">
-      目标车辆 {{ selectedVin || '(未选中)' }} · 命令来自已导入扩展包(scope 含 server)的下发模板
-    </p>
+    <p class="modal-hint">目标车辆 {{ selectedVin || '(未选中)' }} · 命令来自已导入扩展包(scope 含 server)的下发模板</p>
     <a-select
       :value="extCmdKey || undefined"
       :options="extCmdOptions"
@@ -102,7 +109,9 @@ defineExpose({ open })
           />
         </div>
         <div v-else-if="f.kind === 'int' || f.kind === 'float'" class="field">
-          <span class="field-label">{{ f.label }}<em v-if="f.unit"> ({{ f.unit }})</em></span>
+          <span class="field-label"
+            >{{ f.label }}<em v-if="f.unit"> ({{ f.unit }})</em></span
+          >
           <a-input-number
             :value="numOf(extCmdRow, f.key)"
             size="small"
@@ -113,7 +122,9 @@ defineExpose({ open })
           />
         </div>
         <div v-else-if="f.kind === 'bytes'" class="field">
-          <span class="field-label">{{ f.label }}<em v-if="f.length"> ({{ f.length }}B hex)</em></span>
+          <span class="field-label"
+            >{{ f.label }}<em v-if="f.length"> ({{ f.length }}B hex)</em></span
+          >
           <a-input
             :value="hexOf(extCmdRow, f.key)"
             class="hex-input"

@@ -42,10 +42,7 @@ const tooltipHex = computed(() => {
   const lines: string[] = []
   for (let i = 0; i < bytes.length; i += 16) lines.push(bytes.slice(i, i + 16).join(' '))
   if (lines.length > MAX_LINES) {
-    return (
-      lines.slice(0, MAX_LINES).join('\n') +
-      `\n…(已截断,共 ${bytes.length} 字节;点击报文可编辑,复制HEX 可取全文)`
-    )
+    return lines.slice(0, MAX_LINES).join('\n') + `\n…(已截断,共 ${bytes.length} 字节;点击报文可编辑,复制HEX 可取全文)`
   }
   return lines.join('\n')
 })

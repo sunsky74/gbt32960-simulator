@@ -1,6 +1,6 @@
 // clampNum 纯函数冒烟测试(非法回落默认 / 越界钳回区间;localStorage 侧效应由 jsdom 提供)
-import {describe, expect, it} from 'vitest'
-import {clampNum} from './useAppSettings'
+import { describe, expect, it } from 'vitest'
+import { clampNum } from './useAppSettings'
 
 describe('clampNum', () => {
   it('区间内的值原样返回', () => {

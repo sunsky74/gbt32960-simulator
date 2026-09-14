@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed, ref} from 'vue'
+import { computed, ref } from 'vue'
 
 // JsonTree:可折叠 JSON 树,用于展示 GB/T 32960 解析后的帧数据
 // 约定:根层条目直接展开渲染(无根标签行);嵌套容器默认折叠;
@@ -12,7 +12,7 @@ interface JtEntry {
   value: unknown
 }
 
-const props = defineProps<{value: unknown}>()
+const props = defineProps<{ value: unknown }>()
 
 // 当前实例内已展开条目的 key 集合;更深层级由递归子实例各自管理,天然互不影响
 const expandedKeys = ref<Set<string>>(new Set())
@@ -27,7 +27,7 @@ const entries = computed<JtEntry[]>(() => {
   const v = props.value
   if (!isContainer(v)) return []
   if (Array.isArray(v)) {
-    return v.map((item, i) => ({key: String(i), text: `[${i}]`, value: item}))
+    return v.map((item, i) => ({ key: String(i), text: `[${i}]`, value: item }))
   }
   return Object.entries(v as Record<string, unknown>).map(([k, val]) => ({
     key: k,
@@ -86,12 +86,7 @@ function primClass(v: unknown): string {
     </div>
     <template v-for="entry in entries" :key="entry.key">
       <!-- 容器条目行:整行可点击切换;stop 防止冒泡触发宿主行 -->
-      <div
-        v-if="isContainer(entry.value)"
-        class="jt-row jt-container"
-        role="button"
-        @click.stop="toggle(entry.key)"
-      >
+      <div v-if="isContainer(entry.value)" class="jt-row jt-container" role="button" @click.stop="toggle(entry.key)">
         <span class="jt-toggle">{{ isOpen(entry.key) ? '▾' : '▸' }}</span>
         <span class="jt-key">{{ entry.text }}</span>
         <span class="jt-count">{{ countText(entry.value) }}</span>

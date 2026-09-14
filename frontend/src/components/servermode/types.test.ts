@@ -1,6 +1,6 @@
 // 服务端格式化纯函数冒烟测试(types.ts 无外部依赖,直接单测)
-import {describe, expect, it} from 'vitest'
-import {cmdNameOf, fmtClock, fmtDuration, fmtMs} from './types'
+import { describe, expect, it } from 'vitest'
+import { cmdNameOf, fmtClock, fmtDuration, fmtMs } from './types'
 
 describe('cmdNameOf', () => {
   it('识别已知命令字(大小写不敏感)', () => {

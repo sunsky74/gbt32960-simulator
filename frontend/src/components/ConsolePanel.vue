@@ -185,9 +185,7 @@ async function clearConsole() {
         placeholder="搜索 cmd / hex / 文本"
         allow-clear
       />
-      <label class="toolbar-label check-line">
-        <a-checkbox v-model:checked="autoScroll" />跟随
-      </label>
+      <label class="toolbar-label check-line"> <a-checkbox v-model:checked="autoScroll" />跟随 </label>
       <a-button
         size="small"
         :type="store.consolePaused ? 'primary' : 'default'"
@@ -201,12 +199,7 @@ async function clearConsole() {
     </div>
 
     <div ref="listEl" class="console-list">
-      <div
-        v-for="(e, i) in visible()"
-        :key="i"
-        class="console-row"
-        @click="expandedIdx = expandedIdx === i ? null : i"
-      >
+      <div v-for="(e, i) in visible()" :key="i" class="console-row" @click="expandedIdx = expandedIdx === i ? null : i">
         <div class="row-main">
           <span class="row-time">{{ timeText(e.time) }}</span>
           <span class="row-kind" :class="e.kind">{{ kindText(e.kind) }}</span>

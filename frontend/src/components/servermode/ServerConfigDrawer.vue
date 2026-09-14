@@ -10,8 +10,14 @@ const props = defineProps<{
 
 // ---------- 服务配置抽屉:表单状态 + 启停/空闲设置动作 ----------
 const cfg = reactive({
-  ip: '127.0.0.1', port: 32960, idleEnabled: true, idleSeconds: 60,
-  maxConns: 64, maxFrameBytes: 8192, logLines: 500, maxVinsPerConn: 128,
+  ip: '127.0.0.1',
+  port: 32960,
+  idleEnabled: true,
+  idleSeconds: 60,
+  maxConns: 64,
+  maxFrameBytes: 8192,
+  logLines: 500,
+  maxVinsPerConn: 128,
 })
 const cfgOpen = ref(false)
 
@@ -109,8 +115,12 @@ defineExpose({ open, start, stop })
       <div class="cfg-item">
         <span class="form-label">空闲秒数</span>
         <a-input-number
-          v-model:value="cfg.idleSeconds" size="small" :min="5" :max="3600"
-          class="cfg-num" :disabled="!cfg.idleEnabled"
+          v-model:value="cfg.idleSeconds"
+          size="small"
+          :min="5"
+          :max="3600"
+          class="cfg-num"
+          :disabled="!cfg.idleEnabled"
         />
       </div>
       <div class="cfg-group-title">高级参数</div>
@@ -139,13 +149,7 @@ defineExpose({ open, start, stop })
       message="服务运行中:修改空闲断开设置将立即下发生效"
       class="cfg-hint"
     />
-    <a-alert
-      v-else
-      type="info"
-      show-icon
-      message="启动后客户端可连接此地址上报报文"
-      class="cfg-hint"
-    />
+    <a-alert v-else type="info" show-icon message="启动后客户端可连接此地址上报报文" class="cfg-hint" />
     <div class="cfg-actions">
       <a-button v-if="!running" type="primary" size="small" @click="startFromDrawer">
         <template #icon><CaretRightOutlined /></template>

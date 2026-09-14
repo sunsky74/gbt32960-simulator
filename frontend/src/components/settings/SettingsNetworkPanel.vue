@@ -9,12 +9,19 @@ const plannedRows: PlannedRow[] = [
   { title: '默认连接超时', description: '新建档案的初始连接超时', control: 'select', value: '10 秒' },
   { title: '自动重连', description: '断线后默认是否自动重连(档案级开关的默认值)', control: 'switch' },
   { title: '重连次数 / 间隔', description: '自动重连的尝试次数与间隔', control: 'select', value: '5 次 · 10 秒' },
-  { title: 'TLS 默认行为', description: '新建档案的 TLS 初始配置(跳过证书验证等)', control: 'select', value: '标准校验' },
+  {
+    title: 'TLS 默认行为',
+    description: '新建档案的 TLS 初始配置(跳过证书验证等)',
+    control: 'select',
+    value: '标准校验',
+  },
 ]
 </script>
 
 <template>
-  <p class="cat-hint">此处配置软件级默认行为;具体连接的地址 / 端口 / VIN / 心跳等按档案配置,见「客户端模拟 → 连接配置」。</p>
+  <p class="cat-hint">
+    此处配置软件级默认行为;具体连接的地址 / 端口 / VIN / 心跳等按档案配置,见「客户端模拟 → 连接配置」。
+  </p>
   <div class="row-group">
     <PlannedSettingRows :rows="plannedRows" />
   </div>

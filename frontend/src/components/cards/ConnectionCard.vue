@@ -90,13 +90,7 @@ onMounted(refreshPacks)
       </template>
 
       <a-form-item label="心跳间隔" name="heartbeatSec">
-        <a-input-number
-          v-model:value="cfg.heartbeatSec"
-          :min="0"
-          :max="3600"
-          addon-after="秒"
-          class="w-180"
-        />
+        <a-input-number v-model:value="cfg.heartbeatSec" :min="0" :max="3600" addon-after="秒" class="w-180" />
         <span class="field-hint">0 = 不发心跳 (0x07)</span>
       </a-form-item>
 

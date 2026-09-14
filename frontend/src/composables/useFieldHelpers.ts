@@ -48,7 +48,12 @@ export function arrayValues(row: Record<string, unknown>, key: string): number[]
   return Array.isArray(v) ? v.map(Number) : []
 }
 
-export function setArrayValue(row: Record<string, unknown>, key: string, idx: number, v: number | string | null | undefined) {
+export function setArrayValue(
+  row: Record<string, unknown>,
+  key: string,
+  idx: number,
+  v: number | string | null | undefined,
+) {
   const arr = arrayValues(row, key).slice()
   arr[idx] = typeof v === 'number' ? v : Number(v) || 0
   row[key] = arr

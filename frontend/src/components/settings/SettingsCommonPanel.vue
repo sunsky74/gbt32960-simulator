@@ -16,10 +16,7 @@ const plannedRows: PlannedRow[] = [
 
 <template>
   <div class="row-group">
-    <SettingRow
-      title="启动时恢复上次工作区"
-      description="启动后自动打开上次使用的页面(客户端模拟 / 报文解析等)"
-    >
+    <SettingRow title="启动时恢复上次工作区" description="启动后自动打开上次使用的页面(客户端模拟 / 报文解析等)">
       <template #action>
         <a-switch v-model:checked="appSettings.restoreLastPage" size="small" />
       </template>

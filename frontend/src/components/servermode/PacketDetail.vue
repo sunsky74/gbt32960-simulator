@@ -124,8 +124,7 @@ function onFieldHover(r: ByteRange | null, pos?: { x: number; y: number }) {
     return
   }
   const cur = hovered.value
-  const same =
-    cur !== null && cur.source === 'field' && cur.range.start === r.start && cur.range.end === r.end
+  const same = cur !== null && cur.source === 'field' && cur.range.start === r.start && cur.range.end === r.end
   if (!same) hovered.value = { range: r, source: 'field', byte: null }
   if (pos) byteHover.value = { x: pos.x, y: pos.y, byte: r.start, field: findField(r.start), source: 'field' }
 }
@@ -171,7 +170,7 @@ function dirText(f: StreamRow): string {
 const colsEl = ref<HTMLElement | null>(null)
 const HEX_MIN_PX = 200
 const PARSE_MIN_PX = 240
-  const COLS_DIVIDER_PX = 12 // 与 .resizable-divider-col 的 12px 命中区同步
+const COLS_DIVIDER_PX = 12 // 与 .resizable-divider-col 的 12px 命中区同步
 const hexW = ref<number | null>(null)
 
 function onColsDrag(px: number) {
@@ -206,7 +205,10 @@ onBeforeUnmount(() => window.removeEventListener('resize', onWindowResize))
       <header class="zone-head">
         <span class="zone-title">报文详情</span>
         <span class="bar-sep" />
-        <span class="dir-badge" :class="frame.kind === 'link' ? 'dir-link' : frame.kind === 'warn' ? 'dir-error' : frame.dir">
+        <span
+          class="dir-badge"
+          :class="frame.kind === 'link' ? 'dir-link' : frame.kind === 'warn' ? 'dir-error' : frame.dir"
+        >
           {{ dirText(frame) }}
         </span>
         <span class="detail-meta mono">{{ fmtMs(frame.time) }}</span>
@@ -222,10 +224,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', onWindowResize))
       </header>
 
       <div v-if="frame.kind === 'normal'" ref="colsEl" class="detail-cols">
-        <div
-          class="detail-left"
-          :style="hexW !== null ? { flex: '0 0 auto', width: hexW + 'px' } : undefined"
-        >
+        <div class="detail-left" :style="hexW !== null ? { flex: '0 0 auto', width: hexW + 'px' } : undefined">
           <div class="col-head">
             HEX 字节视图
             <span class="col-hint">悬停字节查看字段信息</span>
@@ -242,11 +241,7 @@ onBeforeUnmount(() => window.removeEventListener('resize', onWindowResize))
             />
           </div>
         </div>
-        <ResizableDividerCol
-          :min-px="HEX_MIN_PX"
-          :right-min-px="PARSE_MIN_PX"
-          @drag="onColsDrag"
-        />
+        <ResizableDividerCol :min-px="HEX_MIN_PX" :right-min-px="PARSE_MIN_PX" @drag="onColsDrag" />
         <div class="detail-right">
           <div class="col-head">
             协议解析
@@ -310,21 +305,40 @@ onBeforeUnmount(() => window.removeEventListener('resize', onWindowResize))
     <div v-if="byteHover" class="byte-card" :style="cardStyle">
       <template v-if="byteHover.source === 'field' && byteHover.field">
         <div class="bc-name">{{ byteHover.field.name }}</div>
-        <div class="bc-kv"><span class="bc-k">Offset</span><span class="bc-v mono">{{ byteHover.field.offset }}</span></div>
-        <div class="bc-kv"><span class="bc-k">Length</span><span class="bc-v mono">{{ byteHover.field.length }}</span></div>
-        <div class="bc-kv"><span class="bc-k">类型</span><span class="bc-v mono">{{ byteHover.field.type }}</span></div>
-        <div class="bc-kv"><span class="bc-k">HEX</span><span class="bc-v mono bc-hex">{{ truncHex(byteHover.field.rawHex) }}</span></div>
-        <div class="bc-kv"><span class="bc-k">原始值</span><span class="bc-v mono">{{ byteHover.field.rawValue }}</span></div>
+        <div class="bc-kv">
+          <span class="bc-k">Offset</span><span class="bc-v mono">{{ byteHover.field.offset }}</span>
+        </div>
+        <div class="bc-kv">
+          <span class="bc-k">Length</span><span class="bc-v mono">{{ byteHover.field.length }}</span>
+        </div>
+        <div class="bc-kv">
+          <span class="bc-k">类型</span><span class="bc-v mono">{{ byteHover.field.type }}</span>
+        </div>
+        <div class="bc-kv">
+          <span class="bc-k">HEX</span><span class="bc-v mono bc-hex">{{ truncHex(byteHover.field.rawHex) }}</span>
+        </div>
+        <div class="bc-kv">
+          <span class="bc-k">原始值</span><span class="bc-v mono">{{ byteHover.field.rawValue }}</span>
+        </div>
         <div class="bc-kv">
           <span class="bc-k">解析值</span>
-          <span class="bc-v">{{ byteHover.field.offsetVal }}<span v-if="byteHover.field.unit" class="bc-u"> {{ byteHover.field.unit }}</span></span>
+          <span class="bc-v"
+            >{{ byteHover.field.offsetVal
+            }}<span v-if="byteHover.field.unit" class="bc-u"> {{ byteHover.field.unit }}</span></span
+          >
         </div>
       </template>
       <template v-else>
         <div class="bc-name">字节 #{{ byteHover.byte }}</div>
-        <div class="bc-kv"><span class="bc-k">Offset</span><span class="bc-v mono">{{ byteHover.byte }}</span></div>
-        <div class="bc-kv"><span class="bc-k">HEX</span><span class="bc-v mono">{{ hoverByteHex }}</span></div>
-        <div class="bc-kv"><span class="bc-k">Decimal</span><span class="bc-v mono">{{ hoverByteDec }}</span></div>
+        <div class="bc-kv">
+          <span class="bc-k">Offset</span><span class="bc-v mono">{{ byteHover.byte }}</span>
+        </div>
+        <div class="bc-kv">
+          <span class="bc-k">HEX</span><span class="bc-v mono">{{ hoverByteHex }}</span>
+        </div>
+        <div class="bc-kv">
+          <span class="bc-k">Decimal</span><span class="bc-v mono">{{ hoverByteDec }}</span>
+        </div>
         <div class="bc-kv">
           <span class="bc-k">所属字段</span>
           <span class="bc-v">{{ byteHover.field?.name || '-' }}</span>

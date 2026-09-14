@@ -85,9 +85,7 @@ function loadCollapsed(): Set<string> {
 
 // collapsed 存组名(跨解析稳定);expandedKeys 用唯一 key
 const collapsed = ref<Set<string>>(loadCollapsed())
-const expandedKeys = computed(() =>
-  model.value.rows.filter((g) => !collapsed.value.has(g.name)).map((g) => g.key),
-)
+const expandedKeys = computed(() => model.value.rows.filter((g) => !collapsed.value.has(g.name)).map((g) => g.key))
 
 function toggleGroup(name: string) {
   const next = new Set(collapsed.value)
@@ -219,13 +217,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div
-    ref="wrapEl"
-    class="field-table"
-    @mousemove="onMove"
-    @mouseleave="emit('hover', null)"
-    @click="onClick"
-  >
+  <div ref="wrapEl" class="field-table" @mousemove="onMove" @mouseleave="emit('hover', null)" @click="onClick">
     <a-table
       :data-source="model.rows"
       :columns="columns"
@@ -242,7 +234,9 @@ onBeforeUnmount(() => {
       <template #bodyCell="{ column, record }">
         <template v-if="record.isGroup">
           <template v-if="column.key === 'name'">
-            <span class="group-label">{{ record.name }} <em>· {{ record.count }} 字段</em></span>
+            <span class="group-label"
+              >{{ record.name }} <em>· {{ record.count }} 字段</em></span
+            >
           </template>
         </template>
         <template v-else-if="column.key === 'offset'">
@@ -265,7 +259,8 @@ onBeforeUnmount(() => {
             v-if="record.field.offsetVal !== '-'"
             class="phys ellipsis-cell"
             :title="record.field.offsetVal + (record.field.unit ? ' ' + record.field.unit : '')"
-          >{{ record.field.offsetVal }}<em v-if="record.field.unit"> {{ record.field.unit }}</em></span>
+            >{{ record.field.offsetVal }}<em v-if="record.field.unit"> {{ record.field.unit }}</em></span
+          >
           <span v-else>-</span>
         </template>
         <template v-else-if="column.key === 'translate'">

@@ -80,9 +80,7 @@ watch(
   rows,
   async () => {
     await nextTick()
-    cellEls = gridEl.value
-      ? Array.from(gridEl.value.querySelectorAll<HTMLElement>('[data-idx]'))
-      : []
+    cellEls = gridEl.value ? Array.from(gridEl.value.querySelectorAll<HTMLElement>('[data-idx]')) : []
     applyHl()
   },
   { immediate: true, flush: 'post' },
@@ -160,13 +158,7 @@ function onClick(e: MouseEvent) {
 </script>
 
 <template>
-  <div
-    ref="gridEl"
-    class="byte-grid"
-    @mouseover="onMove"
-    @mouseleave="onLeave"
-    @click="onClick"
-  >
+  <div ref="gridEl" class="byte-grid" @mouseover="onMove" @mouseleave="onLeave" @click="onClick">
     <div v-for="row in rows" :key="row.offset" class="byte-row">
       <span class="byte-offset">{{ row.offset.toString(16).padStart(4, '0') }}</span>
       <span
@@ -175,7 +167,8 @@ function onClick(e: MouseEvent) {
         class="byte-cell"
         :class="{ g8: bi === 8, 'byte-issue': issueOf(row.offset + bi) !== undefined }"
         :data-idx="row.offset + bi"
-      >{{ b }}</span>
+        >{{ b }}</span
+      >
     </div>
   </div>
 </template>

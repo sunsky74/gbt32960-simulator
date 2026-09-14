@@ -132,9 +132,7 @@ function bytesOf(r: StreamRow): string {
         placeholder="搜索 VIN / 命令 / HEX / 摘要"
         allow-clear
       />
-      <label class="toolbar-label check-line">
-        <a-checkbox v-model:checked="autoScroll" />跟随
-      </label>
+      <label class="toolbar-label check-line"> <a-checkbox v-model:checked="autoScroll" />跟随 </label>
       <span class="toolbar-count">{{ visibleRows.length }} 条</span>
     </header>
 
