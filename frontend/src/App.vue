@@ -45,5 +45,3 @@ const antdTheme = computed(() => antdThemes[resolvedMode.value])
     </div>
   </a-config-provider>
 </template>
-
-<style src="./style.css"></style>
