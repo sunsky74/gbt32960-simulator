@@ -17,6 +17,7 @@ import (
 
 // loadGolden 读取生产报文金标准 hex。
 // 来源: 协议库 golden 测试集 —— 真实国标终端发出、网关日志采集的报文。
+// 2026-09-14 已去标识化: VIN/ICCID/GPS 坐标替换为合成值, 帧结构仍为真实采集的生产结构。
 // 金标准随仓库提交,缺失即断供,直接失败而不是跳过。
 func loadGolden(t *testing.T, name string) []byte {
 	t.Helper()
@@ -150,7 +151,7 @@ func TestSimulatorFrameMatchesGoldenShape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("assemble: %v", err)
 	}
-	sim, _, err := engine.BuildFrame(api.V2016, "H3V21AA24RZ016158", 0x02, body)
+	sim, _, err := engine.BuildFrame(api.V2016, "LSV00000000000003", 0x02, body)
 	if err != nil {
 		t.Fatalf("build frame: %v", err)
 	}
@@ -161,7 +162,7 @@ func TestSimulatorFrameMatchesGoldenShape(t *testing.T) {
 			t.Errorf("head[%d] = %02X, want %02X", i, sim[i], w)
 		}
 	}
-	if vin := string(sim[4:21]); vin != "H3V21AA24RZ016158" {
+	if vin := string(sim[4:21]); vin != "LSV00000000000003" {
 		t.Errorf("vin = %q", vin)
 	}
 	if sim[21] != 0x01 {

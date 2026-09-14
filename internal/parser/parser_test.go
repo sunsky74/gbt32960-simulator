@@ -30,7 +30,7 @@ func TestParseGoldenLogin(t *testing.T) {
 	if r.TotalBytes != 55 || r.Version != "V2016" {
 		t.Errorf("basic = %d/%s", r.TotalBytes, r.Version)
 	}
-	if r.Command != "0x01 VEHICLE_LOGIN" || r.VIN != "H3V21BA29SZ003109" {
+	if r.Command != "0x01 VEHICLE_LOGIN" || r.VIN != "LSV00000000000001" {
 		t.Errorf("cmd/vin = %s / %s", r.Command, r.VIN)
 	}
 	if len(r.Warnings) != 0 {
