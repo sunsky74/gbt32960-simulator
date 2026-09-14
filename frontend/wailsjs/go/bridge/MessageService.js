@@ -38,6 +38,10 @@ export function RespondRemoteSecondLayer(arg1, arg2) {
   return window['go']['bridge']['MessageService']['RespondRemoteSecondLayer'](arg1, arg2);
 }
 
+export function ResumeAutoReport() {
+  return window['go']['bridge']['MessageService']['ResumeAutoReport']();
+}
+
 export function SaveGroups(arg1) {
   return window['go']['bridge']['MessageService']['SaveGroups'](arg1);
 }

@@ -14,6 +14,8 @@ export function GetProfiles():Promise<Array<bridge.ProfileSummary>>;
 
 export function SaveConfig(arg1:bridge.ConnectionConfig):Promise<void>;
 
+export function SetOnConnected(arg1:any):Promise<void>;
+
 export function State():Promise<string>;
 
 export function SwitchProfile(arg1:string):Promise<bridge.ConnectionConfig>;

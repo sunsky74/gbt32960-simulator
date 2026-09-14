@@ -22,6 +22,8 @@ export function RespondParamQuery(arg1:Array<engine.ParamResponseRow>,arg2:numbe
 
 export function RespondRemoteSecondLayer(arg1:string,arg2:string):Promise<void>;
 
+export function ResumeAutoReport():Promise<void>;
+
 export function SaveGroups(arg1:schema.GroupsPayload):Promise<void>;
 
 export function SendExtension(arg1:string):Promise<void>;
