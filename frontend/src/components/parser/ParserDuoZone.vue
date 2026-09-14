@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import type { parser as parserNs } from '../../../wailsjs/go/models'
 import ByteGridView, { type ByteHover, type ByteIssueRange, type ByteRange } from './ByteGridView.vue'
 import FieldTableView from './FieldTableView.vue'
-import { useSplitter } from './useSplitter'
+import { useSplitter } from '../../composables/useSplitter'
 
 type ParsedField = parserNs.Field
 
