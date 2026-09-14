@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onActivated, onDeactivated, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
-import { message, Modal } from 'ant-design-vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue'
+import { message } from 'ant-design-vue'
 import {
   CaretRightOutlined, ClearOutlined, DownloadOutlined, SendOutlined, SettingOutlined, StopOutlined,
 } from '@ant-design/icons-vue'
@@ -12,70 +12,11 @@ import ResizableDividerCol from '../components/layout/ResizableDividerCol.vue'
 import SessionList from '../components/servermode/SessionList.vue'
 import PacketStream from '../components/servermode/PacketStream.vue'
 import PacketDetail from '../components/servermode/PacketDetail.vue'
+import ServerConfigDrawer from '../components/servermode/ServerConfigDrawer.vue'
+import ExtCommandModal from '../components/servermode/ExtCommandModal.vue'
 import { RENDER_CAP, fmtDuration, type SessionRow, type StreamRow } from '../components/servermode/types'
-import {
-  bitsArrayOf, bitOptions, boolOf, hexOf, numOf, setBitsArray, setBool, setEnum, setHex, setNum,
-} from '../composables/useFieldHelpers'
 import { appSettings } from '../composables/useAppSettings'
-import type { FieldSchema } from '../api/backend'
 
-// ---------- 平台下发:扩展包 down 命令模板 ----------
-interface ExtCommandInfo {
-  packId: string
-  packLabel: string
-  key: string
-  label: string
-  code: number
-  respType: string
-  fields: FieldSchema[]
-  defaults: Record<string, unknown>
-}
-
-const extCmds = ref<ExtCommandInfo[]>([])
-const extCmdOpen = ref(false)
-const extCmdKey = ref('')
-const extCmdRow = ref<Record<string, unknown>>({})
-
-const extCmdOptions = computed(() =>
-  extCmds.value.map((c) => ({ value: `${c.packId}/${c.key}`, label: `${c.packLabel} · ${c.label}` })),
-)
-
-const activeExtCmd = computed(() => {
-  const [packId, key] = extCmdKey.value.split('/')
-  return extCmds.value.find((c) => c.packId === packId && c.key === key) ?? null
-})
-
-async function refreshExtCmds() {
-  extCmds.value = (await ServerService.ServerExtCommands().catch(() => [])) ?? []
-}
-
-function onExtCmdSelect(val: string) {
-  extCmdKey.value = val
-  const cmd = extCmds.value.find((c) => `${c.packId}/${c.key}` === val)
-  extCmdRow.value = cmd ? { ...cmd.defaults } : {}
-}
-
-async function sendExtCmd() {
-  const cmd = activeExtCmd.value
-  if (!cmd || !selectedVin.value) return
-  try {
-    await ServerService.SendExtCommand(cmd.packId, cmd.key, selectedVin.value, extCmdRow.value)
-    message.success(`已下发「${cmd.label}」→ ${selectedVin.value}`)
-    extCmdOpen.value = false
-  } catch (e) {
-    message.error('下发失败: ' + String(e))
-  }
-}
-
-function openExtCmdModal() {
-  void refreshExtCmds()
-  extCmdOpen.value = true
-}
-
-const cfg = reactive({
-  ip: '127.0.0.1', port: 32960, idleEnabled: true, idleSeconds: 60,
-  maxConns: 64, maxFrameBytes: 8192, logLines: 500, maxVinsPerConn: 128,
-})
 const running = ref(false)
 const listenAddr = ref('')
 const sessions = ref<SessionRow[]>([])
@@ -83,7 +24,27 @@ const frames = ref<StreamRow[]>([])
 const detailFrame = ref<StreamRow | null>(null)
 const selectedVin = ref('')
 const parserPacks = ref<Array<{ id: string; label: string }>>([])
-const cfgOpen = ref(false)
+
+// ---------- 子组件句柄:配置抽屉自持 cfg/启停动作,下发弹窗自持命令列表 ----------
+const cfgDrawerRef = ref<InstanceType<typeof ServerConfigDrawer> | null>(null)
+const extCmdModalRef = ref<InstanceType<typeof ExtCommandModal> | null>(null)
+
+// 顶栏启停委托给配置抽屉(cfg 表单状态由抽屉自持,启停共用同一实现)
+function startServer() {
+  void cfgDrawerRef.value?.start()
+}
+
+function stopServer() {
+  void cfgDrawerRef.value?.stop()
+}
+
+function openCfgDrawer() {
+  cfgDrawerRef.value?.open()
+}
+
+function openExtCmdModal() {
+  extCmdModalRef.value?.open()
+}
 
 // 每秒 tick:驱动顶栏运行时长与会话在线时长跳动
 const now = ref(Date.now())
@@ -201,55 +162,6 @@ function stopTick() {
   }
 }
 
-async function loadCfg() {
-  try {
-    const saved = await ServerService.LoadConfig()
-    Object.assign(cfg, saved)
-  } catch (e) {
-    message.error('读取服务端配置失败: ' + String(e))
-  }
-}
-
-async function start(): Promise<boolean> {
-  const loopback = cfg.ip === '127.0.0.1' || cfg.ip === 'localhost'
-  const doStart = async (force: boolean): Promise<boolean> => {
-    try {
-      const st = await ServerService.Start({ ...cfg }, force)
-      if (st.running) {
-        message.success('服务已启动 ' + st.listenAddr)
-        return true
-      }
-      return false
-    } catch (e) {
-      message.error(String(e))
-      return false
-    }
-  }
-  if (loopback) return doStart(false)
-  return new Promise((resolve) => {
-    Modal.confirm({
-      title: '监听地址非环回',
-      content: `即将监听 ${cfg.ip}:${cfg.port},局域网内任何设备都可连接(协议无认证)。确认继续?`,
-      okText: '继续监听',
-      cancelText: '取消',
-      onOk: async () => resolve(await doStart(true)),
-      onCancel: () => resolve(false),
-    })
-  })
-}
-
-async function startFromDrawer() {
-  if (await start()) cfgOpen.value = false
-}
-
-async function stop() {
-  try {
-    await ServerService.Stop()
-  } catch (e) {
-    message.error(String(e))
-  }
-}
-
 async function exportLog() {
   try {
     const path = await ServerService.ExportLog()
@@ -269,19 +181,6 @@ async function clearLog() {
     /* 忽略 */
   }
 }
-
-// 运行中即时下发空闲断开设置(AC-10)
-watch(
-  () => [cfg.idleEnabled, cfg.idleSeconds] as const,
-  async ([enabled, seconds]) => {
-    if (!running.value) return
-    try {
-      await ServerService.UpdateIdle(enabled, seconds)
-    } catch (e) {
-      message.error('空闲断开设置下发失败: ' + String(e))
-    }
-  },
-)
 
 // ---------- 选中与会话过滤 ----------
 function onSelectSession(vin: string) {
@@ -375,7 +274,7 @@ onMounted(async () => {
   // 先初始化分割与监听:纯浏览器调试(无 window.runtime)时布局仍可用
   initSplit()
   window.addEventListener('resize', onWindowResize)
-  await loadCfg()
+  // 已保存服务配置由 ServerConfigDrawer 挂载时自行加载
   parserPacks.value = (await ParserService.ParserPacks().catch(() => [])) ?? []
 })
 
@@ -412,11 +311,11 @@ onUnmounted(() => {
       <span class="server-stat">报文 <b>{{ frames.length }}</b></span>
       <span class="server-stat">运行 <b>{{ uptimeText }}</b></span>
       <div class="spacer" />
-      <a-button v-if="!running" type="primary" size="small" @click="start">
+      <a-button v-if="!running" type="primary" size="small" @click="startServer">
         <template #icon><CaretRightOutlined /></template>
         启动服务
       </a-button>
-      <a-button v-else danger size="small" @click="stop">
+      <a-button v-else danger size="small" @click="stopServer">
         <template #icon><StopOutlined /></template>
         停止服务
       </a-button>
@@ -428,7 +327,7 @@ onUnmounted(() => {
         <template #icon><DownloadOutlined /></template>
         导出日志
       </a-button>
-      <a-button size="small" @click="cfgOpen = true">
+      <a-button size="small" @click="openCfgDrawer">
         <template #icon><SettingOutlined /></template>
         服务配置
       </a-button>
@@ -465,7 +364,7 @@ onUnmounted(() => {
           :session-count="sessions.length"
           :selected-id="detailFrame?.id ?? null"
           @select="onSelectFrame"
-          @start="start"
+          @start="startServer"
         />
       </div>
       <ResizableDivider :min-px="MIN_BOTTOM_PX" @drag="onVSplitDrag" />
@@ -473,178 +372,9 @@ onUnmounted(() => {
     </div>
 
     <!-- 平台下发:扩展包 down 命令模板 -->
-    <a-modal
-      v-model:open="extCmdOpen"
-      title="平台下发扩展命令"
-      :width="520"
-      ok-text="下发"
-      cancel-text="取消"
-      :ok-button-props="{ disabled: !activeExtCmd }"
-      @ok="sendExtCmd"
-    >
-      <p class="modal-hint">
-        目标车辆 {{ selectedVin || '(未选中)' }} · 命令来自已导入扩展包(scope 含 server)的下发模板
-      </p>
-      <a-select
-        :value="extCmdKey || undefined"
-        :options="extCmdOptions"
-        placeholder="选择下发命令"
-        style="width: 100%"
-        @change="onExtCmdSelect"
-      />
-      <div v-if="activeExtCmd" class="extcmd-fields">
-        <template v-for="f in activeExtCmd.fields" :key="f.key">
-          <div v-if="f.kind === 'enum'" class="field">
-            <span class="field-label">{{ f.label }}</span>
-            <a-select
-              :value="numOf(extCmdRow, f.key)"
-              size="small"
-              style="flex: 1"
-              :options="(f.enum ?? []).map((e) => ({ value: e.value, label: e.label }))"
-              @change="(v: unknown) => setEnum(extCmdRow, f.key, v)"
-            />
-          </div>
-          <div v-else-if="f.kind === 'int' || f.kind === 'float'" class="field">
-            <span class="field-label">{{ f.label }}<em v-if="f.unit"> ({{ f.unit }})</em></span>
-            <a-input-number
-              :value="numOf(extCmdRow, f.key)"
-              size="small"
-              style="flex: 1"
-              :min="f.min"
-              :max="f.max"
-              @change="(v: number | string | null | undefined) => setNum(extCmdRow, f.key, v)"
-            />
-          </div>
-          <div v-else-if="f.kind === 'bytes'" class="field">
-            <span class="field-label">{{ f.label }}<em v-if="f.length"> ({{ f.length }}B hex)</em></span>
-            <a-input
-              :value="hexOf(extCmdRow, f.key)"
-              class="hex-input"
-              size="small"
-              style="flex: 1"
-              @update:value="(v: string) => setHex(extCmdRow, f.key, f, v)"
-            />
-          </div>
-          <div v-else-if="f.kind === 'bool'" class="field field-bool">
-            <span class="field-label">{{ f.label }}</span>
-            <a-switch
-              :checked="boolOf(extCmdRow, f.key)"
-              size="small"
-              @change="(v: unknown) => setBool(extCmdRow, f.key, v)"
-            />
-          </div>
-          <div v-else-if="f.kind === 'bitgroup'" class="field field-bits">
-            <span class="field-label">{{ f.label }}</span>
-            <a-checkbox-group
-              :value="bitsArrayOf(extCmdRow, f)"
-              :options="bitOptions(f)"
-              class="bits-group"
-              @change="(vals: Array<string | number | boolean>) => setBitsArray(extCmdRow, f, vals)"
-            />
-          </div>
-        </template>
-      </div>
-    </a-modal>
+    <ExtCommandModal ref="extCmdModalRef" :selected-vin="selectedVin" />
 
     <!-- 服务配置抽屉:Listen/空闲设置不再常驻顶栏 -->
-    <a-drawer v-model:open="cfgOpen" title="服务配置" placement="right" :width="440">
-      <div class="cfg-form">
-        <div class="cfg-item">
-          <span class="form-label">Listen IP</span>
-          <a-input v-model:value="cfg.ip" size="small" placeholder="127.0.0.1" />
-        </div>
-        <div class="cfg-item">
-          <span class="form-label">Listen Port</span>
-          <a-input-number v-model:value="cfg.port" size="small" :min="1" :max="65535" class="cfg-num" />
-        </div>
-        <div class="cfg-item">
-          <span class="form-label">空闲断开</span>
-          <a-switch v-model:checked="cfg.idleEnabled" size="small" />
-        </div>
-        <div class="cfg-item">
-          <span class="form-label">空闲秒数</span>
-          <a-input-number
-            v-model:value="cfg.idleSeconds" size="small" :min="5" :max="3600"
-            class="cfg-num" :disabled="!cfg.idleEnabled"
-          />
-        </div>
-        <div class="cfg-group-title">高级参数</div>
-        <p class="cfg-group-hint">停止服务后修改,重新启动生效</p>
-        <div class="cfg-item">
-          <span class="form-label">最大连接数</span>
-          <a-input-number v-model:value="cfg.maxConns" size="small" :min="1" :max="512" class="cfg-num" />
-        </div>
-        <div class="cfg-item">
-          <span class="form-label">单帧上限(字节)</span>
-          <a-input-number v-model:value="cfg.maxFrameBytes" size="small" :min="512" :max="65536" class="cfg-num" />
-        </div>
-        <div class="cfg-item">
-          <span class="form-label">日志保留行数</span>
-          <a-input-number v-model:value="cfg.logLines" size="small" :min="100" :max="10000" class="cfg-num" />
-        </div>
-        <div class="cfg-item">
-          <span class="form-label">平台链路 VIN 上限</span>
-          <a-input-number v-model:value="cfg.maxVinsPerConn" size="small" :min="1" :max="1024" class="cfg-num" />
-        </div>
-      </div>
-      <a-alert
-        v-if="running"
-        type="info"
-        show-icon
-        message="服务运行中:修改空闲断开设置将立即下发生效"
-        class="cfg-hint"
-      />
-      <a-alert
-        v-else
-        type="info"
-        show-icon
-        message="启动后客户端可连接此地址上报报文"
-        class="cfg-hint"
-      />
-      <div class="cfg-actions">
-        <a-button v-if="!running" type="primary" size="small" @click="startFromDrawer">
-          <template #icon><CaretRightOutlined /></template>
-          启动服务
-        </a-button>
-        <a-button v-else danger size="small" @click="stop">
-          <template #icon><StopOutlined /></template>
-          停止服务
-        </a-button>
-      </div>
-    </a-drawer>
+    <ServerConfigDrawer ref="cfgDrawerRef" :running="running" />
   </div>
 </template>
-
-<style scoped>
-.modal-hint {
-  color: var(--text-secondary);
-  font-size: 13px;
-  margin-bottom: 12px;
-}
-
-/* 配置抽屉分组标题与提示(高级参数) */
-.cfg-group-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  letter-spacing: 0.5px;
-  margin-top: 4px;
-}
-
-.cfg-group-hint {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.extcmd-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.hex-input :deep(input) {
-  font-family: var(--font-mono);
-}
-</style>
