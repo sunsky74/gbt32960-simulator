@@ -47,9 +47,10 @@ export async function testConnect() {
 }
 
 export async function connect() {
-  if (!(await validateForm())) return
+  if (store.connBusy) return
   store.connBusy = true
   try {
+    if (!(await validateForm())) return
     await ConnectionService.Connect(cfg)
     store.config = cfg
     if (cfg.version !== savedBinding.version) {

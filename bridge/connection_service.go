@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"gbt32960-simulator/internal/engine"
@@ -84,6 +85,11 @@ type profilesData struct {
 // ConnectionService 连接相关的前端服务。
 type ConnectionService struct {
 	rt *Runtime
+
+	// connectMu 串行化 Connect:进行中时直接拒绝并发调用,避免两次连接
+	// 各自取代客户端后留下孤儿长连。Disconnect 有意不加锁——它必须能在
+	// 任意时刻取消进行中的 Connect(引擎侧由会话 ctx 取消完成)。
+	connectMu sync.Mutex
 }
 
 // NewConnectionService 创建服务。
@@ -247,6 +253,11 @@ func (s *ConnectionService) TestConnect(cfg ConnectionConfig) TestResult {
 
 // Connect 用给定配置建链并自动登录(阻塞至成功/失败)。
 func (s *ConnectionService) Connect(cfg ConnectionConfig) error {
+	if !s.connectMu.TryLock() {
+		return fmt.Errorf("连接进行中,请稍候")
+	}
+	defer s.connectMu.Unlock()
+
 	if err := validateConn(&cfg); err != nil {
 		return err
 	}
