@@ -8,8 +8,6 @@ export function AutoReportState():Promise<bridge.ReportState>;
 
 export function DefaultGroups(arg1:string):Promise<schema.GroupsPayload>;
 
-export function EnsureAutoReport():Promise<void>;
-
 export function GetGroups():Promise<schema.GroupsPayload>;
 
 export function GetSchema(arg1:string):Promise<Array<schema.GroupSchema>>;
@@ -22,8 +20,6 @@ export function RespondParamQuery(arg1:Array<engine.ParamResponseRow>,arg2:numbe
 
 export function RespondRemoteSecondLayer(arg1:string,arg2:string):Promise<void>;
 
-export function ResumeAutoReport():Promise<void>;
-
 export function SaveGroups(arg1:schema.GroupsPayload):Promise<void>;
 
 export function SendExtension(arg1:string):Promise<void>;
@@ -35,5 +31,3 @@ export function SendReissue(arg1:number,arg2:number,arg3:number):Promise<void>;
 export function SetAutoReport(arg1:boolean,arg2:number):Promise<void>;
 
 export function SetExtAutoReport(arg1:string,arg2:boolean,arg3:number):Promise<void>;
-
-export function SetTrackReplay(arg1:bridge.trackHook):Promise<void>;

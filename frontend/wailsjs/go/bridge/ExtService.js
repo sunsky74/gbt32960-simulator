@@ -30,10 +30,6 @@ export function ReloadPacks() {
   return window['go']['bridge']['ExtService']['ReloadPacks']();
 }
 
-export function SetContext(arg1) {
-  return window['go']['bridge']['ExtService']['SetContext'](arg1);
-}
-
 export function SetPackEnabled(arg1, arg2) {
   return window['go']['bridge']['ExtService']['SetPackEnabled'](arg1, arg2);
 }

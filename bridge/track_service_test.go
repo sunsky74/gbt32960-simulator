@@ -12,14 +12,14 @@ import (
 	"gbt32960-simulator/internal/track"
 )
 
-// fakeTrackDeps 测试替身:记录 EnsureAutoReport 调用;DefaultGroups 只含 location 组。
+// fakeTrackDeps 测试替身:记录 ensureAutoReport 调用;DefaultGroups 只含 location 组。
 type fakeTrackDeps struct {
 	mu        sync.Mutex
 	ensured   int
 	ensureErr error
 }
 
-func (f *fakeTrackDeps) EnsureAutoReport() error {
+func (f *fakeTrackDeps) ensureAutoReport() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.ensured++
@@ -66,7 +66,7 @@ func TestStartReplayAppliesPreviewPoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	if deps.ensuredCalls() != 1 {
-		t.Fatalf("EnsureAutoReport calls = %d, want 1", deps.ensuredCalls())
+		t.Fatalf("ensureAutoReport calls = %d, want 1", deps.ensuredCalls())
 	}
 	st := s.ReplayStatus()
 	if !st.Running || st.Index != 0 || st.Total != 3 {
@@ -85,7 +85,7 @@ func TestAdvanceProgressionAndFinish(t *testing.T) {
 	}
 	want := [][2]float64{{116, 39}, {117, 40}, {118, 41}}
 	for i, w := range want {
-		s.AdvanceForReport()
+		s.advanceForReport()
 		row := locationRow(t, rt)
 		if row["longitude"] != w[0] || row["latitude"] != w[1] {
 			t.Errorf("advance %d: row = %v, want %v", i+1, row, w)
@@ -94,12 +94,12 @@ func TestAdvanceProgressionAndFinish(t *testing.T) {
 	if st := s.ReplayStatus(); st.Index != 3 || !st.Running {
 		t.Fatalf("after 3 advances: %+v", st)
 	}
-	s.AdvanceForReport() // 播完 → 自动停止
+	s.advanceForReport() // 播完 → 自动停止
 	if st := s.ReplayStatus(); st.Running || st.Index != 3 || st.LastError != "" {
 		t.Fatalf("after finish: %+v", st)
 	}
 	// 停止后再推进为空操作,位置保留最后一点。
-	s.AdvanceForReport()
+	s.advanceForReport()
 	if row := locationRow(t, rt); row["longitude"] != 118.0 {
 		t.Errorf("position changed after finish: %v", row)
 	}
@@ -111,7 +111,7 @@ func TestAdvanceLoop(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i := 0; i < 7; i++ {
-		s.AdvanceForReport()
+		s.advanceForReport()
 	}
 	st := s.ReplayStatus()
 	if !st.Running {
@@ -127,21 +127,21 @@ func TestFailOnSendStopsReplay(t *testing.T) {
 	if err := s.StartReplay(false); err != nil {
 		t.Fatal(err)
 	}
-	s.FailOnSend(errors.New("connection reset"))
+	s.failOnSend(errors.New("connection reset"))
 	st := s.ReplayStatus()
 	if st.Running || st.LastError == "" {
 		t.Fatalf("status = %+v, want stopped with reason", st)
 	}
-	s.FailOnSend(errors.New("again")) // 未激活时忽略
+	s.failOnSend(errors.New("again")) // 未激活时忽略
 	if strings.Contains(s.ReplayStatus().LastError, "again") {
-		t.Fatal("inactive FailOnSend should be ignored")
+		t.Fatal("inactive failOnSend should be ignored")
 	}
 }
 
 func TestStopReplayKeepsLastPosition(t *testing.T) {
 	s, _, _ := newTestTrackService(3)
 	_ = s.StartReplay(false)
-	s.AdvanceForReport()
+	s.advanceForReport()
 	s.StopReplay()
 	s.StopReplay() // 幂等
 	st := s.ReplayStatus()
@@ -176,7 +176,7 @@ func TestImportAutoEnsuresReport(t *testing.T) {
 		t.Fatal(err)
 	}
 	if deps.ensuredCalls() != 1 {
-		t.Fatalf("EnsureAutoReport calls = %d, want 1", deps.ensuredCalls())
+		t.Fatalf("ensureAutoReport calls = %d, want 1", deps.ensuredCalls())
 	}
 
 	// 离线等失败静默跳过,导入仍成功。
@@ -263,15 +263,15 @@ type fakeHook struct {
 	stopped bool
 }
 
-func (f *fakeHook) AdvanceForReport() {}
-func (f *fakeHook) FailOnSend(error)  {}
+func (f *fakeHook) advanceForReport() {}
+func (f *fakeHook) failOnSend(error)  {}
 func (f *fakeHook) StopReplay()       { f.stopped = true }
 
 func TestSetAutoReportStopStopsTrackReplay(t *testing.T) {
 	rt := NewRuntime()
 	ms := NewMessageService(rt)
 	h := &fakeHook{}
-	ms.SetTrackReplay(h)
+	ms.setTrackReplay(h)
 	// 无客户端:调用报"未连接",但停报联动仍须发生。
 	if err := ms.SetAutoReport(false, 0); err == nil {
 		t.Fatal("want error: not connected")
@@ -284,7 +284,7 @@ func TestSetAutoReportStopStopsTrackReplay(t *testing.T) {
 func TestEnsureAutoReportRequiresOnlineClient(t *testing.T) {
 	rt := NewRuntime()
 	ms := NewMessageService(rt)
-	if err := ms.EnsureAutoReport(); err == nil {
+	if err := ms.ensureAutoReport(); err == nil {
 		t.Fatal("want error without client")
 	}
 }

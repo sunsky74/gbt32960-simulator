@@ -43,8 +43,6 @@ type ServerService struct {
 
 func NewServerService(rt *Runtime) *ServerService { return &ServerService{rt: rt} }
 
-func (s *ServerService) SetContext(ctx context.Context) { s.ctx = ctx }
-
 func (s *ServerService) emit(name string, data any) {
 	if s.ctx == nil {
 		return // 测试环境无 wails 上下文

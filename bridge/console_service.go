@@ -21,13 +21,10 @@ type ConsoleService struct {
 	ctx context.Context
 }
 
-// NewConsoleService 创建服务。ctx 由 app.startup 注入(原生对话框需要)。
+// NewConsoleService 创建服务。ctx 由 app.startup 经 WireContexts 注入(原生对话框需要)。
 func NewConsoleService(fwd *Forwarder) *ConsoleService {
 	return &ConsoleService{fwd: fwd}
 }
-
-// SetContext 注入 wails 上下文。
-func (s *ConsoleService) SetContext(ctx context.Context) { s.ctx = ctx }
 
 // ExportResult 导出结果。
 type ExportResult struct {

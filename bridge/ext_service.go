@@ -39,9 +39,6 @@ type ExtService struct {
 	ctx context.Context
 }
 
-// SetContext 注入 wails 上下文(原生文件对话框需要)。
-func (s *ExtService) SetContext(ctx context.Context) { s.ctx = ctx }
-
 // NewExtService 创建服务并预加载一次包集合。
 // 绑定激活发生在 GetConfig 回填 connCfg 时(见本任务 GetConfig 修改):
 // 启动链 loadInitialData → GetConfig → SetConnCfg → resolvePack。

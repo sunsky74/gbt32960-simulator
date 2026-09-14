@@ -13,12 +13,12 @@ import (
 )
 
 // TrackDeps 轨迹导入与回放依赖的最小接口(生产环境传 *MessageService,
-// 测试可替换)。
+// 测试可替换)。方法不导出:仅包内协作,不进入前端 RPC 绑定面。
 type TrackDeps interface {
 	// DefaultGroups 返回指定版本的默认报文配置(运行时无配置时兜底)。
 	DefaultGroups(version string) *schema.GroupsPayload
-	// EnsureAutoReport 确保周期上报开启(回放的推进载体)。
-	EnsureAutoReport() error
+	// ensureAutoReport 确保周期上报开启(回放的推进载体)。
+	ensureAutoReport() error
 }
 
 // TrackService 轨迹导入与回放。回放不自发报文:周期上报每次 tick 经
@@ -63,9 +63,6 @@ func NewTrackService(rt *Runtime, deps TrackDeps) *TrackService {
 	return &TrackService{rt: rt, deps: deps}
 }
 
-// SetContext 注入 wails 上下文(文件对话框用)。
-func (s *TrackService) SetContext(ctx context.Context) { s.ctx = ctx }
-
 // PickTrackFile 打开文件选择对话框(取消返回空串)。
 func (s *TrackService) PickTrackFile() (string, error) {
 	return runtime.OpenFileDialog(s.ctx, runtime.OpenDialogOptions{
@@ -91,7 +88,7 @@ func (s *TrackService) ImportTrack(path string) (*TrackInfo, error) {
 		return nil, fmt.Errorf("导入失败: %w", err)
 	}
 	s.StopReplay()
-	_ = s.deps.EnsureAutoReport()
+	_ = s.deps.ensureAutoReport()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.points = res.Points
@@ -127,7 +124,7 @@ func (s *TrackService) StartReplay(loop bool) error {
 	first := s.points[0]
 	s.mu.Unlock()
 
-	if err := s.deps.EnsureAutoReport(); err != nil {
+	if err := s.deps.ensureAutoReport(); err != nil {
 		return fmt.Errorf("开启周期上报失败: %w", err)
 	}
 
@@ -164,9 +161,9 @@ func (s *TrackService) ReplayStatus() TrackReplayStatus {
 	}
 }
 
-// AdvanceForReport 周期上报 tick 钩子:推进一个轨迹点写入位置组。
+// advanceForReport 周期上报 tick 钩子:推进一个轨迹点写入位置组。
 // 未激活时为空操作;播完且未开循环则自动停止。
-func (s *TrackService) AdvanceForReport() {
+func (s *TrackService) advanceForReport() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.active {
@@ -186,8 +183,8 @@ func (s *TrackService) AdvanceForReport() {
 	s.applyLocationLocked(p)
 }
 
-// FailOnSend 0x02 发送失败钩子:终止回放并记录原因(如中途掉线)。
-func (s *TrackService) FailOnSend(err error) {
+// failOnSend 0x02 发送失败钩子:终止回放并记录原因(如中途掉线)。
+func (s *TrackService) failOnSend(err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.active {

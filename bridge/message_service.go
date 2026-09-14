@@ -41,14 +41,15 @@ type MessageService struct {
 
 // trackHook 周期上报与轨迹回放的耦合点(由 TrackService 实现,测试可替换):
 // 每次 0x02 tick 组装前推进一个轨迹点;发送失败终止回放;停报即停回放。
+// 方法不导出:仅包内协作,不进入前端 RPC 绑定面。
 type trackHook interface {
-	AdvanceForReport()
-	FailOnSend(err error)
+	advanceForReport()
+	failOnSend(err error)
 	StopReplay()
 }
 
-// SetTrackReplay 注入轨迹回放钩子(app 装配时调用)。
-func (s *MessageService) SetTrackReplay(h trackHook) {
+// setTrackReplay 注入轨迹回放钩子(app 装配经 wiring.go 调用)。
+func (s *MessageService) setTrackReplay(h trackHook) {
 	s.trackMu.Lock()
 	defer s.trackMu.Unlock()
 	s.track = h
@@ -524,7 +525,7 @@ func (s *MessageService) SetAutoReport(enabled bool, intervalSec int) error {
 			return fmt.Errorf("报文配置为空")
 		}
 		if h := s.replayHook(); h != nil {
-			h.AdvanceForReport()
+			h.advanceForReport()
 		}
 		body, err := s.assembleBody(time.Now())
 		if err != nil {
@@ -532,7 +533,7 @@ func (s *MessageService) SetAutoReport(enabled bool, intervalSec int) error {
 		}
 		if err := c.Send(context.Background(), 0x02, body); err != nil {
 			if h := s.replayHook(); h != nil {
-				h.FailOnSend(err)
+				h.failOnSend(err)
 			}
 			return err
 		}
@@ -541,11 +542,11 @@ func (s *MessageService) SetAutoReport(enabled bool, intervalSec int) error {
 	return nil
 }
 
-// EnsureAutoReport 确保周期上报处于开启状态:未开启则按记忆间隔(缺省取
+// ensureAutoReport 确保周期上报处于开启状态:未开启则按记忆间隔(缺省取
 // 连接配置 reportInterval,再缺省 10s)开启;已开启也重装 ticker——客户端
 // 重建后 ticker 丢失,重装幂等。轨迹导入与回放启动的"默认开周期上报"
-// 由此保证。
-func (s *MessageService) EnsureAutoReport() error {
+// 由此保证。经 TrackDeps 接口由 TrackService 调用。
+func (s *MessageService) ensureAutoReport() error {
 	c := s.rt.CurrentClient()
 	if c == nil || c.State() != engine.StateOnline {
 		return fmt.Errorf("未连接或未登录")
@@ -553,9 +554,10 @@ func (s *MessageService) EnsureAutoReport() error {
 	return s.SetAutoReport(true, s.effectiveReportInterval())
 }
 
-// ResumeAutoReport 客户端重建(手动重连)后按记忆状态恢复周期上报;
+// resumeAutoReport 客户端重建(手动重连)后按记忆状态恢复周期上报;
 // reportOn 为 false 时静默返回(用户已关闭的语义不被扭转)。
-func (s *MessageService) ResumeAutoReport() error {
+// 经 wiring.WireAutoReportResume 注入为连接成功回调。
+func (s *MessageService) resumeAutoReport() error {
 	s.reportMu.Lock()
 	on := s.reportOn
 	s.reportMu.Unlock()

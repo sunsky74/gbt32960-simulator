@@ -26,10 +26,6 @@ export function Sessions() {
   return window['go']['bridge']['ServerService']['Sessions']();
 }
 
-export function SetContext(arg1) {
-  return window['go']['bridge']['ServerService']['SetContext'](arg1);
-}
-
 export function Start(arg1, arg2) {
   return window['go']['bridge']['ServerService']['Start'](arg1, arg2);
 }

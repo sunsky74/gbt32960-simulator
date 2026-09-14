@@ -6,10 +6,6 @@ export function OpenDirectory(arg1) {
   return window['go']['bridge']['SystemService']['OpenDirectory'](arg1);
 }
 
-export function SetContext(arg1) {
-  return window['go']['bridge']['SystemService']['SetContext'](arg1);
-}
-
 export function StoragePaths() {
   return window['go']['bridge']['SystemService']['StoragePaths']();
 }

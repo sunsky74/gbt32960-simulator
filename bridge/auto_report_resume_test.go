@@ -26,7 +26,7 @@ func TestAutoReportResumesAfterReconnect(t *testing.T) {
 	rt := NewRuntime()
 	cs := NewConnectionService(rt)
 	ms := NewMessageService(rt)
-	cs.SetOnConnected(func() { _ = ms.ResumeAutoReport() }) // 模拟 app 装配
+	cs.setOnConnected(func() { _ = ms.resumeAutoReport() }) // 模拟 app 装配
 	t.Cleanup(func() { _ = cs.Disconnect() })
 
 	ch, cancel := rt.Bus().Subscribe(4096)

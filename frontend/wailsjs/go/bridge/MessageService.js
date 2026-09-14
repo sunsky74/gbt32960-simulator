@@ -10,10 +10,6 @@ export function DefaultGroups(arg1) {
   return window['go']['bridge']['MessageService']['DefaultGroups'](arg1);
 }
 
-export function EnsureAutoReport() {
-  return window['go']['bridge']['MessageService']['EnsureAutoReport']();
-}
-
 export function GetGroups() {
   return window['go']['bridge']['MessageService']['GetGroups']();
 }
@@ -38,10 +34,6 @@ export function RespondRemoteSecondLayer(arg1, arg2) {
   return window['go']['bridge']['MessageService']['RespondRemoteSecondLayer'](arg1, arg2);
 }
 
-export function ResumeAutoReport() {
-  return window['go']['bridge']['MessageService']['ResumeAutoReport']();
-}
-
 export function SaveGroups(arg1) {
   return window['go']['bridge']['MessageService']['SaveGroups'](arg1);
 }
@@ -64,8 +56,4 @@ export function SetAutoReport(arg1, arg2) {
 
 export function SetExtAutoReport(arg1, arg2, arg3) {
   return window['go']['bridge']['MessageService']['SetExtAutoReport'](arg1, arg2, arg3);
-}
-
-export function SetTrackReplay(arg1) {
-  return window['go']['bridge']['MessageService']['SetTrackReplay'](arg1);
 }

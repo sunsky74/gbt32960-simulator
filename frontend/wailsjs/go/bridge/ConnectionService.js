@@ -26,10 +26,6 @@ export function SaveConfig(arg1) {
   return window['go']['bridge']['ConnectionService']['SaveConfig'](arg1);
 }
 
-export function SetOnConnected(arg1) {
-  return window['go']['bridge']['ConnectionService']['SetOnConnected'](arg1);
-}
-
 export function State() {
   return window['go']['bridge']['ConnectionService']['State']();
 }

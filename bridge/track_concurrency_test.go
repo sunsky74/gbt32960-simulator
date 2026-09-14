@@ -20,7 +20,7 @@ func TestTA1GroupsSnapshotIsolationOnAdvance(t *testing.T) {
 	s := NewTrackService(rt, &fakeTrackDeps{})
 	s.points = []track.Point{{Lng: 9, Lat: 8}}
 	s.active = true
-	s.AdvanceForReport()
+	s.advanceForReport()
 
 	if got := snap["location"].Rows[0]["longitude"]; got != 1.0 {
 		t.Fatalf("快照被就地写穿:longitude = %v, want 1.0", got)
@@ -55,7 +55,7 @@ func TestTA2ConcurrentAdvanceAndGroupsRead(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < 2000; i++ {
-			s.AdvanceForReport()
+			s.advanceForReport()
 		}
 	}()
 	go func() {

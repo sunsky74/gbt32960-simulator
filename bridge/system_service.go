@@ -17,9 +17,6 @@ type SystemService struct {
 // NewSystemService 创建服务。
 func NewSystemService() *SystemService { return &SystemService{} }
 
-// SetContext 注入 wails 上下文(打开目录等原生能力需要)。
-func (s *SystemService) SetContext(ctx context.Context) { s.ctx = ctx }
-
 // StoragePaths 返回应用数据存储路径(只读展示;修改位置属规划能力,不在本期)。
 func (s *SystemService) StoragePaths() (map[string]string, error) {
 	dir, err := store.Dir()

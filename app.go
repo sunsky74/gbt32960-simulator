@@ -28,11 +28,11 @@ func NewApp() *App {
 	fwd := bridge.NewForwarder(rt)
 	msg := bridge.NewMessageService(rt)
 	track := bridge.NewTrackService(rt, msg)
-	msg.SetTrackReplay(track)
+	bridge.WireTrackReplay(msg, track)
 	conn := bridge.NewConnectionService(rt)
 	// 手动重连会重建客户端(旧客户端 ticker 已随 Disconnect 停止),登录成功后
 	// 按 MessageService 的记忆状态恢复周期上报。
-	conn.SetOnConnected(func() { _ = msg.ResumeAutoReport() })
+	bridge.WireAutoReportResume(conn, msg)
 	return &App{
 		rt:        rt,
 		conn:      conn,
@@ -51,11 +51,7 @@ func NewApp() *App {
 // startup wails 启动回调:注入上下文并启动事件转发。
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	a.console.SetContext(ctx)
-	a.extsvc.SetContext(ctx)
-	a.sys.SetContext(ctx)
-	a.server.SetContext(ctx)
-	a.track.SetContext(ctx)
+	bridge.WireContexts(ctx, a.console, a.extsvc, a.sys, a.server, a.track)
 	go a.forwarder.Start(ctx)
 }
 

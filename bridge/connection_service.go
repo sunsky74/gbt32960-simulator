@@ -111,8 +111,8 @@ type ConnectionService struct {
 // NewConnectionService 创建服务。
 func NewConnectionService(rt *Runtime) *ConnectionService { return &ConnectionService{rt: rt} }
 
-// SetOnConnected 注入"登录成功"回调(app 装配:重连后恢复周期上报等跨服务联动)。
-func (s *ConnectionService) SetOnConnected(fn func()) { s.onConnected = fn }
+// setOnConnected 注入"登录成功"回调(app 装配经 wiring.go 调用:重连后恢复周期上报等跨服务联动)。
+func (s *ConnectionService) setOnConnected(fn func()) { s.onConnected = fn }
 
 // getProfiles 读取档案;无档案时尝试迁移旧版单配置文件,再兜底空档案。
 func (s *ConnectionService) getProfiles() (*profilesData, error) {
