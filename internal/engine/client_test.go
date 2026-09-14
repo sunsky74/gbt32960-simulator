@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sunsky74/gb32960/api"
-	_ "github.com/sunsky74/gb32960/codec/all"
 	"gbt32960-simulator/internal/framing"
 	"gbt32960-simulator/internal/schema"
+	"github.com/sunsky74/gb32960/api"
+	_ "github.com/sunsky74/gb32960/codec/all"
 	"github.com/sunsky74/gb32960/utils"
 )
 
@@ -103,8 +103,8 @@ func TestClientFullLifecycle(t *testing.T) {
 		Host: "127.0.0.1", Port: fp.port(), Version: api.V2016,
 		VIN: "LSV00000000000001", ICCID: "89860000000000000001",
 		HeartbeatInterval: 200 * time.Millisecond,
-		LoginTimeout:     2 * time.Second,
-		LoginRetries:     2,
+		LoginTimeout:      2 * time.Second,
+		LoginRetries:      2,
 	}, bus)
 
 	if err := client.Connect(context.Background()); err != nil {
@@ -166,10 +166,11 @@ loop:
 }
 
 func TestClientConnectRefused(t *testing.T) {
-	// 找一个必然拒绝的端口
+	// 找一个必然拒绝的端口。
+	// 仅当受限环境连本地回环监听端口都分配不到时跳过;正常环境不应命中 skip。
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Skipf("no port: %v", err)
+		t.Skipf("受限环境:本地监听端口分配失败,跳过: %v", err)
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
 	_ = ln.Close()

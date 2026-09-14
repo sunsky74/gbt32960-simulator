@@ -14,10 +14,11 @@ import (
 // 否则随后的 Disconnect 会误判"存在活动连接",在 nil conn 上发登出,
 // 冒出一条假的 "发送登出报文失败" EventError。
 func TestConnectFailureClearsCancel(t *testing.T) {
-	// 找一个必然拒绝的端口(先监听再关闭,复用 TestClientConnectRefused 手法)
+	// 找一个必然拒绝的端口(先监听再关闭,复用 TestClientConnectRefused 手法)。
+	// 仅当受限环境连本地回环监听端口都分配不到时跳过;正常环境不应命中 skip。
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Skipf("no port: %v", err)
+		t.Skipf("受限环境:本地监听端口分配失败,跳过: %v", err)
 	}
 	port := ln.Addr().(*net.TCPAddr).Port
 	_ = ln.Close()

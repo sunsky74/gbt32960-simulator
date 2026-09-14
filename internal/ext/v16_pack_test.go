@@ -5,11 +5,13 @@ import (
 	"testing"
 )
 
-// 客户专属 v16 示例包不随仓库分发;该文件存在时必须通过校验(scope=server + 0x8C 三命令模板)。
+// TestV16PackValid 校验客户专属 v16 示例包。
+// 注意:该夹具是可选文件(../../docs/extpack/local-pack-v16.json 不随仓库分发),
+// 仅当本地存在时才做 scope=server + 0x8C 三命令模板校验;缺失属预期,故保留 skip。
 func TestV16PackValid(t *testing.T) {
 	const path = "../../docs/extpack/local-pack-v16.json"
 	if _, err := os.Stat(path); err != nil {
-		t.Skipf("示例包未随仓库分发,跳过: %v", err)
+		t.Skipf("可选示例包未随仓库分发,跳过: %v", err)
 	}
 	p, err := LoadFile(path)
 	if err != nil {

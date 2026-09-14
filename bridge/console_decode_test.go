@@ -12,12 +12,12 @@ import (
 	"gbt32960-simulator/internal/engine"
 )
 
-// loadConsoleFrameHex 读取 schema golden 帧 hex;文件缺失时跳过(与 internal/parser 测试同风格)。
+// loadConsoleFrameHex 读取 schema golden 帧 hex;金标准随仓库提交,缺失即断供,直接失败。
 func loadConsoleFrameHex(t *testing.T, name string) string {
 	t.Helper()
 	b, err := os.ReadFile("../internal/schema/testdata/" + name)
 	if err != nil {
-		t.Skipf("golden missing: %v", err)
+		t.Fatalf("golden missing: %v", err)
 	}
 	return strings.TrimSpace(string(b))
 }

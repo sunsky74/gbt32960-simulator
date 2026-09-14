@@ -6,22 +6,23 @@ import (
 	"testing"
 	"time"
 
+	"gbt32960-simulator/internal/engine"
 	"github.com/sunsky74/gb32960/api"
 	"github.com/sunsky74/gb32960/codec"
 	_ "github.com/sunsky74/gb32960/codec/all"
 	"github.com/sunsky74/gb32960/frame"
-	"gbt32960-simulator/internal/engine"
 	mdl "github.com/sunsky74/gb32960/model/gbt2016"
 	"github.com/sunsky74/gb32960/utils"
 )
 
 // loadGolden 读取生产报文金标准 hex。
 // 来源: 协议库 golden 测试集 —— 真实国标终端发出、网关日志采集的报文。
+// 金标准随仓库提交,缺失即断供,直接失败而不是跳过。
 func loadGolden(t *testing.T, name string) []byte {
 	t.Helper()
 	b, err := os.ReadFile("testdata/" + name)
 	if err != nil {
-		t.Skipf("golden file missing: %v", err)
+		t.Fatalf("golden file missing: %v", err)
 	}
 	data, err := utils.HexToBytes(strings.TrimSpace(string(b)))
 	if err != nil {
@@ -137,7 +138,7 @@ func TestGoldenChargeableCurrentSemantics(t *testing.T) {
 
 // TestSimulatorFrameMatchesGoldenShape 模拟器产出帧与生产帧的帧头布局对照。
 func TestSimulatorFrameMatchesGoldenShape(t *testing.T) {
-	loadGolden(t, "prod_realtime_v2016_01.hex") // 存在性检查,缺失则 skip
+	loadGolden(t, "prod_realtime_v2016_01.hex") // 存在性检查(缺失即失败)
 
 	cfg := GroupsConfig{
 		"vehicle": {Enabled: true, Rows: []RowValue{{

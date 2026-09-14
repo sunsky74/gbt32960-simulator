@@ -17,7 +17,7 @@ func loadHex(t *testing.T, name string) string {
 	t.Helper()
 	b, err := os.ReadFile("../../internal/schema/testdata/" + name)
 	if err != nil {
-		t.Skipf("golden missing: %v", err)
+		t.Fatalf("golden missing: %v", err)
 	}
 	return strings.TrimSpace(string(b))
 }
@@ -209,7 +209,12 @@ func parseFloat(t *testing.T, s string) float64 {
 	return v
 }
 
-func abs(x float64) float64 { if x < 0 { return -x }; return x }
+func abs(x float64) float64 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
 
 func spaced(raw string) string {
 	var out strings.Builder
