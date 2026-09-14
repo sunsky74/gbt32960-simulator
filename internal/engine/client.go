@@ -54,6 +54,7 @@ type Options struct {
 	LoginRetries      int           // 登录重试次数
 	AutoClockSync     bool          // 登录成功后自动 0x08 校时
 	AutoReconnect     bool          // 断线自动重连
+	ReconnectDelay    time.Duration // 自动重连间隔,0=3s
 	TLS               *tls.Config
 }
 
@@ -63,6 +64,9 @@ func (o *Options) normalize() {
 	}
 	if o.LoginRetries <= 0 {
 		o.LoginRetries = 3
+	}
+	if o.ReconnectDelay <= 0 {
+		o.ReconnectDelay = 3 * time.Second
 	}
 }
 
@@ -92,10 +96,19 @@ type Client struct {
 
 	writeMu sync.Mutex
 	cancel  context.CancelFunc
-	acks    chan ackMsg
+	lifeCtx context.Context
+
+	// 会话级生命周期:每次 doConnect 递增 sessID 并派生独立 ctx;
+	// 重连/断开时旧会话的读循环与心跳循环随会话 ctx 取消而退出,避免叠加。
+	sessID       uint64
+	sessCancel   context.CancelFunc
+	reconnecting bool // 自动重连单飞守卫
+
+	acks chan ackMsg
 
 	reportMu     sync.Mutex
 	reportTicker *time.Ticker
+	reportStop   chan struct{}
 	reportFn     func() error
 }
 
@@ -240,6 +253,7 @@ func (c *Client) Connect(ctx context.Context) error {
 	cctx, cancel := context.WithCancel(context.Background())
 	c.mu.Lock()
 	c.cancel = cancel
+	c.lifeCtx = cctx
 	c.mu.Unlock()
 
 	if err := c.doConnect(cctx); err != nil {
@@ -252,12 +266,16 @@ func (c *Client) Connect(ctx context.Context) error {
 }
 
 // doConnect 执行 建链→登录→启动后台循环 的完整序列。
-func (c *Client) doConnect(ctx context.Context) error {
+// lifeCtx 为整个连接生命期(跨自动重连复用),会话级取消由 beginSession 派生。
+func (c *Client) doConnect(lifeCtx context.Context) error {
+	// 防御性清理上一次会话残留(无活动会话时为空操作)
+	c.endSession(c.currentSessID())
+
 	c.setState(StateConnecting)
 	c.bus.Emit(Event{Kind: EventConn, Message: fmt.Sprintf("正在连接 %s:%d ...", c.opts.Host, c.opts.Port)})
 
 	d := net.Dialer{Timeout: 5 * time.Second}
-	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(c.opts.Host, fmt.Sprint(c.opts.Port)))
+	conn, err := d.DialContext(lifeCtx, "tcp", net.JoinHostPort(c.opts.Host, fmt.Sprint(c.opts.Port)))
 	if err != nil {
 		c.bus.Emit(Event{Kind: EventError, Message: "连接失败: " + err.Error()})
 		return err
@@ -265,7 +283,7 @@ func (c *Client) doConnect(ctx context.Context) error {
 	if c.opts.TLS != nil {
 		tconn := tls.Client(conn, c.opts.TLS)
 		tconn.SetDeadline(time.Now().Add(5 * time.Second))
-		if err := tconn.HandshakeContext(ctx); err != nil {
+		if err := tconn.HandshakeContext(lifeCtx); err != nil {
 			_ = conn.Close()
 			c.bus.Emit(Event{Kind: EventError, Message: "TLS 握手失败: " + err.Error()})
 			return err
@@ -280,13 +298,15 @@ func (c *Client) doConnect(ctx context.Context) error {
 	c.mu.Unlock()
 	c.bus.Emit(Event{Kind: EventConn, Message: "TCP 已连接 " + conn.RemoteAddr().String()})
 
-	// 读循环先启动,登录应答由它送入 acks
-	go c.readLoop(ctx)
-	go c.heartbeatLoop(ctx)
+	// 读循环先启动,登录应答由它送入 acks;读/心跳循环绑定本会话,随会话取消而退出
+	sessCtx, id := c.beginSession(lifeCtx)
+	go c.readLoop(sessCtx, id)
+	go c.heartbeatLoop(sessCtx, id)
 
 	// 企业平台级联:先 0x05 平台登入(重试口径与车辆登入一致)
 	if c.opts.PlatformMode {
-		if err := c.platformLoginPhase(ctx); err != nil {
+		if err := c.platformLoginPhase(sessCtx); err != nil {
+			c.endSession(id)
 			return err
 		}
 	}
@@ -295,11 +315,11 @@ func (c *Client) doConnect(ctx context.Context) error {
 	c.setState(StateLoggingIn)
 	var loginErr error
 	for attempt := 1; attempt <= c.opts.LoginRetries; attempt++ {
-		if err := c.sendLogin(ctx); err != nil {
+		if err := c.sendLogin(sessCtx); err != nil {
 			loginErr = err
 			break
 		}
-		ack, err := c.waitAck(ctx, 0x01, c.opts.LoginTimeout)
+		ack, err := c.waitAck(sessCtx, 0x01, c.opts.LoginTimeout)
 		if err == nil {
 			if ack.resp != types.ResponseSuccess {
 				loginErr = fmt.Errorf("平台拒绝登录: %s", responseText(ack.resp))
@@ -316,16 +336,95 @@ func (c *Client) doConnect(ctx context.Context) error {
 		c.bus.Emit(Event{Kind: EventError, Message: fmt.Sprintf("登录应答超时(第 %d/%d 次)", attempt, c.opts.LoginRetries)})
 	}
 	if loginErr != nil {
+		c.endSession(id)
 		return loginErr
+	}
+
+	// 登录成功但会话已被取消(如并发 Disconnect),不得宣告 ONLINE
+	if sessCtx.Err() != nil {
+		c.endSession(id)
+		return sessCtx.Err()
 	}
 
 	c.setState(StateOnline)
 	c.bus.Emit(Event{Kind: EventConn, Message: "车辆登录成功 (0x01), 状态: ONLINE"})
 
 	if c.opts.AutoClockSync {
-		go c.sendClockSync(ctx)
+		go c.sendClockSync(sessCtx)
 	}
 	return nil
+}
+
+// ---------------------------------------------------------------- 会话管理
+
+// currentSessID 返回当前会话 ID(0 表示无活动会话)。
+func (c *Client) currentSessID() uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.sessID
+}
+
+// beginSession 开启新会话:派生独立 ctx、递增 sessID,并清空上一会话
+// 遗留的应答(迟到 0x01 不得满足新登录)。返回会话 ctx 与 ID。
+func (c *Client) beginSession(lifeCtx context.Context) (context.Context, uint64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.sessID++
+	ctx, cancel := context.WithCancel(lifeCtx)
+	c.sessCancel = cancel
+	for {
+		select {
+		case <-c.acks:
+			continue
+		default:
+		}
+		break
+	}
+	return ctx, c.sessID
+}
+
+// cancelSession 取消指定会话(不关闭连接);ID 不匹配或为 0 时为空操作。
+func (c *Client) cancelSession(id uint64) {
+	if id == 0 {
+		return
+	}
+	c.mu.Lock()
+	if c.sessID != id {
+		c.mu.Unlock()
+		return
+	}
+	c.sessID = 0
+	cancel := c.sessCancel
+	c.sessCancel = nil
+	c.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// endSession 结束指定会话:取消会话 ctx 并在同一临界区原子清空连接,
+// 锁外关闭连接。用于登录失败/读错误等自清理路径。
+func (c *Client) endSession(id uint64) {
+	if id == 0 {
+		return
+	}
+	c.mu.Lock()
+	if c.sessID != id {
+		c.mu.Unlock()
+		return
+	}
+	c.sessID = 0
+	cancel := c.sessCancel
+	c.sessCancel = nil
+	conn := c.conn
+	c.conn = nil
+	c.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if conn != nil {
+		_ = conn.Close()
+	}
 }
 
 // sendLogin 发送 0x01 车辆登录(按版本构造报文体:V2016 共享码长,V2025 每码独立长度)。
@@ -458,26 +557,34 @@ func (c *Client) sendClockSync(ctx context.Context) {
 	}
 }
 
-// Disconnect 优雅断开:自动登出 → 关闭连接 → 停止所有循环。
+// Disconnect 优雅断开:先停上报 → 取消会话(不关连接) → 登出 → 关闭连接 → 取消生命期。
 func (c *Client) Disconnect() {
+	c.SetAutoReport(0, nil) // 1) 先停周期上报
+
 	c.mu.Lock()
 	cancel := c.cancel
+	sid := c.sessID
 	conn := c.conn
 	c.cancel = nil
 	c.mu.Unlock()
-	if conn == nil && cancel == nil {
-		return
+	if cancel == nil && sid == 0 && conn == nil {
+		return // 完全空闲,幂等空操作
 	}
 
-	c.sendLogout(context.Background())
+	// 2) 尽早取消生命期与会话 ctx:确定性中止进行中的 doConnect/waitAck、
+	//    停止心跳与自动重连循环;连接保持打开,供登出报文使用。
+	//    先取消生命期,保证重连循环不再发起新拨号(否则旧连接被覆盖后无人关闭)。
+	if cancel != nil {
+		cancel()
+	}
+	c.cancelSession(sid)
+
+	c.sendLogout(context.Background()) // 3) 尽力而为
 	if c.opts.PlatformMode {
 		c.sendPlatformLogout(context.Background())
 	}
 
-	c.closeConn()
-	if cancel != nil {
-		cancel()
-	}
+	c.closeConn() // 4) 显式关闭连接
 	c.setState(StateIdle)
 	c.bus.Emit(Event{Kind: EventConn, Message: "已断开连接, 状态: IDLE"})
 }
@@ -512,48 +619,43 @@ func (c *Client) waitAck(ctx context.Context, cmd byte, timeout time.Duration) (
 
 // ---------------------------------------------------------------- 读循环
 
-func (c *Client) readLoop(ctx context.Context) {
+func (c *Client) readLoop(ctx context.Context, id uint64) {
+	c.mu.Lock()
+	conn := c.conn
+	c.mu.Unlock()
+	if conn == nil {
+		return
+	}
+	fr := framing.NewFrameReader(conn)
 	for {
-		c.mu.Lock()
-		conn := c.conn
-		c.mu.Unlock()
-		if conn == nil || ctx.Err() != nil {
+		raw, err := fr.Next()
+		if err != nil {
+			if ctx.Err() != nil {
+				return // 会话主动结束
+			}
+			c.handleReadError(id, err)
 			return
 		}
-		fr := framing.NewFrameReader(conn)
-		for {
-			raw, err := fr.Next()
-			if err != nil {
-				if ctx.Err() != nil {
-					return // 主动断开
-				}
-				c.handleReadError(ctx, err)
-				return
-			}
-			c.handleFrame(raw)
-		}
+		c.handleFrame(raw)
 	}
 }
 
-func (c *Client) handleReadError(ctx context.Context, err error) {
-	c.closeConn()
+// handleReadError 处理指定会话的读错误;过期会话的报错直接忽略。
+func (c *Client) handleReadError(id uint64, err error) {
+	c.mu.Lock()
+	if c.sessID != id {
+		c.mu.Unlock()
+		return // 过期会话,忽略
+	}
+	life := c.lifeCtx
+	c.mu.Unlock()
+
+	c.endSession(id)
 	c.bus.Emit(Event{Kind: EventError, Message: "连接断开: " + err.Error()})
 
-	if c.opts.AutoReconnect && ctx.Err() == nil {
+	if c.opts.AutoReconnect && life != nil && life.Err() == nil {
 		c.setState(StateConnecting)
-		go func() {
-			for ctx.Err() == nil {
-				c.bus.Emit(Event{Kind: EventConn, Message: "3 秒后自动重连 ..."})
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(3 * time.Second):
-				}
-				if err := c.doConnect(ctx); err == nil {
-					return
-				}
-			}
-		}()
+		c.startReconnectOnce(life)
 	} else {
 		c.setState(StateIdle)
 		c.mu.Lock()
@@ -565,6 +667,45 @@ func (c *Client) handleReadError(ctx context.Context, err error) {
 		}
 		c.bus.Emit(Event{Kind: EventConn, Message: "状态: IDLE"})
 	}
+}
+
+// startReconnectOnce 启动单飞自动重连循环:已有重连在途时直接返回。
+func (c *Client) startReconnectOnce(lifeCtx context.Context) {
+	c.mu.Lock()
+	if c.reconnecting {
+		c.mu.Unlock()
+		return
+	}
+	c.reconnecting = true
+	c.mu.Unlock()
+
+	go func() {
+		defer func() {
+			c.mu.Lock()
+			c.reconnecting = false
+			c.mu.Unlock()
+		}()
+		for {
+			c.bus.Emit(Event{Kind: EventConn, Message: "3 秒后自动重连 ..."})
+			select {
+			case <-lifeCtx.Done():
+				return
+			case <-time.After(c.reconnectDelay()):
+			}
+			if lifeCtx.Err() != nil {
+				return
+			}
+			if err := c.doConnect(lifeCtx); err == nil {
+				return
+			}
+		}
+	}()
+}
+
+func (c *Client) reconnectDelay() time.Duration {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.opts.ReconnectDelay
 }
 
 // handleFrame 解码单帧 → 发 RX 事件 → 应答送入 acks。
@@ -647,7 +788,7 @@ func parseBeanTime(raw []byte) *model.BeanTime {
 
 // ---------------------------------------------------------------- 心跳与周期上报
 
-func (c *Client) heartbeatLoop(ctx context.Context) {
+func (c *Client) heartbeatLoop(ctx context.Context, id uint64) {
 	c.mu.Lock()
 	interval := c.opts.HeartbeatInterval
 	c.mu.Unlock()
@@ -665,6 +806,8 @@ func (c *Client) heartbeatLoop(ctx context.Context) {
 				continue
 			}
 			if err := c.writeFrameAs(ctx, c.connVIN(), 0x07, emptyBody{v: c.opts.Version}); err != nil {
+				c.bus.Emit(Event{Kind: EventError, Message: "心跳发送失败: " + err.Error()})
+				c.handleReadError(id, err)
 				return
 			}
 		}
@@ -672,10 +815,16 @@ func (c *Client) heartbeatLoop(ctx context.Context) {
 }
 
 // SetAutoReport 设置周期上报。interval<=0 停止;fn 在每次 tick 时由引擎调用
-// (通常由 bridge 组装最新配置并调用 Send)。
+// (通常由 bridge 组装最新配置并调用 Send)。每次重设通过 stop 通道显式
+// 结束旧上报协程(Ticker.Stop 不会关闭通道,旧实现因此泄漏)。
 func (c *Client) SetAutoReport(interval time.Duration, fn func() error) {
 	c.reportMu.Lock()
 	defer c.reportMu.Unlock()
+	// 先发停止信号再停 ticker:旧协程阻塞在 select 上,可被立即唤醒退出
+	if c.reportStop != nil {
+		close(c.reportStop)
+		c.reportStop = nil
+	}
 	if c.reportTicker != nil {
 		c.reportTicker.Stop()
 		c.reportTicker = nil
@@ -686,21 +835,28 @@ func (c *Client) SetAutoReport(interval time.Duration, fn func() error) {
 	}
 	c.reportFn = fn
 	ticker := time.NewTicker(interval)
+	stop := make(chan struct{})
 	c.reportTicker = ticker
+	c.reportStop = stop
 	go func() {
-		for range ticker.C {
-			c.reportMu.Lock()
-			f := c.reportFn
-			tk := c.reportTicker
-			c.reportMu.Unlock()
-			if f == nil || tk != ticker {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
 				return
-			}
-			if c.State() != StateOnline {
-				continue
-			}
-			if err := f(); err != nil {
-				c.bus.Emit(Event{Kind: EventError, Message: "周期上报失败: " + err.Error()})
+			case <-ticker.C:
+				c.reportMu.Lock()
+				f := c.reportFn
+				c.reportMu.Unlock()
+				if f == nil {
+					return
+				}
+				if c.State() != StateOnline {
+					continue
+				}
+				if err := f(); err != nil {
+					c.bus.Emit(Event{Kind: EventError, Message: "周期上报失败: " + err.Error()})
+				}
 			}
 		}
 	}()
