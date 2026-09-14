@@ -34,6 +34,11 @@ type Forwarder struct {
 	buffer []engine.Event // 环形缓冲,超出容量丢弃最旧
 	cap    int            // 导出缓冲容量(SetCap 运行中可调)
 
+	// emit 前端推送函数,默认 runtime.EventsEmit;测试可注入以确定性验证取消路径。
+	emit func(ctx context.Context, eventName string, optionalData ...any)
+	// batchWindow 批窗口时长(默认 100ms;测试可注入拉长以避免与取消竞速)。
+	batchWindow time.Duration
+
 	// done 在 Start 完全停止(转发循环退出 + 总线退订)后关闭,
 	// 供调用方确认停止完成(当前由测试消费;shutdown 可选择等待)。
 	done     chan struct{}
@@ -45,10 +50,12 @@ const defaultExportBufferCap = 50000
 // NewForwarder 创建转发器。
 func NewForwarder(rt *Runtime) *Forwarder {
 	return &Forwarder{
-		rt:     rt,
-		buffer: make([]engine.Event, 0, 1024),
-		cap:    defaultExportBufferCap,
-		done:   make(chan struct{}),
+		rt:          rt,
+		buffer:      make([]engine.Event, 0, 1024),
+		cap:         defaultExportBufferCap,
+		emit:        runtime.EventsEmit,
+		batchWindow: 100 * time.Millisecond,
+		done:        make(chan struct{}),
 	}
 }
 
@@ -117,7 +124,7 @@ func (f *Forwarder) Start(ctx context.Context) {
 			batch = append(batch, DecodeEvent(e))
 		}
 
-		timer := time.NewTimer(100 * time.Millisecond)
+		timer := time.NewTimer(f.batchWindow)
 	drain:
 		for len(batch) < 128 {
 			select {
@@ -142,6 +149,10 @@ func (f *Forwarder) Start(ctx context.Context) {
 		for _, e := range batch {
 			f.mirror(e)
 		}
-		runtime.EventsEmit(ctx, "console:events", batch)
+		// 取消瞬间(定时器先于 ctx.Done 就绪)只镜像不推送:shutdown 时前端正在关闭。
+		if ctx.Err() != nil {
+			return
+		}
+		f.emit(ctx, "console:events", batch)
 	}
 }
