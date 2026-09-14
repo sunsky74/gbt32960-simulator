@@ -29,21 +29,21 @@ func AssembleRealtimeV2025(cfg GroupsConfig, at time.Time) (*mdl.RealTimeV2025Da
 		},
 	}
 
-	if g, ok := cfg["vehicle"]; ok && g.Enabled && len(g.Rows) > 0 {
+	if g, ok := cfg[GroupVehicle]; ok && g.Enabled && len(g.Rows) > 0 {
 		v, err := assembleVehicleV2025(g.Rows[0])
 		if err != nil {
 			return nil, fmt.Errorf("整车数据: %w", err)
 		}
 		m.VehicleData = v
 	}
-	if g, ok := cfg["motor"]; ok && g.Enabled {
+	if g, ok := cfg[GroupMotor]; ok && g.Enabled {
 		l, err := assembleMotorsV2025(g.Rows)
 		if err != nil {
 			return nil, fmt.Errorf("驱动电机: %w", err)
 		}
 		m.MotorDataList = l
 	}
-	if g, ok := cfg["fuelcell"]; ok && g.Enabled && len(g.Rows) > 0 {
+	if g, ok := cfg[GroupFuelCell]; ok && g.Enabled && len(g.Rows) > 0 {
 		m.FuelCellData = &mdlrt.FuelCellEngineV2025Data{
 			HighestTempOfHydrogenSystem:          getFloat(g.Rows[0], "hydrogenMaxTemp", 0),
 			HighestTempProbeCodeOfHydrogenSystem: getInt(g.Rows[0], "hydrogenMaxTempProbe", 0),
@@ -56,12 +56,12 @@ func AssembleRealtimeV2025(cfg GroupsConfig, at time.Time) (*mdl.RealTimeV2025Da
 			DCControllerTemperature:              getFloat(g.Rows[0], "dcControllerTemp", 0),
 		}
 	}
-	if g, ok := cfg["engine"]; ok && g.Enabled && len(g.Rows) > 0 {
+	if g, ok := cfg[GroupEngine]; ok && g.Enabled && len(g.Rows) > 0 {
 		m.EngineData = &mdlrt.EngineV2025Data{
 			CrankshaftSpeed: getInt(g.Rows[0], "crankshaftSpeed", 0),
 		}
 	}
-	if g, ok := cfg["location"]; ok && g.Enabled && len(g.Rows) > 0 {
+	if g, ok := cfg[GroupLocation]; ok && g.Enabled && len(g.Rows) > 0 {
 		lon := getFloat(g.Rows[0], "longitude", 0)
 		lat := getFloat(g.Rows[0], "latitude", 0)
 		m.LocationData = &mdlrt.LocationV2025Data{
@@ -75,28 +75,28 @@ func AssembleRealtimeV2025(cfg GroupsConfig, at time.Time) (*mdl.RealTimeV2025Da
 			ConvertLatitude:  lat,
 		}
 	}
-	if g, ok := cfg["alarm"]; ok && g.Enabled && len(g.Rows) > 0 {
+	if g, ok := cfg[GroupAlarm]; ok && g.Enabled && len(g.Rows) > 0 {
 		a, err := assembleAlarmV2025(g.Rows[0])
 		if err != nil {
 			return nil, fmt.Errorf("报警数据: %w", err)
 		}
 		m.AlarmData = a
 	}
-	if g, ok := cfg["minparallel"]; ok && g.Enabled {
+	if g, ok := cfg[GroupMinParallel]; ok && g.Enabled {
 		l, err := assembleMinParallel(g.Rows)
 		if err != nil {
 			return nil, fmt.Errorf("最小并联电压: %w", err)
 		}
 		m.MinParallelCellVoltages = l
 	}
-	if g, ok := cfg["batterytemp"]; ok && g.Enabled {
+	if g, ok := cfg[GroupBatteryTemp]; ok && g.Enabled {
 		l, err := assembleBatteryTemp(g.Rows)
 		if err != nil {
 			return nil, fmt.Errorf("电池包温度: %w", err)
 		}
 		m.BatteryPackTemperatures = l
 	}
-	if g, ok := cfg["fcstack"]; ok && g.Enabled {
+	if g, ok := cfg[GroupFCStack]; ok && g.Enabled {
 		l := &mdlrt.FuelCellStackDataList{StackCount: len(g.Rows)}
 		for _, r := range g.Rows {
 			l.Items = append(l.Items, mdlrt.FuelCellStackData{
@@ -115,7 +115,7 @@ func AssembleRealtimeV2025(cfg GroupsConfig, at time.Time) (*mdl.RealTimeV2025Da
 		}
 		m.FuelCellStackDataList = l
 	}
-	if g, ok := cfg["supercap"]; ok && g.Enabled && len(g.Rows) > 0 {
+	if g, ok := cfg[GroupSuperCap]; ok && g.Enabled && len(g.Rows) > 0 {
 		m.SuperCapacitorData = &mdlrt.SuperCapacitorData{
 			ManagementSystemNumber: getInt(g.Rows[0], "managementSystemNumber", 1),
 			TotalVoltage:           getFloat(g.Rows[0], "totalVoltage", 0),
@@ -127,7 +127,7 @@ func AssembleRealtimeV2025(cfg GroupsConfig, at time.Time) (*mdl.RealTimeV2025Da
 		m.SuperCapacitorData.CapacitorCount = len(m.SuperCapacitorData.CapacitorVoltages)
 		m.SuperCapacitorData.TemperatureProbeCount = len(m.SuperCapacitorData.ProbeTemperatures)
 	}
-	if g, ok := cfg["supercapextremum"]; ok && g.Enabled && len(g.Rows) > 0 {
+	if g, ok := cfg[GroupSuperCapExtremum]; ok && g.Enabled && len(g.Rows) > 0 {
 		m.SuperCapacitorExtremumData = &mdlrt.SuperCapacitorExtremumData{
 			VoltageMaxSubsystem:     getInt(g.Rows[0], "voltageMaxSubsystem", 0),
 			VoltageMaxBattery:       getInt(g.Rows[0], "voltageMaxBattery", 0),
@@ -212,7 +212,7 @@ var v2025AlarmBoolFields = []string{
 
 func assembleAlarmV2025(r RowValue) (*mdlrt.AlarmV2025Data, error) {
 	a := &mdlrt.AlarmV2025Data{
-		MaxAlarmLevel:    getInt(r, "maxAlarmLevel", 0),
+		MaxAlarmLevel:     getInt(r, "maxAlarmLevel", 0),
 		BatteryFaultDatas: toInt64s(getFloatArray(r, "batteryFaults")),
 		MotorFaultDatas:   toInt64s(getFloatArray(r, "motorFaults")),
 		EngineFaultDatas:  toInt64s(getFloatArray(r, "engineFaults")),
@@ -237,68 +237,9 @@ func assembleAlarmV2025(r RowValue) (*mdlrt.AlarmV2025Data, error) {
 	return a, nil
 }
 
+// setAlarmV2025Bool 反射写入 2025 报警结构的布尔位;未知字段或非布尔字段返回错误。
 func setAlarmV2025Bool(a *mdlrt.AlarmV2025Data, field string, on bool) error {
-	switch field {
-	case "TemperatureDifferential":
-		a.TemperatureDifferential = on
-	case "BatteryHighTemperature":
-		a.BatteryHighTemperature = on
-	case "DeviceTypeOverVoltage":
-		a.DeviceTypeOverVoltage = on
-	case "DeviceTypeUnderVoltage":
-		a.DeviceTypeUnderVoltage = on
-	case "SOCLow":
-		a.SOCLow = on
-	case "MonomerBatteryOverVoltage":
-		a.MonomerBatteryOverVoltage = on
-	case "MonomerBatteryUnderVoltage":
-		a.MonomerBatteryUnderVoltage = on
-	case "SOCHigh":
-		a.SOCHigh = on
-	case "SOCJump":
-		a.SOCJump = on
-	case "DeviceTypeDontMatch":
-		a.DeviceTypeDontMatch = on
-	case "BatteryConsistencyPoor":
-		a.BatteryConsistencyPoor = on
-	case "Insulation":
-		a.Insulation = on
-	case "DCTemperature":
-		a.DCTemperature = on
-	case "BrakingSystem":
-		a.BrakingSystem = on
-	case "DCStatus":
-		a.DCStatus = on
-	case "DriveMotorControllerTemperature":
-		a.DriveMotorControllerTemperature = on
-	case "HighPressureInterlock":
-		a.HighPressureInterlock = on
-	case "DriveMotorTemperature":
-		a.DriveMotorTemperature = on
-	case "DeviceTypeOverFilling":
-		a.DeviceTypeOverFilling = on
-	case "DriveMotorOverSpeed":
-		a.DriveMotorOverSpeed = on
-	case "DriveMotorOverCurrent":
-		a.DriveMotorOverCurrent = on
-	case "SuperCapacitorOverTemp":
-		a.SuperCapacitorOverTemp = on
-	case "SuperCapacitorOverVoltage":
-		a.SuperCapacitorOverVoltage = on
-	case "DeviceThermalEvent":
-		a.DeviceThermalEvent = on
-	case "HydrogenLeakage":
-		a.HydrogenLeakage = on
-	case "HydrogenPressureAbnormal":
-		a.HydrogenPressureAbnormal = on
-	case "HydrogenTemperatureAbnormal":
-		a.HydrogenTemperatureAbnormal = on
-	case "FuelCellStackOverTemperature":
-		a.FuelCellStackOverTemperature = on
-	default:
-		return fmt.Errorf("未知报警位字段: %s", field)
-	}
-	return nil
+	return setBoolFieldByName(a, field, on)
 }
 
 func assembleMinParallel(rows []RowValue) (*mdlrt.MinParallelCellVoltageList, error) {

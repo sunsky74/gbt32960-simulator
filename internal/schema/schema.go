@@ -2,6 +2,25 @@
 // 协议报文体的装配器。schema 由 Go 输出、前端动态渲染,加字段只改 Go。
 package schema
 
+// 标准报文组键常量:V2016 与 V2025 组定义的并集(共 14 个)。
+// 组定义、装配查表与标准键集合统一引用常量,避免字面量散落漂移。
+const (
+	GroupVehicle          = "vehicle"          // 整车数据
+	GroupMotor            = "motor"            // 驱动电机数据
+	GroupFuelCell         = "fuelcell"         // 燃料电池数据
+	GroupEngine           = "engine"           // 发动机数据
+	GroupLocation         = "location"         // 位置数据
+	GroupExtremum         = "extremum"         // 极值数据 (2016)
+	GroupAlarm            = "alarm"            // 报警数据
+	GroupVoltage          = "voltage"          // 储能装置电压数据 (2016)
+	GroupTemperature      = "temperature"      // 储能装置温度数据 (2016)
+	GroupMinParallel      = "minparallel"      // 最小并联单元电压数据 (2025)
+	GroupBatteryTemp      = "batterytemp"      // 电池包温度数据 (2025)
+	GroupFCStack          = "fcstack"          // 燃料电池电堆数据 (2025)
+	GroupSuperCap         = "supercap"         // 超级电容数据 (2025)
+	GroupSuperCapExtremum = "supercapextremum" // 超级电容极值数据 (2025)
+)
+
 // GroupSchema 一个实时数据组(对应 0x02/0x03 数据单元的一个 TLV 子记录)。
 type GroupSchema struct {
 	Key      string        `json:"key"`      // 组标识,如 "vehicle"
@@ -76,7 +95,7 @@ var (
 func V2016Groups() []GroupSchema {
 	return []GroupSchema{
 		{
-			Key: "vehicle", Title: "整车数据", Enabled: true,
+			Key: GroupVehicle, Title: "整车数据", Enabled: true,
 			Fields: []FieldSchema{
 				{Key: "operatingState", Label: "车辆状态", Kind: "enum", Enum: opStateEnum},
 				{Key: "chargingState", Label: "充电状态", Kind: "enum", Enum: chargeEnum},
@@ -96,7 +115,7 @@ func V2016Groups() []GroupSchema {
 			},
 		},
 		{
-			Key: "motor", Title: "驱动电机数据", Enabled: true, Multiple: true, MaxRows: 30,
+			Key: GroupMotor, Title: "驱动电机数据", Enabled: true, Multiple: true, MaxRows: 30,
 			Fields: []FieldSchema{
 				{Key: "seq", Label: "电机序号", Kind: "int", Min: ptr(1), Max: ptr(253)},
 				{Key: "state", Label: "电机状态", Kind: "enum", Enum: motorStateEnum},
@@ -109,7 +128,7 @@ func V2016Groups() []GroupSchema {
 			},
 		},
 		{
-			Key: "fuelcell", Title: "燃料电池数据", Enabled: false,
+			Key: GroupFuelCell, Title: "燃料电池数据", Enabled: false,
 			Fields: []FieldSchema{
 				{Key: "voltage", Label: "燃料电池电压", Kind: "float", Unit: "V", Min: ptr(0), Max: ptr(6000), ScaleNote: "×0.1"},
 				{Key: "current", Label: "燃料电池电流", Kind: "float", Unit: "A", Min: ptr(0), Max: ptr(2000), ScaleNote: "×0.1"},
@@ -125,7 +144,7 @@ func V2016Groups() []GroupSchema {
 			},
 		},
 		{
-			Key: "engine", Title: "发动机数据", Enabled: false,
+			Key: GroupEngine, Title: "发动机数据", Enabled: false,
 			Fields: []FieldSchema{
 				{Key: "state", Label: "发动机状态", Kind: "enum", Enum: onOffEnum},
 				{Key: "crankshaftSpeed", Label: "曲轴转速", Kind: "int", Unit: "r/min", Min: ptr(0), Max: ptr(65535)},
@@ -133,7 +152,7 @@ func V2016Groups() []GroupSchema {
 			},
 		},
 		{
-			Key: "location", Title: "位置数据", Enabled: true,
+			Key: GroupLocation, Title: "位置数据", Enabled: true,
 			Fields: []FieldSchema{
 				{Key: "valid", Label: "定位有效", Kind: "bool"},
 				{Key: "longitude", Label: "经度", Kind: "float", Unit: "°", Min: ptr(-180), Max: ptr(180), ScaleNote: "×10^6"},
@@ -141,7 +160,7 @@ func V2016Groups() []GroupSchema {
 			},
 		},
 		{
-			Key: "extremum", Title: "极值数据", Enabled: true,
+			Key: GroupExtremum, Title: "极值数据", Enabled: true,
 			Fields: []FieldSchema{
 				{Key: "voltageMaxSubsystem", Label: "最高电压子系统号", Kind: "int", Min: ptr(0), Max: ptr(255)},
 				{Key: "voltageMaxBattery", Label: "最高电压单体代号", Kind: "int", Min: ptr(0), Max: ptr(255)},
@@ -158,7 +177,7 @@ func V2016Groups() []GroupSchema {
 			},
 		},
 		{
-			Key: "alarm", Title: "报警数据", Enabled: true,
+			Key: GroupAlarm, Title: "报警数据", Enabled: true,
 			Fields: []FieldSchema{
 				{Key: "maxAlarmLevel", Label: "最高报警等级", Kind: "int", Min: ptr(0), Max: ptr(3)},
 				// 19 个报警位按 bit 顺序生成 bool 字段
@@ -170,7 +189,7 @@ func V2016Groups() []GroupSchema {
 			},
 		},
 		{
-			Key: "voltage", Title: "储能装置电压数据", Enabled: true, Multiple: true, MaxRows: 10,
+			Key: GroupVoltage, Title: "储能装置电压数据", Enabled: true, Multiple: true, MaxRows: 10,
 			Fields: []FieldSchema{
 				{Key: "subsystem", Label: "子系统号", Kind: "int", Min: ptr(1), Max: ptr(250)},
 				{Key: "voltage", Label: "总电压", Kind: "float", Unit: "V", Min: ptr(0), Max: ptr(10000), ScaleNote: "×0.1"},
@@ -181,7 +200,7 @@ func V2016Groups() []GroupSchema {
 			},
 		},
 		{
-			Key: "temperature", Title: "储能装置温度数据", Enabled: true, Multiple: true, MaxRows: 10,
+			Key: GroupTemperature, Title: "储能装置温度数据", Enabled: true, Multiple: true, MaxRows: 10,
 			Fields: []FieldSchema{
 				{Key: "subsystem", Label: "子系统号", Kind: "int", Min: ptr(1), Max: ptr(250)},
 				{Key: "probeTemps", Label: "探针温度值", Kind: "array_float", ItemLabel: "探针", Unit: "°C", ScaleNote: "偏移+40"},
@@ -208,17 +227,14 @@ func alarmBitsField() FieldSchema {
 	return FieldSchema{Key: "bits", Label: "通用报警标志位", Kind: "bitgroup", Bits: defs}
 }
 
-// standardGroupKeys 标准报文组键集合(V2016 与 V2025 组定义并集,共 14 个)。
-// 从组定义构建以保持同步;扩展组键与标准键同名会被 ext.Validate 拒绝。
-var standardGroupKeys = func() map[string]bool {
-	m := make(map[string]bool)
-	for _, groups := range [][]GroupSchema{V2016Groups(), V2025Groups()} {
-		for _, g := range groups {
-			m[g.Key] = true
-		}
-	}
-	return m
-}()
+// standardGroupKeys 标准报文组键集合(V2016 与 V2025 组定义并集,共 14 个),
+// 由 Group* 常量构建;扩展组键与标准键同名会被 ext.Validate 拒绝。
+var standardGroupKeys = map[string]bool{
+	GroupVehicle: true, GroupMotor: true, GroupFuelCell: true, GroupEngine: true,
+	GroupLocation: true, GroupExtremum: true, GroupAlarm: true, GroupVoltage: true,
+	GroupTemperature: true, GroupMinParallel: true, GroupBatteryTemp: true,
+	GroupFCStack: true, GroupSuperCap: true, GroupSuperCapExtremum: true,
+}
 
 // IsStandardGroupKey 报告 key 是否属于任一协议版本的标准报文组键。
 // 持久化层据此把扩展组键挡在 message.json 之外(扩展组值按包独立存储)。

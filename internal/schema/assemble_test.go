@@ -5,12 +5,14 @@ import (
 	"testing"
 	"time"
 
+	"gbt32960-simulator/internal/engine"
 	"github.com/sunsky74/gb32960/api"
 	"github.com/sunsky74/gb32960/codec"
 	_ "github.com/sunsky74/gb32960/codec/all"
 	"github.com/sunsky74/gb32960/frame"
-	"gbt32960-simulator/internal/engine"
 	mdl "github.com/sunsky74/gb32960/model/gbt2016"
+	mdlrt16 "github.com/sunsky74/gb32960/model/gbt2016/realtime"
+	mdlrt25 "github.com/sunsky74/gb32960/model/gbt2025/realtime"
 	"github.com/sunsky74/gb32960/utils"
 )
 
@@ -144,6 +146,26 @@ func TestAssembleInvalidSOC(t *testing.T) {
 	}
 	if _, err := AssembleRealtime(cfg, time.Now()); err == nil {
 		t.Fatal("soc=150 should fail validation")
+	}
+}
+
+// TestAlarmBoolSettersReflect 锁定反射写入口径:两版已知字段均可写入,
+// 未知字段两版均返回错误(v2016 旧 switch 实现曾静默忽略)。
+func TestAlarmBoolSettersReflect(t *testing.T) {
+	a := &mdlrt16.AlarmData{}
+	if err := setAlarmBool(a, "SocLow", true); err != nil || !a.SocLow {
+		t.Fatalf("v2016 已知字段写入失败: err=%v", err)
+	}
+	if err := setAlarmBool(a, "NoSuchAlarmBit", true); err == nil {
+		t.Fatal("v2016 未知字段应返回错误")
+	}
+
+	b := &mdlrt25.AlarmV2025Data{}
+	if err := setAlarmV2025Bool(b, "DCStatus", true); err != nil || !b.DCStatus {
+		t.Fatalf("v2025 已知字段写入失败: err=%v", err)
+	}
+	if err := setAlarmV2025Bool(b, "NoSuchAlarmBit", true); err == nil {
+		t.Fatal("v2025 未知字段应返回错误")
 	}
 }
 

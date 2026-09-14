@@ -2,6 +2,7 @@ package schema
 
 import (
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/sunsky74/gb32960/model"
@@ -81,59 +82,59 @@ func AssembleRealtime(cfg GroupsConfig, at time.Time) (*mdl.RealTimeData, error)
 		},
 	}
 
-	if g, ok := cfg["vehicle"]; ok && g.Enabled && len(g.Rows) > 0 {
+	if g, ok := cfg[GroupVehicle]; ok && g.Enabled && len(g.Rows) > 0 {
 		v, err := assembleVehicle(g.Rows[0])
 		if err != nil {
 			return nil, fmt.Errorf("整车数据: %w", err)
 		}
 		m.VehicleData = v
 	}
-	if g, ok := cfg["motor"]; ok && g.Enabled {
+	if g, ok := cfg[GroupMotor]; ok && g.Enabled {
 		l, err := assembleMotors(g.Rows)
 		if err != nil {
 			return nil, fmt.Errorf("驱动电机: %w", err)
 		}
 		m.MotorDataList = l
 	}
-	if g, ok := cfg["fuelcell"]; ok && g.Enabled && len(g.Rows) > 0 {
+	if g, ok := cfg[GroupFuelCell]; ok && g.Enabled && len(g.Rows) > 0 {
 		v, err := assembleFuelCell(g.Rows[0])
 		if err != nil {
 			return nil, fmt.Errorf("燃料电池: %w", err)
 		}
 		m.FuelCellData = v
 	}
-	if g, ok := cfg["engine"]; ok && g.Enabled && len(g.Rows) > 0 {
+	if g, ok := cfg[GroupEngine]; ok && g.Enabled && len(g.Rows) > 0 {
 		m.EngineData = &realtime.EngineData{
 			EngineState:         byte(getInt(g.Rows[0], "state", 1)),
 			CrankshaftSpeed:     getInt(g.Rows[0], "crankshaftSpeed", 0),
 			FuelConsumptionRate: getFloat(g.Rows[0], "consumption", 0),
 		}
 	}
-	if g, ok := cfg["location"]; ok && g.Enabled && len(g.Rows) > 0 {
+	if g, ok := cfg[GroupLocation]; ok && g.Enabled && len(g.Rows) > 0 {
 		m.LocationData = &realtime.LocationData{
 			Valid:     getBool(g.Rows[0], "valid", true),
 			Longitude: getFloat(g.Rows[0], "longitude", 0),
 			Latitude:  getFloat(g.Rows[0], "latitude", 0),
 		}
 	}
-	if g, ok := cfg["extremum"]; ok && g.Enabled && len(g.Rows) > 0 {
+	if g, ok := cfg[GroupExtremum]; ok && g.Enabled && len(g.Rows) > 0 {
 		m.ExtremumData = assembleExtremum(g.Rows[0])
 	}
-	if g, ok := cfg["alarm"]; ok && g.Enabled && len(g.Rows) > 0 {
+	if g, ok := cfg[GroupAlarm]; ok && g.Enabled && len(g.Rows) > 0 {
 		a, err := assembleAlarm(g.Rows[0])
 		if err != nil {
 			return nil, fmt.Errorf("报警数据: %w", err)
 		}
 		m.AlarmData = a
 	}
-	if g, ok := cfg["voltage"]; ok && g.Enabled {
+	if g, ok := cfg[GroupVoltage]; ok && g.Enabled {
 		l, err := assembleVoltageList(g.Rows)
 		if err != nil {
 			return nil, fmt.Errorf("储能电压: %w", err)
 		}
 		m.ChargeableSubsystemElectricList = l
 	}
-	if g, ok := cfg["temperature"]; ok && g.Enabled {
+	if g, ok := cfg[GroupTemperature]; ok && g.Enabled {
 		l, err := assembleTemperatureList(g.Rows)
 		if err != nil {
 			return nil, fmt.Errorf("储能温度: %w", err)
@@ -245,7 +246,7 @@ var alarmBoolFields = []string{
 
 func assembleAlarm(r RowValue) (*realtime.AlarmData, error) {
 	a := &realtime.AlarmData{
-		MaxAlarmLevel:    getInt(r, "maxAlarmLevel", 0),
+		MaxAlarmLevel:     getInt(r, "maxAlarmLevel", 0),
 		BatteryFaultDatas: toInt64s(getFloatArray(r, "batteryFaults")),
 		MotorFaultDatas:   toInt64s(getFloatArray(r, "motorFaults")),
 		EngineFaultDatas:  toInt64s(getFloatArray(r, "engineFaults")),
@@ -266,53 +267,31 @@ func assembleAlarm(r RowValue) (*realtime.AlarmData, error) {
 		if on {
 			mask |= 1 << i
 		}
-		setAlarmBool(a, name, on)
+		if err := setAlarmBool(a, name, on); err != nil {
+			return nil, err
+		}
 	}
 	a.AlarmBitIdentify = mask
 	return a, nil
 }
 
-func setAlarmBool(a *realtime.AlarmData, field string, on bool) {
-	switch field {
-	case "TemperatureDifferential":
-		a.TemperatureDifferential = on
-	case "BatteryHighTemperature":
-		a.BatteryHighTemperature = on
-	case "DeviceTypeOverVoltage":
-		a.DeviceTypeOverVoltage = on
-	case "DeviceTypeUnderVoltage":
-		a.DeviceTypeUnderVoltage = on
-	case "SocLow":
-		a.SocLow = on
-	case "MonomerBatteryOverVoltage":
-		a.MonomerBatteryOverVoltage = on
-	case "MonomerBatteryUnderVoltage":
-		a.MonomerBatteryUnderVoltage = on
-	case "SocHigh":
-		a.SocHigh = on
-	case "SocJump":
-		a.SocJump = on
-	case "DeviceTypeDontMatch":
-		a.DeviceTypeDontMatch = on
-	case "BatteryConsistencyPoor":
-		a.BatteryConsistencyPoor = on
-	case "Insulation":
-		a.Insulation = on
-	case "DcTemperature":
-		a.DcTemperature = on
-	case "BrakingSystem":
-		a.BrakingSystem = on
-	case "DcStatus":
-		a.DcStatus = on
-	case "DriveMotorControllerTemperature":
-		a.DriveMotorControllerTemperature = on
-	case "HighPressureInterlock":
-		a.HighPressureInterlock = on
-	case "DriveMotorTemperature":
-		a.DriveMotorTemperature = on
-	case "DeviceTypeOverFilling":
-		a.DeviceTypeOverFilling = on
+// setAlarmBool 反射写入 2016 报警结构的布尔位;未知字段或非布尔字段返回错误。
+func setAlarmBool(a *realtime.AlarmData, field string, on bool) error {
+	return setBoolFieldByName(a, field, on)
+}
+
+// setBoolFieldByName 反射按字段名写入 bool:字段不存在或类型非 bool 返回错误。
+// 两版报警结构字段名不同(2025 为 SOCLow/DCStatus 等),此处统一写入口径。
+func setBoolFieldByName(target any, field string, on bool) error {
+	fv := reflect.ValueOf(target).Elem().FieldByName(field)
+	if !fv.IsValid() {
+		return fmt.Errorf("未知报警位字段: %s", field)
 	}
+	if fv.Kind() != reflect.Bool {
+		return fmt.Errorf("报警位字段类型非布尔: %s", field)
+	}
+	fv.SetBool(on)
+	return nil
 }
 
 func assembleVoltageList(rows []RowValue) (*realtime.ChargeableSubsystemElectricList, error) {

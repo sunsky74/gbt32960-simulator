@@ -7,6 +7,7 @@ package schema
 //   - 电机组无控制器电压/电流;转速偏移 +32000、转矩偏移 +20000
 //   - 报警位扩展到 28 位(2016 为 19 位)
 //   - 新增:燃料电池电堆 / 超级电容 / 超级电容极值
+//
 // 自定义数据(0x80~)与签名(0xFF)暂不暴露:自定义无固定结构,签名属加密链路(M4)。
 func V2025Groups() []GroupSchema {
 	sharedMotorStateEnum := enum(
@@ -15,7 +16,7 @@ func V2025Groups() []GroupSchema {
 	)
 	return []GroupSchema{
 		{
-			Key: "vehicle", Title: "整车数据", Enabled: true,
+			Key: GroupVehicle, Title: "整车数据", Enabled: true,
 			Fields: []FieldSchema{
 				{Key: "operatingState", Label: "车辆状态", Kind: "enum", Enum: opStateEnum},
 				{Key: "chargingState", Label: "充电状态", Kind: "enum", Enum: chargeEnum},
@@ -32,7 +33,7 @@ func V2025Groups() []GroupSchema {
 			},
 		},
 		{
-			Key: "motor", Title: "驱动电机数据", Enabled: true, Multiple: true, MaxRows: 30,
+			Key: GroupMotor, Title: "驱动电机数据", Enabled: true, Multiple: true, MaxRows: 30,
 			Fields: []FieldSchema{
 				{Key: "seq", Label: "电机序号", Kind: "int", Min: ptr(1), Max: ptr(253)},
 				{Key: "state", Label: "电机状态", Kind: "enum", Enum: sharedMotorStateEnum},
@@ -43,7 +44,7 @@ func V2025Groups() []GroupSchema {
 			},
 		},
 		{
-			Key: "fuelcell", Title: "燃料电池发动机数据", Enabled: false,
+			Key: GroupFuelCell, Title: "燃料电池发动机数据", Enabled: false,
 			Fields: []FieldSchema{
 				{Key: "hydrogenMaxTemp", Label: "氢系统最高温度", Kind: "float", Unit: "°C", Min: ptr(-40), Max: ptr(210), ScaleNote: "偏移+40"},
 				{Key: "hydrogenMaxTempProbe", Label: "最高温度探针代号", Kind: "int", Min: ptr(0), Max: ptr(255)},
@@ -57,13 +58,13 @@ func V2025Groups() []GroupSchema {
 			},
 		},
 		{
-			Key: "engine", Title: "发动机数据", Enabled: false,
+			Key: GroupEngine, Title: "发动机数据", Enabled: false,
 			Fields: []FieldSchema{
 				{Key: "crankshaftSpeed", Label: "曲轴转速", Kind: "int", Unit: "r/min", Min: ptr(0), Max: ptr(60000)},
 			},
 		},
 		{
-			Key: "location", Title: "位置数据", Enabled: true,
+			Key: GroupLocation, Title: "位置数据", Enabled: true,
 			Fields: []FieldSchema{
 				{Key: "valid", Label: "定位有效", Kind: "bool"},
 				{Key: "longitude", Label: "经度", Kind: "float", Unit: "°", Min: ptr(-180), Max: ptr(180), ScaleNote: "×10^6, 东/西经按正负号自动判定"},
@@ -71,7 +72,7 @@ func V2025Groups() []GroupSchema {
 			},
 		},
 		{
-			Key: "alarm", Title: "报警数据", Enabled: true,
+			Key: GroupAlarm, Title: "报警数据", Enabled: true,
 			Fields: []FieldSchema{
 				{Key: "maxAlarmLevel", Label: "最高报警等级", Kind: "int", Min: ptr(0), Max: ptr(3)},
 				alarmBitsFieldV2025(),
@@ -82,7 +83,7 @@ func V2025Groups() []GroupSchema {
 			},
 		},
 		{
-			Key: "minparallel", Title: "最小并联单元电压数据", Enabled: true, Multiple: true, MaxRows: 10,
+			Key: GroupMinParallel, Title: "最小并联单元电压数据", Enabled: true, Multiple: true, MaxRows: 10,
 			Fields: []FieldSchema{
 				{Key: "batteryPackSeq", Label: "电池包号", Kind: "int", Min: ptr(1), Max: ptr(250)},
 				{Key: "voltage", Label: "总电压", Kind: "float", Unit: "V", Min: ptr(0), Max: ptr(10000), ScaleNote: "×0.1"},
@@ -91,14 +92,14 @@ func V2025Groups() []GroupSchema {
 			},
 		},
 		{
-			Key: "batterytemp", Title: "电池包温度数据", Enabled: true, Multiple: true, MaxRows: 10,
+			Key: GroupBatteryTemp, Title: "电池包温度数据", Enabled: true, Multiple: true, MaxRows: 10,
 			Fields: []FieldSchema{
 				{Key: "batteryPackSeq", Label: "电池包号", Kind: "int", Min: ptr(1), Max: ptr(250)},
 				{Key: "probeTemps", Label: "探针温度值", Kind: "array_float", ItemLabel: "探针", Unit: "°C", ScaleNote: "偏移+40"},
 			},
 		},
 		{
-			Key: "fcstack", Title: "燃料电池电堆数据", Enabled: false, Multiple: true, MaxRows: 10,
+			Key: GroupFCStack, Title: "燃料电池电堆数据", Enabled: false, Multiple: true, MaxRows: 10,
 			Fields: []FieldSchema{
 				{Key: "stackSeq", Label: "电堆序号", Kind: "int", Min: ptr(1), Max: ptr(250)},
 				{Key: "voltage", Label: "电压", Kind: "float", Unit: "V", Min: ptr(0), Max: ptr(10000), ScaleNote: "×0.1"},
@@ -110,7 +111,7 @@ func V2025Groups() []GroupSchema {
 			},
 		},
 		{
-			Key: "supercap", Title: "超级电容数据", Enabled: false,
+			Key: GroupSuperCap, Title: "超级电容数据", Enabled: false,
 			Fields: []FieldSchema{
 				{Key: "managementSystemNumber", Label: "管理系统号", Kind: "int", Min: ptr(1), Max: ptr(250)},
 				{Key: "totalVoltage", Label: "总电压", Kind: "float", Unit: "V", Min: ptr(0), Max: ptr(10000), ScaleNote: "×0.1"},
@@ -120,7 +121,7 @@ func V2025Groups() []GroupSchema {
 			},
 		},
 		{
-			Key: "supercapextremum", Title: "超级电容极值数据", Enabled: false,
+			Key: GroupSuperCapExtremum, Title: "超级电容极值数据", Enabled: false,
 			Fields: []FieldSchema{
 				{Key: "voltageMaxSubsystem", Label: "最高电压管理系统号", Kind: "int", Min: ptr(0), Max: ptr(255)},
 				{Key: "voltageMaxBattery", Label: "最高电压单体代号", Kind: "int", Min: ptr(0), Max: ptr(255)},
