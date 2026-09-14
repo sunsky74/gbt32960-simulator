@@ -9,6 +9,7 @@ import (
 )
 
 // connVinsLen 返回唯一活动连接已注册的 VIN 数(仅单连接场景使用)。
+// 锁序与 WriteFrameVIN 一致:Server.mu → conn.idMu。
 func connVinsLen(t *testing.T, srv *Server) int {
 	t.Helper()
 	srv.mu.Lock()
@@ -17,7 +18,10 @@ func connVinsLen(t *testing.T, srv *Server) int {
 		t.Fatalf("活动连接数 = %d, want 1", len(srv.conns))
 	}
 	for c := range srv.conns {
-		return len(c.vins)
+		c.idMu.Lock()
+		n := len(c.vins)
+		c.idMu.Unlock()
+		return n
 	}
 	return -1
 }

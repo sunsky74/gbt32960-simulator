@@ -213,11 +213,12 @@ func (s *Server) UpdateIdle(enabled bool, d time.Duration) {
 
 // WriteFrameVIN 向指定 VIN 的已登入会话写入一帧原始字节(平台下发通道,
 // bridge 组帧后调用;产生 TX 遥测)。会话不在线或未登入返回错误。
+// 平台链路多车复用:命中任一已注册该 VIN 的连接(hasVIN),不再只认最后登入者。
 func (s *Server) WriteFrameVIN(vin string, cmd byte, raw []byte, summary string) error {
 	s.mu.Lock()
 	var target *conn
 	for c := range s.conns {
-		if c.authed && c.vin == vin {
+		if c.hasVIN(vin) { // 锁序 Server.mu → idMu;hasVIN 为叶子,不回调
 			target = c
 			break
 		}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"sync"
 	"time"
 
@@ -17,15 +18,61 @@ import (
 // platform:本连接为平台链路(0x05 平台登入建立),vins 记录该连接注册的
 // 全部会话 VIN(平台标识 + 各车辆;断开时逐一注销,避免多车会话泄漏)。
 // serve/nextFrame 见下方(空闲判定走 cfgSnapshot 支持运行中更新)。
+//
+// 锁序:idMu 守护身份字段(vin/vins/authed/platform),连接自身 goroutine 的
+// 读写与 bridge 侧读取(hasVIN/platformFlag)共用;叶子锁——持有时不得调用
+// hooks/registry/Server 方法或做 I/O。仅允许 Server.mu → idMu 的嵌套
+// (WriteFrameVIN 持 s.mu 选连接时调 hasVIN),反向嵌套禁止。
 type conn struct {
 	nc       net.Conn
 	fr       *framing.FrameReader
 	srv      *Server
+	idMu     sync.Mutex
 	authed   bool
 	platform bool
 	vin      string
 	vins     []string
 	writeMu  sync.Mutex // 帧写串行化:读循环应答与外部下发通道共用
+}
+
+// markPlatform 标记本连接为平台链路(0x05 平台登入)。
+func (c *conn) markPlatform() {
+	c.idMu.Lock()
+	c.platform = true
+	c.idMu.Unlock()
+}
+
+// bindAuth 登入成功后绑定会话身份:authed=true、当前 VIN、已注册 VIN 列表追加。
+func (c *conn) bindAuth(vin string) {
+	c.idMu.Lock()
+	c.authed = true
+	c.vin = vin
+	c.vins = append(c.vins, vin)
+	c.idMu.Unlock()
+}
+
+// setVINIfEmpty 首帧 VIN 回填:当前 VIN 为空且帧头带 VIN 时置位。
+func (c *conn) setVINIfEmpty(v string) {
+	c.idMu.Lock()
+	if c.vin == "" && v != "" {
+		c.vin = v
+	}
+	c.idMu.Unlock()
+}
+
+// hasVIN 该连接是否已登入且注册过 vin。
+// 平台链路多车复用:vins 含全部会话 VIN,故早于最后登入者的车辆也可定向。
+func (c *conn) hasVIN(vin string) bool {
+	c.idMu.Lock()
+	defer c.idMu.Unlock()
+	return c.authed && slices.Contains(c.vins, vin)
+}
+
+// platformFlag 平台链路标记快照(调用方须在 I/O/hooks 前取快照并释放 idMu)。
+func (c *conn) platformFlag() bool {
+	c.idMu.Lock()
+	defer c.idMu.Unlock()
+	return c.platform
 }
 
 func (c *conn) handleRaw(ctx context.Context, raw []byte) {
@@ -59,9 +106,7 @@ func (c *conn) handleRaw(ctx context.Context, raw []byte) {
 		Dir:      DirRX,
 		Platform: c.platform,
 	})
-	if c.vin == "" && d.VIN != "" {
-		c.vin = d.VIN
-	}
+	c.setVINIfEmpty(d.VIN)
 	// 环形行落地(AC-5):每帧一行 [时间] [VIN] [命令] [hex]
 	c.srv.buf.add(fmt.Sprintf("[%s] [%s] [%s] [%s]", now.Format("2006-01-02 15:04:05"), d.VIN, cmdName, fmt.Sprintf("%x", raw)))
 
@@ -116,6 +161,9 @@ func (c *conn) reply(vin string, cmd byte, resp types.ResponseType, body []byte)
 
 // writeFrame 串行写一帧并产生 TX 遥测(reply 与外部下发通道共用)。
 func (c *conn) writeFrame(vin string, cmd byte, raw []byte, summary string) {
+	// bridge goroutine 可能调用本方法:身份标记先取快照(叶子锁),再释放锁做
+	// I/O 与 hooks,绝不持有 idMu 回调外部。
+	platform := c.platformFlag()
 	c.writeMu.Lock()
 	_, werr := c.nc.Write(raw)
 	c.writeMu.Unlock()
@@ -131,7 +179,7 @@ func (c *conn) writeFrame(vin string, cmd byte, raw []byte, summary string) {
 	c.srv.hooks.OnFrame(FrameEvent{
 		Time: c.srv.hooks.Now(), VIN: vin, Cmd: cmdName,
 		Hex: fmt.Sprintf("%x", raw), Summary: summary, Kind: KindNormal, Dir: DirTX,
-		Platform: c.platform,
+		Platform: platform,
 	})
 	c.srv.registry.Count(vin, 0, 1)
 }
@@ -164,16 +212,14 @@ func (c *conn) handleLogin(d Decoded, now time.Time) {
 		return
 	}
 	if isPlatformLogin {
-		c.platform = true // 0x05 平台登入:本连接此后按平台链路对待
+		c.markPlatform() // 0x05 平台登入:本连接此后按平台链路对待
 	}
 	if ok := c.srv.registry.Register(d.VIN, c.nc.RemoteAddr().String(), now, c.platform); !ok {
 		c.srv.hooks.OnWarn(WarnEvent{Note: "重复登入拒绝: " + d.VIN})
 		c.reply(d.VIN, d.Cmd, types.ResponseFailed, nil)
 		return
 	}
-	c.authed = true
-	c.vin = d.VIN
-	c.vins = append(c.vins, d.VIN)
+	c.bindAuth(d.VIN)
 	// 应答回显请求命令码:0x01 车辆登入 / 0x05 平台登入共用本处理器
 	c.reply(d.VIN, d.Cmd, types.ResponseSuccess, nil)
 	c.srv.hooks.OnSession(SessionEvent{VIN: d.VIN, Peer: c.nc.RemoteAddr().String(), Online: true, LastSeen: now, Platform: c.platform})
