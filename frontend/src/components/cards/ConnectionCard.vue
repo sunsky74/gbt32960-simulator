@@ -36,10 +36,10 @@ onMounted(refreshPacks)
 
       <a-form-item label="平台地址" required>
         <a-space-compact class="addr-compact">
-          <a-form-item name="host" noStyle>
+          <a-form-item name="host" no-style>
             <a-input v-model:value="cfg.host" placeholder="127.0.0.1" style="width: 100%" />
           </a-form-item>
-          <a-form-item name="port" noStyle>
+          <a-form-item name="port" no-style>
             <a-input-number v-model:value="cfg.port" :min="1" :max="65535" placeholder="32960" class="w-110" />
           </a-form-item>
         </a-space-compact>

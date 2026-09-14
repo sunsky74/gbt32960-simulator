@@ -255,8 +255,8 @@ function doCopyHex() {
       <ParserInputHero
         v-if="stage === 'input'"
         key="stage-input"
-        v-model:hexInput="hexInput"
-        v-model:selectedPackId="selectedPackId"
+        v-model:hex-input="hexInput"
+        v-model:selected-pack-id="selectedPackId"
         :pack-options="packOptions"
         :can-parse="canParse"
         :is-parsing="isParsing"
@@ -276,7 +276,7 @@ function doCopyHex() {
           :style="topH !== null ? { height: topH + 'px' } : undefined"
         >
           <ParseOverview
-            v-model:hexInput="hexInput"
+            v-model:hex-input="hexInput"
             v-model:editing="editing"
             :result="result"
             :parsed-hex="parsedHex"

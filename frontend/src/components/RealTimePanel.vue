@@ -6,7 +6,7 @@ import { stateToPayload } from '../api/backend'
 import * as MessageService from '../../wailsjs/go/bridge/MessageService'
 import { store } from '../state'
 import {
-  addArrayItem, arrayValues, bitOptions, bitsArrayOf, bitsObjOf, boolOf, defaultFor,
+  addArrayItem, arrayValues, bitOptions, bitsArrayOf, boolOf, defaultFor,
   hexOf, numOf, setArrayValue, setBitsArray, setBool, setEnum, setHex, setNum,
 } from '../composables/useFieldHelpers'
 import ExtensionCommands from './ExtensionCommands.vue'
@@ -33,7 +33,6 @@ const reissueOffset = ref(180)
 const reissueInterval = ref(10)
 
 // 周期上报状态存于 store:轨迹导入/回放会开启周期上报,需跨组件同步。
-const autoReport = computed(() => store.autoReport)
 const autoInterval = computed({
   get: () => store.autoInterval,
   set: (v: number) => {
@@ -181,7 +180,7 @@ async function onIntervalChange(v: number | string | null | undefined) {
             />
           </div>
 
-          <a-collapse v-model:activeKey="activeKeys" ghost expand-icon-position="end" class="group-collapse">
+          <a-collapse v-model:active-key="activeKeys" ghost expand-icon-position="end" class="group-collapse">
             <a-collapse-panel v-for="g in store.schema" :key="g.key">
               <template #header>
                 <span class="group-title">{{ g.title }}</span>

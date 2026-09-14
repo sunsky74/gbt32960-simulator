@@ -9,7 +9,7 @@ type ParsedField = parserNs.Field
 
 // ---------- 左右两栏分析区:字节视图 ↔ 解析结果(含 vbar 左右拖拽与刷新淡入动画) ----------
 // 联动高亮状态(悬停/钉住)由页面持有,此处仅透传 props/事件。
-const props = defineProps<{
+defineProps<{
   normalizedHex: string
   active: ByteRange | null
   activeSource: 'byte' | 'field' | null

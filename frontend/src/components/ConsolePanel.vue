@@ -248,12 +248,16 @@ async function clearConsole() {
         <div class="param-rows">
           <div v-for="(row, ri) in respondModal.paramRows" :key="ri" class="param-row">
             <span class="param-id">0x{{ row.id.toString(16) }}</span>
-            <a-select v-model:value="row.type" size="small" :options="[
-              { value: 'u8', label: 'u8' },
-              { value: 'u16', label: 'u16' },
-              { value: 'u32', label: 'u32' },
-              { value: 'hex', label: 'hex' },
-            ]" />
+            <a-select
+              v-model:value="row.type"
+              size="small"
+              :options="[
+                { value: 'u8', label: 'u8' },
+                { value: 'u16', label: 'u16' },
+                { value: 'u32', label: 'u32' },
+                { value: 'hex', label: 'hex' },
+              ]"
+            />
             <a-input
               v-model:value="row.value"
               size="small"
