@@ -138,6 +138,8 @@ func (rt *Runtime) SetGroups(g map[string]schema.GroupConfig) {
 }
 
 // Groups 返回报文配置副本(周期上报 tick 时读取,避免并发修改)。
+// 返回的 map 与各组 Rows 切片头均已隔离,调用方可安全替换行元素;
+// 但行 map 本身仍与运行时共享,只读使用,不得原地修改行内容。
 func (rt *Runtime) Groups() map[string]schema.GroupConfig {
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
@@ -146,7 +148,13 @@ func (rt *Runtime) Groups() map[string]schema.GroupConfig {
 	}
 	out := make(map[string]schema.GroupConfig, len(rt.groups))
 	for k, v := range rt.groups {
-		out[k] = v
+		nv := v
+		if v.Rows != nil {
+			rows := make([]map[string]any, len(v.Rows))
+			copy(rows, v.Rows)
+			nv.Rows = rows
+		}
+		out[k] = nv
 	}
 	return out
 }

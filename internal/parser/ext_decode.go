@@ -141,7 +141,7 @@ func extUnitWidth(u *ext.AppendUnit) int {
 // extField 按扩展包字段 DSL 解码一个字段,返回是否成功(失败 = 单元数据不足或类型未知)。
 // 物理值 = 线值×scale + offset(与 ext.EncodeFields 互逆)。
 func extField(w *walker, f ext.FieldSpec) bool {
-	pendingName = f.Label
+	w.pending = f.Label
 	switch f.Type {
 	case "u8", "u16", "u32", "i8", "i16", "i32":
 		return extNumeric(w, f)

@@ -199,7 +199,8 @@ func (s *TrackService) FailOnSend(err error) {
 
 // applyLocationLocked 把经纬度写入运行时位置组(2016/2025 键一致:
 // location / longitude / latitude / valid)。组缺失则创建并启用;
-// 行值深拷贝后替换,避免与并发读取方共享底层数组。调用方须持 s.mu
+// rt.Groups() 已隔离 map 与 Rows 切片头,行 map 共享只读不可原地改,
+// 故行值深拷贝后整体替换切片元素。调用方须持 s.mu
 // 与 rt 无交叉锁序(先 s.mu 后 rt.mu)。
 func (s *TrackService) applyLocationLocked(p track.Point) {
 	groups := s.rt.Groups()

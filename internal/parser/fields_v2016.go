@@ -73,21 +73,22 @@ func parsePayload(v api.GBTVersion, cmd byte, p []byte, pack *ext.Pack, warn war
 // walker 顺序走字节,自动记录 Offset/Length,越界告警不中断。
 // base 为本 walker 数据在所属 payload 中的起始偏移(子 walker 用于自定义单元区间)。
 type walker struct {
-	p    []byte
-	pos  int
-	base int
-	out  []Field
-	warn warnFn
+	p       []byte
+	pos     int
+	base    int
+	out     []Field
+	warn    warnFn
+	pending string // take() 截断告警用的当前字段名(每 walker 私有,Parse 可并发)
 }
 
 type numField struct {
 	num int64
 }
 
-func (w *walker) remain() int  { return len(w.p) - w.pos }
+func (w *walker) remain() int { return len(w.p) - w.pos }
 func (w *walker) take(n int) []byte {
 	if w.pos+n > len(w.p) {
-		w.warn(fmt.Sprintf("报文在字段 %q 处被截断(还需 %d 字节,剩余 %d)", pendingName, n, w.remain()))
+		w.warn(fmt.Sprintf("报文在字段 %q 处被截断(还需 %d 字节,剩余 %d)", w.pending, n, w.remain()))
 		w.pos = len(w.p)
 		return nil
 	}
@@ -95,8 +96,6 @@ func (w *walker) take(n int) []byte {
 	w.pos += n
 	return b
 }
-
-var pendingName string
 
 func (w *walker) emit(name, typ string, raw []byte, rawVal, offsetVal, translate, unit string) {
 	w.out = append(w.out, Field{
@@ -107,7 +106,7 @@ func (w *walker) emit(name, typ string, raw []byte, rawVal, offsetVal, translate
 }
 
 func (w *walker) u8(name, unit string) numField {
-	pendingName = name
+	w.pending = name
 	b := w.take(1)
 	if b == nil {
 		return numField{}
@@ -117,7 +116,7 @@ func (w *walker) u8(name, unit string) numField {
 }
 
 func (w *walker) u16(name, unit string) numField {
-	pendingName = name
+	w.pending = name
 	b := w.take(2)
 	if b == nil {
 		return numField{}
@@ -128,7 +127,7 @@ func (w *walker) u16(name, unit string) numField {
 }
 
 func (w *walker) conv(name, unit string, width int, c *codec.ValueConverter) {
-	pendingName = name
+	w.pending = name
 	b := w.take(width)
 	if b == nil {
 		return
@@ -154,7 +153,7 @@ func (w *walker) conv(name, unit string, width int, c *codec.ValueConverter) {
 }
 
 func (w *walker) enumF(name string, labels map[byte]string) {
-	pendingName = name
+	w.pending = name
 	b := w.take(1)
 	if b == nil {
 		return
@@ -167,7 +166,7 @@ func (w *walker) enumF(name string, labels map[byte]string) {
 }
 
 func (w *walker) ascii(n int, name, unit string) {
-	pendingName = name
+	w.pending = name
 	b := w.take(n)
 	if b == nil {
 		return
@@ -176,7 +175,7 @@ func (w *walker) ascii(n int, name, unit string) {
 }
 
 func (w *walker) bytesF(n int, name, typ string) {
-	pendingName = name
+	w.pending = name
 	b := w.take(n)
 	if b == nil {
 		return
@@ -185,7 +184,7 @@ func (w *walker) bytesF(n int, name, typ string) {
 }
 
 func (w *walker) beanTime() {
-	pendingName = "数据采集时间"
+	w.pending = "数据采集时间"
 	b := w.take(6)
 	if b == nil {
 		return
@@ -318,7 +317,7 @@ func parseTLVGroup(w *walker, flag byte) {
 }
 
 func parseGear(w *walker) {
-	pendingName = "档位"
+	w.pending = "档位"
 	b := w.take(1)
 	if b == nil {
 		return
@@ -336,7 +335,7 @@ func parseGear(w *walker) {
 }
 
 func parseLocation(w *walker) {
-	pendingName = "定位状态字节"
+	w.pending = "定位状态字节"
 	b := w.take(1)
 	if b == nil {
 		return
@@ -360,7 +359,7 @@ func parseLocation(w *walker) {
 }
 
 func (w *walker) convLong(name string, width int) {
-	pendingName = name
+	w.pending = name
 	b := w.take(width)
 	if b == nil {
 		return
@@ -371,7 +370,7 @@ func (w *walker) convLong(name string, width int) {
 
 func parseAlarm(w *walker) {
 	w.u8("最高报警等级", "")
-	pendingName = "通用报警标志"
+	w.pending = "通用报警标志"
 	b := w.take(4)
 	if b == nil {
 		return
@@ -397,7 +396,7 @@ func parseAlarm(w *walker) {
 	} {
 		cnt := w.u8(seg.name+"总数", "")
 		for j := 0; j < int(cnt.num); j++ {
-			pendingName = seg.name + "代码"
+			w.pending = seg.name + "代码"
 			fb := w.take(4)
 			if fb == nil {
 				return
