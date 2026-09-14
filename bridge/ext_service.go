@@ -324,6 +324,9 @@ func (s *ExtService) DeletePack(id string) error {
 	if err := os.Remove(path); err != nil {
 		return fmt.Errorf("删除失败: %w", err)
 	}
+	// 删除包时一并清理其扩展组配置:同 id 重新导入时目标文件已不存在,
+	// installPack 不会走同 id 清理分支,残留值会随重导入复活。
+	_ = clearExtGroupsFor(id)
 	disabled := loadPackStates()
 	if disabled[id] {
 		delete(disabled, id)

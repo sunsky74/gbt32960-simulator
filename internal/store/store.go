@@ -20,7 +20,9 @@ func Dir() (string, error) {
 	return dir, nil
 }
 
-// Save 把 v 以 JSON 写入配置目录下的 name 文件。
+// Save 把 v 以 JSON 原子写入配置目录下的 name 文件:
+// 先写同目录临时文件,再 os.Rename 覆盖目标。并发读者(frontend 轮询)不会
+// 读到截断/半截内容,写入过程中崩溃也不会留下损坏的目标文件。
 func Save(name string, v any) error {
 	dir, err := Dir()
 	if err != nil {
@@ -30,7 +32,24 @@ func Save(name string, v any) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, name), b, 0o644)
+	f, err := os.CreateTemp(dir, name+".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := f.Name()
+	defer func() { _ = os.Remove(tmpName) }() // 失败路径清理;rename 成功后为 no-op
+	if _, err := f.Write(b); err != nil {
+		_ = f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	// CreateTemp 默认 0600,修正为与其他配置文件一致的 0644。
+	if err := os.Chmod(tmpName, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, filepath.Join(dir, name))
 }
 
 // Load 从配置目录读取 name 文件到 v;文件不存在时返回 nil(v 保持零值)。

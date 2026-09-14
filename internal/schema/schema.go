@@ -207,3 +207,19 @@ func alarmBitsField() FieldSchema {
 	}
 	return FieldSchema{Key: "bits", Label: "通用报警标志位", Kind: "bitgroup", Bits: defs}
 }
+
+// standardGroupKeys 标准报文组键集合(V2016 与 V2025 组定义并集,共 14 个)。
+// 从组定义构建以保持同步;扩展组键与标准键同名会被 ext.Validate 拒绝。
+var standardGroupKeys = func() map[string]bool {
+	m := make(map[string]bool)
+	for _, groups := range [][]GroupSchema{V2016Groups(), V2025Groups()} {
+		for _, g := range groups {
+			m[g.Key] = true
+		}
+	}
+	return m
+}()
+
+// IsStandardGroupKey 报告 key 是否属于任一协议版本的标准报文组键。
+// 持久化层据此把扩展组键挡在 message.json 之外(扩展组值按包独立存储)。
+func IsStandardGroupKey(key string) bool { return standardGroupKeys[key] }

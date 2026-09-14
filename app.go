@@ -29,9 +29,13 @@ func NewApp() *App {
 	msg := bridge.NewMessageService(rt)
 	track := bridge.NewTrackService(rt, msg)
 	msg.SetTrackReplay(track)
+	conn := bridge.NewConnectionService(rt)
+	// 手动重连会重建客户端(旧客户端 ticker 已随 Disconnect 停止),登录成功后
+	// 按 MessageService 的记忆状态恢复周期上报。
+	conn.SetOnConnected(func() { _ = msg.ResumeAutoReport() })
 	return &App{
 		rt:        rt,
-		conn:      bridge.NewConnectionService(rt),
+		conn:      conn,
 		msg:       msg,
 		console:   bridge.NewConsoleService(fwd),
 		parser:    bridge.NewParserService(rt),

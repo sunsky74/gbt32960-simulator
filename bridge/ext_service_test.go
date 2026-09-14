@@ -315,6 +315,51 @@ func TestImportPackOverwriteResetsDisabled(t *testing.T) {
 	}
 }
 
+// TestDeletePackClearsExtGroups 删除包必须同时清理其扩展组配置:
+// 重新导入同 id 时目标文件不存在,installPack 不会走清理分支,残留值会复活。
+func TestDeletePackClearsExtGroups(t *testing.T) {
+	tempHome(t)
+	rt := NewRuntime()
+	svc := NewExtServiceForTest(rt)
+	if _, err := svc.ImportPackJSON(extcmdJSON); err != nil {
+		t.Fatal(err)
+	}
+	all := map[string]map[string]schema.GroupConfig{
+		"extcmd": {"extData09": {Enabled: true, Rows: []map[string]any{{"seq": float64(42), "volt": 3.3}}}},
+	}
+	if err := store.Save(extGroupsFile, &all); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := svc.DeletePack("extcmd"); err != nil {
+		t.Fatal(err)
+	}
+
+	var after map[string]map[string]schema.GroupConfig
+	if err := store.Load(extGroupsFile, &after); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := after["extcmd"]; ok {
+		t.Fatal("DeletePack 后 extgroups.json 不应保留该包条目")
+	}
+
+	// 重新导入同 id:旧扩展组值不得复活
+	if _, err := svc.ImportPackJSON(extcmdJSON); err != nil {
+		t.Fatal(err)
+	}
+	rt.SetConnCfg(&ConnectionConfig{Version: "2016", ExtensionPack: "extcmd"})
+	ms := NewMessageService(rt)
+	got, err := ms.GetGroups()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g, ok := got.ToMap()["extData09"]; ok && len(g.Rows) > 0 {
+		if g.Rows[0]["seq"] == float64(42) {
+			t.Fatal("重新导入同 id 后旧扩展组值复活")
+		}
+	}
+}
+
 // TestFindPackFileByID 热放置场景:文件名与 meta.id 不一致时,启停/删除/预览
 // 仍须按内容定位(修复"列表可见却无法操作"的不一致)。
 func TestFindPackFileByID(t *testing.T) {

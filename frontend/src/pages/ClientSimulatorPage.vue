@@ -92,6 +92,7 @@ const profileOptions = computed(() =>
 )
 
 async function onSwitchProfile(name: string) {
+  if (store.connBusy) return
   try {
     store.config = await ConnectionService.SwitchProfile(name)
     await loadProfiles()
@@ -113,7 +114,7 @@ function onNewProfile() {
 
 // 下拉框选项内的 ×:弹确认框,确认后删除该档案(删激活档案须先断开)。
 function confirmDeleteProfile(name: string) {
-  if (store.connState !== 'idle' && name === activeProfileName.value) {
+  if ((store.connBusy || store.connState !== 'idle') && name === activeProfileName.value) {
     message.warning('该档案正在连接中,请先断开连接再删除')
     return
   }
@@ -228,6 +229,7 @@ onUnmounted(() => {
         v-model:value="activeProfileName"
         class="profile-select"
         size="small"
+        :disabled="store.connBusy"
         :options="profileOptions"
         @change="onSwitchProfile"
       >

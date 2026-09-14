@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"gbt32960-simulator/internal/engine"
@@ -90,10 +91,28 @@ type ConnectionService struct {
 	// 各自取代客户端后留下孤儿长连。Disconnect 有意不加锁——它必须能在
 	// 任意时刻取消进行中的 Connect(引擎侧由会话 ctx 取消完成)。
 	connectMu sync.Mutex
+
+	// profilesMu 串行化档案的读改写(SaveConfig/SwitchProfile/DeleteProfile):
+	// 三者都是「读 profiles.json → 改 → 写回」,无锁会丢更新。
+	// 锁序:connectMu → profilesMu,禁止反向获取(Connect 持 connectMu 调 SaveConfig)。
+	// getProfiles 有意保持无锁,供持 profilesMu 的调用方直接使用,避免自死锁。
+	profilesMu sync.Mutex
+
+	// disconnectEpoch 断开纪元:Disconnect 先自增,Connect 在拨号前与登录
+	// 成功后各校验一次。Connect 取代旧客户端的过程存在窗口(旧客户端登出
+	// 等待最长 ~1s),窗口内落地的 Disconnect 只作用于旧客户端;纪元让
+	// 进行中的 Connect 感知到"已被取消",不再建立新连接。
+	disconnectEpoch atomic.Uint64
+
+	// onConnected 登录成功回调(app 装配注入:重连后恢复周期上报等跨服务联动)。
+	onConnected func()
 }
 
 // NewConnectionService 创建服务。
 func NewConnectionService(rt *Runtime) *ConnectionService { return &ConnectionService{rt: rt} }
+
+// SetOnConnected 注入"登录成功"回调(app 装配:重连后恢复周期上报等跨服务联动)。
+func (s *ConnectionService) SetOnConnected(fn func()) { s.onConnected = fn }
 
 // getProfiles 读取档案;无档案时尝试迁移旧版单配置文件,再兜底空档案。
 func (s *ConnectionService) getProfiles() (*profilesData, error) {
@@ -151,6 +170,8 @@ func (s *ConnectionService) GetConfig() (*ConnectionConfig, error) {
 
 // SaveConfig 校验并按名称 upsert 档案,保存后即设为激活。
 func (s *ConnectionService) SaveConfig(cfg ConnectionConfig) error {
+	s.profilesMu.Lock()
+	defer s.profilesMu.Unlock()
 	if err := validateConn(&cfg); err != nil {
 		return err
 	}
@@ -176,6 +197,8 @@ func (s *ConnectionService) SaveConfig(cfg ConnectionConfig) error {
 
 // SwitchProfile 切换激活档案并返回其完整配置。
 func (s *ConnectionService) SwitchProfile(name string) (*ConnectionConfig, error) {
+	s.profilesMu.Lock()
+	defer s.profilesMu.Unlock()
 	pd, err := s.getProfiles()
 	if err != nil {
 		return nil, err
@@ -195,6 +218,8 @@ func (s *ConnectionService) SwitchProfile(name string) (*ConnectionConfig, error
 
 // DeleteProfile 删除档案;若删除的是激活档案则激活第一条剩余档案。
 func (s *ConnectionService) DeleteProfile(name string) error {
+	s.profilesMu.Lock()
+	defer s.profilesMu.Unlock()
 	pd, err := s.getProfiles()
 	if err != nil {
 		return err
@@ -258,6 +283,9 @@ func (s *ConnectionService) Connect(cfg ConnectionConfig) error {
 	}
 	defer s.connectMu.Unlock()
 
+	// 记录本次连接发起时的断开纪元:此后任何 Disconnect 都会使它前进。
+	epoch := s.disconnectEpoch.Load()
+
 	if err := validateConn(&cfg); err != nil {
 		return err
 	}
@@ -293,14 +321,31 @@ func (s *ConnectionService) Connect(cfg ConnectionConfig) error {
 	}, s.rt.Bus())
 	s.rt.replaceClient(client)
 
+	// 检查 1(拨号前):上面的旧客户端 Disconnect 窗口内若有 Disconnect 落地,
+	// 它作用于已被取代的旧客户端;此处发现纪元前进即取消,不再拨号。
+	if s.disconnectEpoch.Load() != epoch {
+		return fmt.Errorf("连接已取消")
+	}
+
 	if err := client.Connect(context.Background()); err != nil {
 		return err
+	}
+	// 检查 2(登录成功后):覆盖检查 1 与建链完成之间的残余微窗口。此时连接
+	// 已建立,必须主动断开,否则"已取消"的连接仍然存活并宣告 online。
+	if s.disconnectEpoch.Load() != epoch {
+		client.Disconnect()
+		return fmt.Errorf("连接已取消")
+	}
+
+	if s.onConnected != nil {
+		s.onConnected()
 	}
 	return nil
 }
 
 // Disconnect 自动登出并断开。
 func (s *ConnectionService) Disconnect() error {
+	s.disconnectEpoch.Add(1) // 必须先于取客户端:窗口内的 Connect 据此感知取消
 	if c := s.rt.CurrentClient(); c != nil {
 		c.Disconnect()
 	}

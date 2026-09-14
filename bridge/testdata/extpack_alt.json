@@ -1,0 +1,10 @@
+{
+  "meta": { "id": "p2alt", "label": "P2 备用包", "vendor": "Test", "baseVersion": "2016" },
+  "realtime": { "appendUnits": [{
+    "key": "telemetry", "title": "备用遥测", "unitCode": 129, "enabled": true,
+    "fields": [
+      { "key": "soc2", "label": "SOC2", "type": "u8", "unit": "%" },
+      { "key": "tempC", "label": "温度", "type": "u8", "unit": "°C", "offset": 10 }
+    ]
+  }] }
+}

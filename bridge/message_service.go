@@ -241,8 +241,16 @@ func (s *MessageService) SaveGroups(payload schema.GroupsPayload) error {
 	if err := s.saveExtGroups(groups); err != nil {
 		return err
 	}
-	s.rt.SetGroups(groups)
-	return store.Save(groupsFile, &groups)
+	s.rt.SetGroups(groups) // 内存快照保留扩展组:组装需要扩展值
+	// message.json 只落标准组:扩展组值按包独立存 extgroups.json,
+	// 混写会在切换到同键扩展包时被当作新包的值读出(跨包串值)。
+	standard := make(map[string]schema.GroupConfig, len(groups))
+	for k, g := range groups {
+		if schema.IsStandardGroupKey(k) {
+			standard[k] = g
+		}
+	}
+	return store.Save(groupsFile, &standard)
 }
 
 // validateExtRows 对激活包的扩展组行值做字段级编码干跑:非法值在保存点拦截,不落盘。
@@ -349,6 +357,13 @@ func (s *MessageService) loadAllGroups() map[string]schema.GroupConfig {
 	var g map[string]schema.GroupConfig
 	if err := store.Load(groupsFile, &g); err != nil || g == nil {
 		g = map[string]schema.GroupConfig{}
+	}
+	// 剔除历史遗留的扩展键:旧版本曾把扩展组值混写进 message.json,
+	// 绑同键包时会被当成该包的值读出;扩展组值只从 extgroups.json 叠加。
+	for k := range g {
+		if !schema.IsStandardGroupKey(k) {
+			delete(g, k)
+		}
 	}
 	for k, v := range s.loadExtGroups() {
 		g[k] = v
@@ -534,6 +549,18 @@ func (s *MessageService) EnsureAutoReport() error {
 	c := s.rt.CurrentClient()
 	if c == nil || c.State() != engine.StateOnline {
 		return fmt.Errorf("未连接或未登录")
+	}
+	return s.SetAutoReport(true, s.effectiveReportInterval())
+}
+
+// ResumeAutoReport 客户端重建(手动重连)后按记忆状态恢复周期上报;
+// reportOn 为 false 时静默返回(用户已关闭的语义不被扭转)。
+func (s *MessageService) ResumeAutoReport() error {
+	s.reportMu.Lock()
+	on := s.reportOn
+	s.reportMu.Unlock()
+	if !on {
+		return nil
 	}
 	return s.SetAutoReport(true, s.effectiveReportInterval())
 }

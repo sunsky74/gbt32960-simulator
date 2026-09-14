@@ -69,6 +69,7 @@ export async function connect() {
 }
 
 export async function saveOnly() {
+  if (store.connBusy) return
   if (!(await validateForm())) return
   try {
     await ConnectionService.SaveConfig(cfg)
