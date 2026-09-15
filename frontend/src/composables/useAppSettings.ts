@@ -11,6 +11,12 @@ export interface AppSettings {
   packetStreamCap: number
   // 前端本地性能上限:客户端控制台保留事件条数(内存开销)
   consoleEventCap: number
+  // 更新:启动自动检查开关(默认开)
+  checkUpdateOnStartup: boolean
+  // 更新:上次检查完成时间戳 ms(0=从未;自动检查 24h 冷却用;成功失败统一记录)
+  lastUpdateCheckAt: number
+  // 更新:用户跳过的版本号(空串=未跳过;更高版本发布后自动失效)
+  skippedVersion: string
 }
 
 const SETTINGS_KEY = 'app-settings'
@@ -22,6 +28,9 @@ const DEFAULTS: AppSettings = {
   restoreLastPage: true,
   packetStreamCap: 200,
   consoleEventCap: 10000,
+  checkUpdateOnStartup: true,
+  lastUpdateCheckAt: 0,
+  skippedVersion: '',
 }
 
 // 数值档位边界(与设置页下拉选项一致;旧数据越界时钳回区间)
@@ -112,6 +121,12 @@ watch(
 // 性能上限档位:变更即持久化(与上方各设置项同一模式)
 watch(
   () => [appSettings.packetStreamCap, appSettings.consoleEventCap] as const,
+  () => persist(),
+)
+
+// 更新相关字段:变更即持久化(与上方各设置项同一模式)
+watch(
+  () => [appSettings.checkUpdateOnStartup, appSettings.lastUpdateCheckAt, appSettings.skippedVersion] as const,
   () => persist(),
 )
 
