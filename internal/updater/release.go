@@ -15,8 +15,8 @@ var (
 	ErrNoRelease = errors.New("暂无发布版本")
 	// ErrRateLimit GitHub 接口限流(403/429)。
 	ErrRateLimit = errors.New("接口限流,请稍后再试")
-	// ErrNetwork 网络不可达/超时/响应解析失败。
-	ErrNetwork = errors.New("无法访问 GitHub,请检查网络")
+	// ErrNetwork 网络不可达/超时/响应解析失败(附代理提示,D21)。
+	ErrNetwork = errors.New("无法访问 GitHub,请检查网络(如使用代理,请确认 TUN 模式或 HTTPS_PROXY 生效)")
 )
 
 // Repo 更新分发仓库(GitHub Releases 为唯一分发渠道)。
@@ -29,16 +29,21 @@ type Client struct {
 	ua      string
 }
 
-// NewClient 默认客户端:官方 API 端点 + 10s 超时;version 进入 User-Agent。
-func NewClient(version string) *Client {
+// userAgent 构造 User-Agent(dev/空版本不带版本号)。
+func userAgent(version string) string {
 	ua := "gbt32960-simulator"
 	if version != "" && version != "dev" {
 		ua += "/" + version
 	}
+	return ua
+}
+
+// NewClient 默认客户端:官方 API 端点 + 10s 超时;version 进入 User-Agent。
+func NewClient(version string) *Client {
 	return &Client{
 		BaseURL: "https://api.github.com",
 		HTTP:    &http.Client{Timeout: 10 * time.Second},
-		ua:      ua,
+		ua:      userAgent(version),
 	}
 }
 
