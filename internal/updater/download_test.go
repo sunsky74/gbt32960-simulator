@@ -464,3 +464,48 @@ func TestReleaseDirAndCleanup(t *testing.T) {
 		t.Fatalf("根级 last-result.json 应保留: %v", err)
 	}
 }
+
+// ---- 评审 I-1 跟进:重定向拒绝方向的生产接线证据 ----
+
+// TestFetchRejectsRedirectToNonWhitelistedHost 重定向跳转到非白名单主机:
+// 经 NewDownloader 的生产 CheckRedirect 接线拒绝,哨兵透出(不被吞为 ErrDownload)。
+func TestFetchRejectsRedirectToNonWhitelistedHost(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "https://evil.com/x", http.StatusFound)
+	}))
+	defer srv.Close()
+
+	d := NewDownloader("dev")
+	// 初始 URL 放行 localhost;跳转目标仍按真实白名单校验
+	d.CheckURL = func(u *url.URL) error {
+		if u.Hostname() == "127.0.0.1" || u.Hostname() == "localhost" {
+			return nil
+		}
+		return CheckDownloadURL(u)
+	}
+	_, err := d.Fetch(context.Background(), srv.URL+"/a", filepath.Join(t.TempDir(), "a.bin"), nil)
+	if !errors.Is(err, ErrHostNotAllowed) {
+		t.Fatalf("err = %v, want ErrHostNotAllowed", err)
+	}
+}
+
+// staticRoundTripper 返回预置响应(测试缝:伪造最终 URL)。
+type staticRoundTripper struct{ resp *http.Response }
+
+func (s staticRoundTripper) RoundTrip(*http.Request) (*http.Response, error) { return s.resp, nil }
+
+// TestFetchRechecksFinalURL 注入无 CheckRedirect 的客户端时,最终 URL 复检仍拒绝非白名单地址。
+func TestFetchRechecksFinalURL(t *testing.T) {
+	req := &http.Request{URL: &url.URL{Scheme: "https", Host: "evil.com", Path: "/x"}}
+	d := NewDownloader("dev")
+	d.HTTP = &http.Client{Transport: staticRoundTripper{resp: &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader("x")),
+		Request:    req,
+	}}}
+	_, err := d.Fetch(context.Background(), "https://github.com/any", filepath.Join(t.TempDir(), "a.bin"), nil)
+	if !errors.Is(err, ErrHostNotAllowed) {
+		t.Fatalf("err = %v, want ErrHostNotAllowed", err)
+	}
+}

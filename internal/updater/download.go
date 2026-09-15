@@ -83,6 +83,7 @@ type DownloadResult struct {
 }
 
 // Downloader 流式下载器:进度节流、停滞检测、逐跳白名单;全部可注入(测试缝)。
+// 必须经 NewDownloader 构造:零值 Downloader 的 HTTP 为 nil、StallTimeout 为 0(立即判停滞)。
 type Downloader struct {
 	HTTP             *http.Client
 	ProgressInterval time.Duration        // 进度最小间隔(默认 100ms)
@@ -101,7 +102,11 @@ func NewDownloader(version string) *Downloader {
 	}
 	d.HTTP = &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			if err := d.CheckURL(req.URL); err != nil {
+			check := d.CheckURL
+			if check == nil {
+				check = CheckDownloadURL // 零值兜底(与 Fetch 一致,fail-closed)
+			}
+			if err := check(req.URL); err != nil {
 				return err
 			}
 			if len(via) >= 10 {
@@ -113,7 +118,7 @@ func NewDownloader(version string) *Downloader {
 	return d
 }
 
-// Fetch 流式下载 rawURL → dest;onProgress 首次与末次必发,中间按 ProgressInterval 节流。
+// Fetch 流式下载 rawURL → dest;onProgress 首次必发、成功路径末次必发(失败路径以返回错误收尾),中间按 ProgressInterval 节流。
 // 停滞/取消/截断分别返回 ErrStalled/ErrCanceled/ErrTruncated;失败时保留部分文件,由调用方清理。
 func (d *Downloader) Fetch(ctx context.Context, rawURL, dest string, onProgress func(Progress)) (int64, error) {
 	u, err := url.Parse(rawURL)
@@ -335,8 +340,8 @@ var tagSanitize = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 
 func safeTag(tag string) string {
 	s := tagSanitize.ReplaceAllString(tag, "_")
-	if s == "" {
-		s = "unknown"
+	if s == "" || s == "." || s == ".." {
+		s = "unknown" // 纵深防御:拒绝路径组件形态
 	}
 	return s
 }
