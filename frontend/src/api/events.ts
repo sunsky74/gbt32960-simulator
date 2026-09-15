@@ -42,6 +42,14 @@ export interface ServerWarnEvent {
   hex: string
 }
 
+/** update:progress —— bridge.UpdaterService 下载进度(设计文档 §5.5;Go 端 progressDTO) */
+export interface UpdateProgressEvent {
+  phase: 'downloading' | 'verifying'
+  received: number
+  total: number
+  percent: number
+}
+
 // ---------- 事件名 → 载荷 映射 ----------
 
 export interface WailsEventMap {
@@ -50,6 +58,7 @@ export interface WailsEventMap {
   'server:session': ServerSessionEvent
   'server:frame': ServerFrameEvent
   'server:warn': ServerWarnEvent
+  'update:progress': UpdateProgressEvent
 }
 
 /**

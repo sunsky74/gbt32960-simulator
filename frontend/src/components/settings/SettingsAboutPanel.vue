@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 关于:版本展示与更新检查入口(Phase 1 仅检查;下载/安装后续 Phase 接入)。
+// 关于:版本展示、更新检查与下载/校验(安装与重启后续 Phase 接入)。
 import { computed, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { GithubOutlined } from '@ant-design/icons-vue'
@@ -7,6 +7,7 @@ import { BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
 import * as UpdaterService from '../../../wailsjs/go/bridge/UpdaterService'
 import { updater } from '../../../wailsjs/go/models'
 import { formatBytes, isDevVersion, skipVersion } from '../../composables/useUpdater'
+import { onWailsEvent, type UpdateProgressEvent } from '../../api/events'
 import SettingRow from './SettingRow.vue'
 
 const REPO_URL = 'https://github.com/sunsky74/gbt32960-simulator'
@@ -16,6 +17,15 @@ const devBuild = ref(false)
 const checking = ref(false)
 const info = ref<updater.UpdateInfo | null>(null)
 const notesExpanded = ref(false)
+const downloading = ref(false)
+const progress = ref<UpdateProgressEvent | null>(null)
+const ready = ref<updater.DownloadResult | null>(null)
+let offProgress: (() => void) | null = null
+
+// errText 统一解包:Wails 拒绝值为 Error(Go error → new Error(msg));直接 String(e) 会带 "Error: " 前缀
+function errText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}
 
 onMounted(async () => {
   try {
@@ -29,14 +39,48 @@ onMounted(async () => {
 async function check() {
   checking.value = true
   notesExpanded.value = false
+  ready.value = null
   try {
     info.value = await UpdaterService.CheckUpdate()
   } catch (e) {
-    message.error(String(e))
+    message.error(errText(e))
   } finally {
     checking.value = false
   }
 }
+
+async function download() {
+  downloading.value = true
+  progress.value = null
+  offProgress = onWailsEvent('update:progress', (p) => {
+    progress.value = p
+  })
+  try {
+    ready.value = await UpdaterService.DownloadUpdate()
+  } catch (e) {
+    if (errText(e) !== '已取消下载') message.error(errText(e))
+  } finally {
+    downloading.value = false
+    offProgress?.()
+    offProgress = null
+    progress.value = null
+  }
+}
+
+async function cancelDownload() {
+  try {
+    await UpdaterService.CancelDownload()
+  } catch {
+    // 下载收尾由 DownloadUpdate 的拒绝统一处理
+  }
+}
+
+const progressText = computed(() => {
+  if (!progress.value) return '正在连接…'
+  if (progress.value.phase === 'verifying') return '正在校验…'
+  const { received, total } = progress.value
+  return total > 0 ? `${formatBytes(received)} / ${formatBytes(total)}` : `已接收 ${formatBytes(received)}`
+})
 
 function skip() {
   const latest = info.value?.latest
@@ -77,12 +121,26 @@ const platformUnsupported = computed(() => hasUpdate.value && !info.value?.asset
             <div v-if="info.notes" class="about-notes" :class="{ expanded: notesExpanded }">
               <pre>{{ info.notes }}</pre>
             </div>
-            <div class="about-actions">
-              <a-button v-if="info.notes" size="small" type="link" @click="notesExpanded = !notesExpanded">
-                {{ notesExpanded ? '收起说明' : '展开说明' }}
-              </a-button>
-              <a-button size="small" @click="skip">跳过此版本</a-button>
-            </div>
+
+            <template v-if="ready">
+              <span class="about-new">更新包已就绪:{{ ready.tag }}(下载与校验完成;安装与重启将在后续阶段开放)</span>
+            </template>
+            <template v-else-if="downloading">
+              <div class="about-progress">
+                <a-progress :percent="progress?.percent ?? 0" :show-info="false" size="small" />
+                <span class="about-hint">{{ progressText }}</span>
+                <a-button size="small" @click="cancelDownload">取消下载</a-button>
+              </div>
+            </template>
+            <template v-else>
+              <div class="about-actions">
+                <a-button size="small" type="primary" :disabled="platformUnsupported" @click="download">下载更新</a-button>
+                <a-button v-if="info.notes" size="small" type="link" @click="notesExpanded = !notesExpanded">
+                  {{ notesExpanded ? '收起说明' : '展开说明' }}
+                </a-button>
+                <a-button size="small" @click="skip">跳过此版本</a-button>
+              </div>
+            </template>
           </template>
           <span v-else-if="upToDate" class="about-hint">已是最新版本</span>
         </div>
@@ -150,6 +208,17 @@ const platformUnsupported = computed(() => hasUpdate.value && !info.value?.asset
 .about-actions {
   display: flex;
   gap: 8px;
+}
+
+.about-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.about-progress :deep(.ant-progress) {
+  width: 160px;
+  margin: 0;
 }
 
 /* 分组:组内末行去分隔线 */
