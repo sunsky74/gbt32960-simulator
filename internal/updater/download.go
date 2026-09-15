@@ -272,6 +272,10 @@ func (d *Downloader) DownloadReleaseArtifact(ctx context.Context, rel *Release, 
 	if err != nil {
 		return Artifact{}, ErrDisk
 	}
+	// 非 HTML 形态校验(spec §5.3/D21)——先于验签:异常页拦截
+	if looksLikeHTML(sumsBytes) {
+		return Artifact{}, ErrChecksumsMissing
+	}
 	// 先验签后解析(fail-closed 顺序契约)
 	if err := VerifySumSignature(sumsBytes, sigBytes, keys); err != nil {
 		return Artifact{}, err
@@ -316,6 +320,17 @@ func (d *Downloader) DownloadReleaseArtifact(ctx context.Context, rel *Release, 
 		return Artifact{}, ErrDisk
 	}
 	return Artifact{Path: final, Name: asset.Name, Tag: rel.TagName, SHA256: got}, nil
+}
+
+// looksLikeHTML 嗅探响应体是否为 HTML 页面(首 512 字节内出现 <!DOCTYPE 或 <html,大小写不敏感)。
+// 用于 SHA256SUMS 形态校验(spec §5.3/D21):代理/网关异常页提前拦截,避免误导性的验签失败文案。
+func looksLikeHTML(b []byte) bool {
+	n := len(b)
+	if n > 512 {
+		n = 512
+	}
+	head := strings.ToLower(string(b[:n]))
+	return strings.Contains(head, "<!doctype") || strings.Contains(head, "<html")
 }
 
 func findAsset(assets []Asset, name string) (Asset, bool) {

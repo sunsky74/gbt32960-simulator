@@ -420,6 +420,18 @@ func TestDownloadReleaseArtifactRejections(t *testing.T) {
 		}
 	})
 
+	t.Run("SHA256SUMS 返回 HTML 页(签名对 HTML 有效)", func(t *testing.T) {
+		html := []byte("<!DOCTYPE html><html><body>rate limit page</body></html>")
+		srv := newSrv(html, signLine(t, priv, html)) // 签名对 HTML 内容有效——形态校验必须先行拦截
+		defer srv.Close()
+		d := newTestDownloader()
+		rel := releaseFixture(srv.URL, int64(len(content)), true)
+		_, err := d.DownloadReleaseArtifact(context.Background(), rel, "darwin", "arm64", t.TempDir(), keys, nil)
+		if !errors.Is(err, ErrChecksumsMissing) {
+			t.Fatalf("err = %v, want ErrChecksumsMissing", err)
+		}
+	})
+
 	t.Run("仅 SHA256SUMS 在列表(sig 资产缺失)", func(t *testing.T) {
 		srv := newSrv([]byte(goodSums), signLine(t, priv, []byte(goodSums)))
 		defer srv.Close()
