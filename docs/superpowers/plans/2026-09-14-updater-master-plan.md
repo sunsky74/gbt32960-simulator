@@ -21,7 +21,7 @@ Phase Plan 生成策略:各 Phase 启动时即时生成(基于上一 Phase 落�
 | Phase | Plan | Status | Current Gate | Depends On | Final Intent Coverage |
 |---|---|---|---|---|---|
 | P1 版本与检查 | `plans/2026-09-14-updater-phase-1-check-plan.md` | **done**(2026-09-15;Quality-LTDD:6 任务+评审×6+oracle 终审;实机验收全链路闭合[toast/跳转/跳过,skippedVersion 机器验证];commits `b3a8c41..16915bd`) | 已合并并推送双远端(完成) | 无 | AC-1/2/3 |
-| P2 下载与校验 | `plans/2026-09-15-updater-phase-2-download-plan.md` | **in-progress**(计划就绪,双门评审中) | 双门评审(Momus)→ 用户确认 | P1 ✅ | AC-4/5;AC-12(SHA256SUMS+签名部分);AC-11(白名单修正);AC-9(update:progress);AC-15(清理) |
+| P2 下载与校验 | `plans/2026-09-15-updater-phase-2-download-plan.md` | **in-progress**(计划 v2 就绪——双门评审 4C/7I/8m 已整改) | 用户确认执行方式 | P1 ✅ | AC-4/5;AC-12(SHA256SUMS+签名部分);AC-11(白名单修正);AC-9(update:progress);AC-15(清理) |
 | P3 替换与重启 | (待生成) | not-started | — | P2 | AC-6/7/8/13/14;AC-12(installscope 部分) |
 | P4 发布链收尾与终验 | (待生成) | not-started | — | P3 | AC-12(wails.json)/15;全局终验;文档随动(frontend-ui-spec "9 分类"/README/backlog) |
 

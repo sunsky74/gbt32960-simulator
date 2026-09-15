@@ -19,23 +19,26 @@
 - 私钥离线保管(绝不入库、绝不进 CI、绝不打印);签名步骤为发布者本地手工动作(见 T4 密钥仪式)
 - 新增错误文案(错误值即前端展示文案,禁止在 bridge/前端二次改写):
   - 校验类:`发布未附校验信息,已拒绝更新` / `更新包签名校验失败,已拒绝更新` / `更新包校验失败(哈希不匹配),已拒绝更新`
-  - 下载类:`已取消下载` / `下载超时(长时间无进展),请重试` / `下载失败,请检查网络` / `下载不完整,请重试` / `写入失败,请检查磁盘空间与权限` / `下载源不在白名单内,已拒绝`
-  - 状态类:`请先检查更新` / `下载已在进行中` / `开发构建不参与更新`
+  - 下载类:`已取消下载` / `下载超时(长时间无进展),请重试` / `下载失败,请检查网络(如使用代理,请确认 TUN 模式或 HTTPS_PROXY 生效)` / `下载不完整,请重试` / `写入失败,请检查磁盘空间与权限` / `下载源不在白名单内,已拒绝`
+  - 状态类:`请先检查更新` / `下载已在进行中` / `开发构建不参与更新` / `已是最新版本,无需下载`
+- P1 检查链路文案同步修订:`无法访问 GitHub,请检查网络` → `无法访问 GitHub,请检查网络(如使用代理,请确认 TUN 模式或 HTTPS_PROXY 生效)`(D21;T2 随 `release.go` 修改);网络类文案证据=`TestErrorCopiesProxyHint`
+- 白名单校验失败为独立哨兵错误 `ErrHostNotAllowed`(重定向跳转被拒时原样透出,不得并入 `ErrDownload`)
+- 前端展示错误前须经 `errText(e)` 解包 Wails 的 `Error` 包装(Wails 将 Go error 包为 `new Error(msg)`,直接 `String(e)` 会带 `Error: ` 前缀;文案内容不得改写)
 - Git:所有操作前缀 `GIT_MASTER=1`;Conventional Commits(中文摘要);逐任务提交;注释/提交信息/文档全中文
 - `update:progress` 载荷契约:`{phase: "downloading" | "verifying", received, total, percent}`;≥100ms 节流(首次与末次必发)
 
 ## Phase Final Acceptance Checklist (Refined from Spec) - MUST
 
 - [ ] [PAC-1] (Source: Current Requirement Flow;← Global AC-4) 下载:进度事件驱动(≥100ms 节流、首末必发),支持取消(取消后清理未完成产物),无字节进展 120s 判失败,失败可重试。
-  Refinement: `go test ./internal/updater/ -run 'TestFetch' -v` 全过——节流用例(注入 `ProgressInterval=1h`、分块响应 → 事件数 == 2(首+末);注入 `ProgressInterval=0` → 事件数 > 2);停滞用例(注入 `StallTimeout=80ms`、服务端长时间无字节 → `ErrStalled` 且判定及时(<300ms);持续滴字节 → 不误杀);取消用例(ctx 取消 → `ErrCanceled`);截断用例(声明 100 字节实发 50 → `ErrTruncated`)。桥接:`go test ./bridge/ -run TestUpdaterServiceDownloadCancel -v` 通过——进行中 `CancelDownload()` → `DownloadUpdate` 返回 `已取消下载`,目录无 `*.part` 残留。手工:真机下载大资产时进度条推进、点“取消下载”立即停止且无残留(演练记录留存,见 T6)。
+  Refinement: `go test ./internal/updater/ -run 'TestFetch|TestDownloadReleaseArtifactTotalFallback' -v` 全过——节流用例(注入 `ProgressInterval=1h`、分块响应 → 事件数 == 2(首+末);注入 `ProgressInterval=0` → 事件数 > 2);停滞用例(注入 `StallTimeout=100ms`、服务端 800ms 不回字节 → `ErrStalled` 且判定及时(<600ms);响应头前的停滞同样生效(TestFetchStallBeforeHeaders);持续滴字节 → 不误杀);取消用例(ctx 取消 → `ErrCanceled`);截断用例(声明 100 字节实发 50 → `ErrTruncated`);total 回退用例(无 Content-Length + API assetSize → 进度 total == assetSize)。文案:`go test ./internal/updater/ -run TestErrorCopiesProxyHint -v` 通过(网络类文案含 TUN/HTTPS_PROXY 提示,D21)。桥接:`go test ./bridge/ -run TestUpdaterServiceDownloadCancel -v` 通过——进行中 `CancelDownload()` → `DownloadUpdate` 返回 `已取消下载`,目录无 `*.part` 残留。手工:真机下载大资产时进度条推进、点“取消下载”立即停止且无残留(演练记录留存,见 T6——需先补传 v0.1.0 校验资产)。
 - [ ] [PAC-2] (Source: Current Requirement Flow;← Global AC-5) 校验 fail-closed 全矩阵:验签先于解析;缺 SHA256SUMS / 缺签名 / 未知 keyid / 签名被篡改 / 哈希不匹配 → 一律拒绝并删除产物;有效签名 + 匹配哈希 → 落定。
-  Refinement: `go test ./internal/updater/ -run 'TestVerify|TestParseChecksums|TestHashFile|TestDownloadReleaseArtifact' -v` 全过(篡改 sums、错 keyid、garbage base64、长度不符、空签名全矩阵);`go test ./bridge/ -run TestUpdaterServiceDownloadAndVerify -v` 通过(测试密钥注入;落定文件存在、SHA256 等于预期、事件含 `verifying` 相位);手工 v0.1.0 真机(发布未附 SHA256SUMS)→ 文案 `发布未附校验信息,已拒绝更新`,缓存目录无产物残留(证据留存)。
+  Refinement: `go test ./internal/updater/ -run 'TestVerify|TestParseChecksums|TestHashFile|TestDownloadReleaseArtifact' -v` 全过(篡改 sums、错 keyid、garbage base64、长度不符、空签名全矩阵;含"仅 SHA256SUMS 在列表、sig 资产缺失"用例与拒绝路径 `.part` 已删除断言);`go test ./bridge/ -run TestUpdaterServiceDownloadAndVerify -v` 通过(测试密钥注入;落定文件存在、SHA256 等于预期、事件含 `verifying` 相位);手工 v0.1.0 真机(发布未附 SHA256SUMS)→ **点击下载后立即**提示 `发布未附校验信息,已拒绝更新`(未发起产物下载),缓存目录无产物残留(证据留存)。
 - [ ] [PAC-3] (Source: New Architecture Enablement;← Global AC-11) 白名单逐跳:`https` + 4 域名放行、其余拒绝;初始 URL 与重定向每一跳均校验;真实 Release 302 链(github.com → release-assets.githubusercontent.com)通过;`go.mod` 零变化。
-  Refinement: `go test ./internal/updater/ -run TestCheckDownloadURL -v`(矩阵:`https://github.com/...` 允 / `http://...` 拒 / `https://evil.com` 拒 / `https://github.com.evil.com` 拒 / `api.github.com`、`objects.githubusercontent.com`、`release-assets.githubusercontent.com` 允);`UPDATER_INTEGRATION=1 go test ./internal/updater/ -run TestIntegrationReleaseChain -v` 通过(真实 GET v0.1.0 资产前 64KiB,记录跳转 host 链:全部 ∈ 白名单 且 ≥2 个 host);`git diff --stat $(git merge-base HEAD origin/main)..HEAD -- go.mod go.sum` 输出为空。
+  Refinement: `go test ./internal/updater/ -run TestCheckDownloadURL -v`(矩阵:`https://github.com/...` 允 / `http://...` 拒 / `https://evil.com` 拒 / `https://github.com.evil.com` 拒 / `api.github.com`、`objects.githubusercontent.com`、`release-assets.githubusercontent.com` 允);`UPDATER_INTEGRATION=1 go test ./internal/updater/ -run TestIntegrationReleaseChain -v` 通过(真实 GET v0.1.0 资产并读取前 4KiB;host 链含初始站共 ≥2 个、全部 ∈ 白名单且含 release-assets.githubusercontent.com);`git diff --stat $(git merge-base HEAD origin/main)..HEAD -- go.mod go.sum` 输出为空。
 - [ ] [PAC-4] (Source: Development Architecture;← Global AC-9/15) 绑定面与事件契约:`UpdaterService` 导出恰 4 方法(`CurrentVersion`/`CheckUpdate`/`DownloadUpdate`/`CancelDownload`,均无参数,不暴露 URL/路径);`update:progress` 登记于 `WailsEventMap`;启动清理更新缓存(不跨会话复用)。
-  Refinement: `grep -n "func (s \*UpdaterService)" bridge/updater_service.go` 恰 4 条且无参数;`grep -n "'update:progress':" frontend/src/api/events.ts` 非空;`go test ./bridge/ -run TestUpdaterServiceCleanupCache -v`(造缓存文件 → `cleanupCache()` → 目录消失);`grep -n "WireUpdaterStartup" app.go bridge/wiring.go` 各 1 条;`go test ./bridge/ -run 'TestUpdaterServiceCheckUpdate|TestUpdaterServiceDevSkipsNetwork' -v` 仍全过(检查链路回归)。
+  Refinement: `grep -n "^func (s \*UpdaterService) [A-Z]" bridge/updater_service.go | wc -l` 输出 4(导出方法均无参数);`grep -n "'update:progress':" frontend/src/api/events.ts` 非空;`go test ./bridge/ -run TestUpdaterServiceCleanupCache -v`(造缓存文件 → `cleanupCache()` → tag 子目录消失、根级 last-result.json/helper.log 保留);`grep -n "WireUpdaterStartup" app.go bridge/wiring.go` 各 1 条;`go test ./bridge/ -run 'TestUpdaterServiceCheckUpdate|TestUpdaterServiceDevSkipsNetwork|TestUpdaterServiceErrorClassification' -v` 仍全过(检查链路回归 + §5.8 两例:403 限流 JSON/200 缺字段)。
 - [ ] [PAC-5] (Source: Overall Business Flow;← Global AC-12, P2 部分) 发布链:release.yml 生成 SHA256SUMS(排除自身、覆盖 4 资产);离线签名工具 gen→sign→verify 往返通过;公钥已嵌入(signing_pubkey 测试断言非空);`docs/release-signing.md` 完整(仪式/备份/签名步骤/轮换/丢失预案)。
-  Refinement: `grep -n "SHA256SUMS" .github/workflows/release.yml` 显示生成步骤;`go test ./tools/sign-release/ -v`(roundtrip:临时目录 `-gen` → `-sign` → `updater.ParseSignature`+`ed25519.Verify` 通过;`-sums` 排除 `SHA256SUMS` 与 `*.sig`;私钥 0600);`go test ./internal/updater/ -run TestEmbeddedKeys -v` 通过(恰 1 个公钥且可解析);本地对 `build/bin` 产物跑一遍 `-sums`(输出覆盖 4 资产、与 CI 步骤一致)。增强证据(推荐、不阻塞):对 v0.1.0 Release 补传 SHA256SUMS + SHA256SUMS.sig 后,真机 happy path 落定“更新包已就绪”。
+  Refinement: `grep -n "SHA256SUMS" .github/workflows/release.yml` 显示生成步骤;`go test ./tools/sign-release/ -v`(roundtrip:临时目录 `-gen` → `-sign` → `updater.ParseSignature`+`ed25519.Verify` 通过;`-sums` 排除 `SHA256SUMS` 与 `*.sig`、格式 `hash  name`;私钥 0600);`go test ./internal/updater/ -run TestEmbeddedKeys -v` 通过(≥1 个公钥且可解析——支持轮换期多钥共存);本地对任意目录跑通 `-sums`(资产数随目录内容,格式/排除规则与 CI 一致;不要求本机产出 4 资产)。真机 happy path(必做,见 T6 步骤 3/4):对 v0.1.0 补传 SHA256SUMS + SHA256SUMS.sig 后,下载→校验→落定“更新包已就绪:v0.1.0”(证据留存)。
 - [ ] [PAC-6] (Source: Existing Architecture Fit;← Global AC-10) 回归与纪律:后端三件套 + 前端四件套全绿;`go.mod` 零变化;既有功能逐字节不变。
   Refinement: `go vet ./... && go test ./... -count=1 && go test -race ./...` 全 exit 0;`cd frontend && npm run lint && npm run typecheck && npm test -- --run && npm run build` 全 exit 0;`git diff --stat $(git merge-base HEAD origin/main)..HEAD -- go.mod go.sum` 为空。
 
@@ -378,7 +381,7 @@ go vet ./internal/updater/
 - [ ] **Step 5: 提交**
 
 ```bash
-GIT_MASTER=1 git add internal/updater/verify.go internal/updater/verify_test.go
+GIT_MASTER=1 git add internal/updater/verify.go internal/updater/verify_test.go internal/updater/signing_pubkey.go
 GIT_MASTER=1 git commit -m "feat(updater): 校验核心——SHA256SUMS 解析、Ed25519 验签与哈希(fail-closed)"
 ```
 
@@ -398,7 +401,7 @@ GIT_MASTER=1 git commit -m "feat(updater): 校验核心——SHA256SUMS 解析�
 
 **Interfaces:**
 - Consumes: T1 的 `VerifySumSignature`/`ParseChecksums`/`HashFile`;`MatchAsset`;`Release`/`Asset`。
-- Produces: `Downloader`(字段 `HTTP`/`ProgressInterval`/`StallTimeout`/`CheckURL` 可注入);`NewDownloader(version string) *Downloader`;`(d *Downloader) Fetch(ctx, rawURL, dest, onProgress) (int64, error)`;`(d *Downloader) DownloadReleaseArtifact(ctx, rel, goos, goarch, dir, keys, onProgress) (Artifact, error)`;`Artifact`;`DownloadResult`(bridge 返回值契约);`Progress{Phase,Received,Total}` + `Percent()`;`CheckDownloadURL`/`AllowedHosts`;`ReleaseDir(tag)`/`CleanupCache()`;错误值(Global Constraints 清单)。T3/T5/T6 依赖。
+- Produces: `Downloader`(字段 `HTTP`/`ProgressInterval`/`StallTimeout`/`CheckURL` 可注入);`NewDownloader(version string) *Downloader`;`(d *Downloader) Fetch(ctx, rawURL, dest, onProgress) (int64, error)`;`(d *Downloader) DownloadReleaseArtifact(ctx, rel, goos, goarch, dir, keys, onProgress) (Artifact, error)`;`Artifact`;`DownloadResult`(bridge 返回值契约);`Progress{Phase,Received,Total}` + `Percent()`;`CheckDownloadURL`(返回 `ErrHostNotAllowed` 哨兵)/`AllowedHosts`;`ReleaseDir(tag)`/`CleanupCache()`(仅清 tag 子目录);错误值(Global Constraints 清单;进度事件 total 缺失时回退 `asset.Size`)。T3/T5/T6 依赖。
 
 - [ ] **Step 1: 写失败测试(完整矩阵)**
 
@@ -508,19 +511,38 @@ func TestFetchProgressThrottle(t *testing.T) {
 func TestFetchStall(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.(http.Flusher).Flush() // 响应头先到、随后长时间无字节
-		time.Sleep(400 * time.Millisecond)
+		time.Sleep(800 * time.Millisecond)
 	}))
 	defer srv.Close()
 
 	d := newTestDownloader()
-	d.StallTimeout = 80 * time.Millisecond
+	d.StallTimeout = 100 * time.Millisecond
 	start := time.Now()
 	_, err := d.Fetch(context.Background(), srv.URL+"/a", filepath.Join(t.TempDir(), "a.bin"), nil)
 	if !errors.Is(err, ErrStalled) {
 		t.Fatalf("err = %v, want ErrStalled", err)
 	}
-	if time.Since(start) > 300*time.Millisecond {
+	if time.Since(start) > 600*time.Millisecond {
 		t.Fatalf("停滞未及时判定: %v", time.Since(start))
+	}
+}
+
+// TestFetchStallBeforeHeaders 覆盖响应头之前(建连/等待应答)的停滞窗口。
+func TestFetchStallBeforeHeaders(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(800 * time.Millisecond) // 连接已接受、响应头不发
+	}))
+	defer srv.Close()
+
+	d := newTestDownloader()
+	d.StallTimeout = 100 * time.Millisecond
+	start := time.Now()
+	_, err := d.Fetch(context.Background(), srv.URL+"/a", filepath.Join(t.TempDir(), "a.bin"), nil)
+	if !errors.Is(err, ErrStalled) {
+		t.Fatalf("err = %v, want ErrStalled", err)
+	}
+	if time.Since(start) > 600*time.Millisecond {
+		t.Fatalf("头前停滞未及时判定: %v", time.Since(start))
 	}
 }
 
@@ -529,13 +551,13 @@ func TestFetchStallTimerResetsOnBytes(t *testing.T) {
 		for i := 0; i < 5; i++ {
 			_, _ = io.WriteString(w, "tick")
 			w.(http.Flusher).Flush()
-			time.Sleep(30 * time.Millisecond) // 每次均 < StallTimeout,持续有进展
+			time.Sleep(40 * time.Millisecond) // 每次均远小于 StallTimeout,持续有进展
 		}
 	}))
 	defer srv.Close()
 
 	d := newTestDownloader()
-	d.StallTimeout = 80 * time.Millisecond
+	d.StallTimeout = 400 * time.Millisecond // 10× 余量,抗调度抖动
 	if _, err := d.Fetch(context.Background(), srv.URL+"/a", filepath.Join(t.TempDir(), "a.bin"), nil); err != nil {
 		t.Fatalf("持续有字节仍被判停滞: %v", err)
 	}
@@ -580,6 +602,34 @@ func TestFetchTruncated(t *testing.T) {
 	if !errors.Is(err, ErrTruncated) {
 		t.Fatalf("err = %v, want ErrTruncated", err)
 	}
+}
+
+// TestFetchHostNotAllowedSentinel 白名单哨兵:非白名单初始 URL 直接拒绝(不发起网络)。
+func TestFetchHostNotAllowedSentinel(t *testing.T) {
+	d := NewDownloader("dev") // 生产默认 CheckURL(真实白名单)
+	_, err := d.Fetch(context.Background(), "https://evil.com/x", filepath.Join(t.TempDir(), "a.bin"), nil)
+	if !errors.Is(err, ErrHostNotAllowed) {
+		t.Fatalf("err = %v, want ErrHostNotAllowed", err)
+	}
+}
+
+// TestErrorCopiesProxyHint 网络类文案含代理提示(D21)。
+func TestErrorCopiesProxyHint(t *testing.T) {
+	for name, e := range map[string]error{"ErrNetwork": ErrNetwork, "ErrDownload": ErrDownload} {
+		msg := e.Error()
+		if !strings.Contains(msg, "TUN") || !strings.Contains(msg, "HTTPS_PROXY") {
+			t.Fatalf("%s 文案缺代理提示: %q", name, msg)
+		}
+	}
+}
+
+// redirectUserCache 把 os.UserCacheDir 重定向到测试临时目录(跨包并发测试隔离)。
+func redirectUserCache(t *testing.T) {
+	t.Helper()
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(tmp, "cache"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(tmp, "localappdata"))
 }
 
 // ---- DownloadReleaseArtifact:编排(验签→解析→下载→哈希) ----
@@ -655,6 +705,43 @@ func TestDownloadReleaseArtifactHappyPath(t *testing.T) {
 	}
 }
 
+// TestDownloadReleaseArtifactTotalFallback 进度事件 total 回退:响应无 Content-Length 时用 asset.Size。
+func TestDownloadReleaseArtifactTotalFallback(t *testing.T) {
+	content := []byte("fallback-bytes")
+	pub, priv := newTestKey(t)
+	sums := sumsFor(content)
+	sig := signLine(t, priv, []byte(sums))
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/sums":
+			_, _ = io.WriteString(w, sums)
+		case "/sig":
+			_, _ = w.Write(sig)
+		default:
+			w.(http.Flusher).Flush() // 分块响应:无 Content-Length
+			_, _ = w.Write(content)
+		}
+	}))
+	defer srv.Close()
+
+	d := newTestDownloader()
+	rel := releaseFixture(srv.URL, int64(len(content)), true)
+	keys := map[string]ed25519.PublicKey{KeyID(pub): pub}
+	lastTotal := int64(-1)
+	_, err := d.DownloadReleaseArtifact(context.Background(), rel, "darwin", "arm64", t.TempDir(), keys, func(p Progress) {
+		if p.Phase == "downloading" {
+			lastTotal = p.Total
+		}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lastTotal != int64(len(content)) {
+		t.Fatalf("下载进度 total = %d, want 回退 asset.Size = %d", lastTotal, len(content))
+	}
+}
+
 func TestDownloadReleaseArtifactRejections(t *testing.T) {
 	content := []byte("artifact-bytes")
 	pub, priv := newTestKey(t)
@@ -700,7 +787,7 @@ func TestDownloadReleaseArtifactRejections(t *testing.T) {
 		},
 		{
 			"哈希不匹配",
-			[]byte(strings.Replace(goodSums, sha256Hex(content), strings.Repeat("0", 64), 1)),
+			[]byte(strings.ReplaceAll(goodSums, sha256Hex(content), strings.Repeat("0", 64))),
 			nil, // 下面用篡改后的 sums 重新签名
 			ErrHashMismatch,
 		},
@@ -721,9 +808,13 @@ func TestDownloadReleaseArtifactRejections(t *testing.T) {
 			defer srv.Close()
 			d := newTestDownloader()
 			rel := releaseFixture(srv.URL, int64(len(content)), true)
-			_, err := d.DownloadReleaseArtifact(context.Background(), rel, "darwin", "arm64", t.TempDir(), keys, nil)
+			dir := t.TempDir()
+			_, err := d.DownloadReleaseArtifact(context.Background(), rel, "darwin", "arm64", dir, keys, nil)
 			if !errors.Is(err, c.wantErr) {
 				t.Fatalf("err = %v, want %v", err, c.wantErr)
+			}
+			if matches, _ := filepath.Glob(filepath.Join(dir, "*.part")); len(matches) != 0 {
+				t.Fatalf("拒绝路径 .part 未清理: %v", matches)
 			}
 		})
 	}
@@ -738,11 +829,24 @@ func TestDownloadReleaseArtifactRejections(t *testing.T) {
 			t.Fatalf("err = %v, want ErrChecksumsMissing", err)
 		}
 	})
+
+	t.Run("仅 SHA256SUMS 在列表(sig 资产缺失)", func(t *testing.T) {
+		srv := newSrv([]byte(goodSums), signLine(t, priv, []byte(goodSums)))
+		defer srv.Close()
+		d := newTestDownloader()
+		rel := releaseFixture(srv.URL, int64(len(content)), true)
+		rel.Assets = rel.Assets[:len(rel.Assets)-1] // 去掉 SHA256SUMS.sig
+		_, err := d.DownloadReleaseArtifact(context.Background(), rel, "darwin", "arm64", t.TempDir(), keys, nil)
+		if !errors.Is(err, ErrChecksumsMissing) {
+			t.Fatalf("err = %v, want ErrChecksumsMissing", err)
+		}
+	})
 }
 
 // ---- 目录与清理 ----
 
 func TestReleaseDirAndCleanup(t *testing.T) {
+	redirectUserCache(t)
 	dir, err := ReleaseDir("release/v1.2.3") // tag 含斜杠 → 清洗
 	if err != nil {
 		t.Fatal(err)
@@ -756,11 +860,18 @@ func TestReleaseDirAndCleanup(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "x.bin"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	keep := filepath.Join(filepath.Dir(dir), "last-result.json") // 根级文件应保留(P3 消费)
+	if err := os.WriteFile(keep, []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := CleanupCache(); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
-		t.Fatal("缓存未被清空")
+		t.Fatal("tag 子目录未被清空")
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatalf("根级 last-result.json 应保留: %v", err)
 	}
 }
 ```
@@ -782,7 +893,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -800,8 +910,10 @@ var (
 	ErrCanceled = errors.New("已取消下载")
 	// ErrStalled 持续 StallTimeout 无字节进展。
 	ErrStalled = errors.New("下载超时(长时间无进展),请重试")
-	// ErrDownload 网络不可达/HTTP 状态异常。
-	ErrDownload = errors.New("下载失败,请检查网络")
+	// ErrHostNotAllowed 下载源(含重定向跳转)不在白名单内。
+	ErrHostNotAllowed = errors.New("下载源不在白名单内,已拒绝")
+	// ErrDownload 网络不可达/HTTP 状态异常(附代理提示,D21)。
+	ErrDownload = errors.New("下载失败,请检查网络(如使用代理,请确认 TUN 模式或 HTTPS_PROXY 生效)")
 	// ErrTruncated 下载字节数与声明大小不符。
 	ErrTruncated = errors.New("下载不完整,请重试")
 	// ErrDisk 本地写入失败(空间/权限)。
@@ -819,7 +931,7 @@ var AllowedHosts = map[string]bool{
 // CheckDownloadURL 校验单个跳转 URL:必须 HTTPS 且 host 在白名单内(逐跳调用)。
 func CheckDownloadURL(u *url.URL) error {
 	if u == nil || u.Scheme != "https" || !AllowedHosts[u.Hostname()] {
-		return errors.New("下载源不在白名单内,已拒绝")
+		return ErrHostNotAllowed
 	}
 	return nil
 }
@@ -897,12 +1009,25 @@ func (d *Downloader) Fetch(ctx context.Context, rawURL, dest string, onProgress 
 	if err != nil {
 		return 0, ErrDownload
 	}
-	if err := d.CheckURL(u); err != nil {
+	check := d.CheckURL
+	if check == nil {
+		check = CheckDownloadURL // 零值兜底:默认白名单策略(fail-closed)
+	}
+	if err := check(u); err != nil {
 		return 0, err // 白名单错误原样透出(安全分类,勿并入 ErrDownload)
 	}
 
 	ctx2, cancel2 := context.WithCancel(ctx)
 	defer cancel2()
+
+	// 停滞计时器覆盖「建连/响应头等待 + 响应体读取」全程;每次收到数据块重置
+	var stalled atomic.Bool
+	timer := time.AfterFunc(d.StallTimeout, func() {
+		stalled.Store(true)
+		cancel2() // 解除 Do/Read 阻塞
+	})
+	defer timer.Stop()
+
 	req, err := http.NewRequestWithContext(ctx2, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return 0, ErrDownload
@@ -910,12 +1035,22 @@ func (d *Downloader) Fetch(ctx context.Context, rawURL, dest string, onProgress 
 	req.Header.Set("User-Agent", d.ua)
 	resp, err := d.HTTP.Do(req)
 	if err != nil {
+		if stalled.Load() {
+			return 0, ErrStalled
+		}
 		if ctx.Err() != nil {
 			return 0, ErrCanceled
+		}
+		if errors.Is(err, ErrHostNotAllowed) { // 重定向跳转被白名单拒绝:原样透出
+			return 0, ErrHostNotAllowed
 		}
 		return 0, ErrDownload
 	}
 	defer resp.Body.Close()
+	// 兜底:最终 URL 亦须在白名单内(防注入客户端绕过 CheckRedirect)
+	if err := check(resp.Request.URL); err != nil {
+		return 0, err
+	}
 	if resp.StatusCode != http.StatusOK {
 		return 0, ErrDownload
 	}
@@ -929,13 +1064,6 @@ func (d *Downloader) Fetch(ctx context.Context, rawURL, dest string, onProgress 
 		return 0, ErrDisk
 	}
 	closeFile := func() error { return f.Close() }
-
-	var stalled atomic.Bool
-	timer := time.AfterFunc(d.StallTimeout, func() {
-		stalled.Store(true)
-		cancel2() // 解除 Read 阻塞
-	})
-	defer timer.Stop()
 
 	var received int64
 	var lastEmit time.Time
@@ -1042,7 +1170,11 @@ func (d *Downloader) DownloadReleaseArtifact(ctx context.Context, rel *Release, 
 	}
 
 	part := filepath.Join(dir, asset.Name+".part")
+	// total 回退:响应无 Content-Length 时,用 API 声明的资产大小填充事件载荷(截断判定仍依据 Content-Length)
 	if _, err := d.Fetch(ctx, asset.URL, part, func(p Progress) {
+		if p.Total == 0 && asset.Size > 0 {
+			p.Total = asset.Size
+		}
 		if onProgress != nil {
 			onProgress(p)
 		}
@@ -1098,17 +1230,34 @@ func safeTag(tag string) string {
 	return s
 }
 
-// CleanupCache 清空整个更新缓存目录(启动时调用;不跨会话复用)。
+// CleanupCache 清空更新缓存:删除各 tag 子目录(下载产物不跨会话复用);
+// 根级 last-result.json / helper.log 保留(P3 启动消费失败结果与排障所需)。
 func CleanupCache() error {
 	cd, err := os.UserCacheDir()
 	if err != nil {
 		return err
 	}
-	return os.RemoveAll(filepath.Join(cd, "gbt32960-simulator", "updates"))
+	root := filepath.Join(cd, "gbt32960-simulator", "updates")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, e := range entries {
+		if !e.IsDir() && (e.Name() == "last-result.json" || e.Name() == "helper.log") {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(root, e.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 ```
 
-同时修改 `internal/updater/release.go`(抽取 UA 帮助函数,`NewClient` 行为不变):
+同时修改 `internal/updater/release.go`(抽取 UA 帮助函数,`NewClient` 行为不变;并按 D21 更新文件顶部网络类文案):
 
 ```go
 // userAgent 构造 User-Agent(dev/空版本不带版本号)。
@@ -1128,6 +1277,9 @@ func NewClient(version string) *Client {
 		ua:      userAgent(version),
 	}
 }
+
+// 文件顶部错误文案同步修订(D21 代理提示;P1 检查链路网络错误):
+// ErrNetwork = errors.New("无法访问 GitHub,请检查网络(如使用代理,请确认 TUN 模式或 HTTPS_PROXY 生效)")
 ```
 
 - [ ] **Step 4: 运行确认通过 + 全包回归 + race**
@@ -1221,6 +1373,15 @@ func updaterFixtureFor(srvURL string) string {
 }`, srvURL)
 }
 
+// redirectUserCache 把 os.UserCacheDir 重定向到测试临时目录(跨包并发隔离;三平台 env 覆盖)。
+func redirectUserCache(t *testing.T) {
+	t.Helper()
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_CACHE_HOME", filepath.Join(tmp, "cache"))
+	t.Setenv("LOCALAPPDATA", filepath.Join(tmp, "localappdata"))
+}
+
 func newDownloadTestService(serverURL string) (*UpdaterService, *[]progressDTO) {
 	svc := NewUpdaterService("v0.1.0")
 	svc.client.BaseURL = serverURL
@@ -1237,6 +1398,7 @@ func newDownloadTestService(serverURL string) (*UpdaterService, *[]progressDTO) 
 }
 
 func TestUpdaterServiceDownloadAndVerify(t *testing.T) {
+	redirectUserCache(t)
 	content := []byte("artifact-bytes-for-bridge-test")
 	pub, priv := newTestSigning(t)
 	sums := fixtureSums(content)
@@ -1288,6 +1450,7 @@ func TestUpdaterServiceDownloadAndVerify(t *testing.T) {
 }
 
 func TestUpdaterServiceDownloadCancel(t *testing.T) {
+	redirectUserCache(t)
 	content := []byte("artifact")
 	pub, priv := newTestSigning(t)
 	sums := fixtureSums(content)
@@ -1342,6 +1505,7 @@ func TestUpdaterServiceDownloadCancel(t *testing.T) {
 }
 
 func TestUpdaterServiceCleanupCache(t *testing.T) {
+	redirectUserCache(t)
 	dir, err := updater.ReleaseDir("v0.0.1")
 	if err != nil {
 		t.Fatal(err)
@@ -1350,10 +1514,16 @@ func TestUpdaterServiceCleanupCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = os.WriteFile(filepath.Join(dir, "x"), []byte("x"), 0o644)
+	keep := filepath.Join(filepath.Dir(dir), "helper.log")
+	_ = os.WriteFile(keep, []byte("log"), 0o644)
+
 	svc := NewUpdaterService("v1.0.0")
 	svc.cleanupCache()
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
-		t.Fatal("缓存未清空")
+		t.Fatal("tag 子目录未清空")
+	}
+	if _, err := os.Stat(keep); err != nil {
+		t.Fatalf("根级 helper.log 应保留: %v", err)
 	}
 }
 
@@ -1366,6 +1536,45 @@ func TestUpdaterServiceDownloadGuards(t *testing.T) {
 	if _, err := dev.DownloadUpdate(); err == nil || err.Error() != "开发构建不参与更新" {
 		t.Fatalf("dev 应拒绝: %v", err)
 	}
+	eq := NewUpdaterService("v1.0.0")
+	eq.lastRelease = &updater.Release{TagName: "v1.0.0"} // 同版本:不得进入下载
+	if _, err := eq.DownloadUpdate(); err == nil || err.Error() != "已是最新版本,无需下载" {
+		t.Fatalf("同版本应拒绝: %v", err)
+	}
+}
+
+// TestUpdaterServiceErrorClassification 锁定“状态码优先”分类(spec §5.8):
+// 403 的限流响应体恰为合法 JSON(无 tag_name),不得被 JSON 解析分流;200 缺字段不得误判为错误。
+func TestUpdaterServiceErrorClassification(t *testing.T) {
+	t.Run("403 限流 JSON 体", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = io.WriteString(w, `{"message":"API rate limit exceeded for 1.2.3.4"}`)
+		}))
+		defer srv.Close()
+		svc := NewUpdaterService("v0.1.0")
+		svc.client.BaseURL = srv.URL
+		_, err := svc.CheckUpdate()
+		if err == nil || err.Error() != "接口限流,请稍后再试" {
+			t.Fatalf("err = %v, want 接口限流,请稍后再试", err)
+		}
+	})
+
+	t.Run("200 缺字段", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, _ = io.WriteString(w, `{}`)
+		}))
+		defer srv.Close()
+		svc := NewUpdaterService("v0.1.0")
+		svc.client.BaseURL = srv.URL
+		info, err := svc.CheckUpdate()
+		if err != nil {
+			t.Fatalf("err = %v, want nil(状态码优先,不误分类)", err)
+		}
+		if info.HasUpdate || info.Latest != "" {
+			t.Fatalf("info = %+v, want 无更新且 Latest 为空", info)
+		}
+	})
 }
 ```
 
@@ -1481,6 +1690,9 @@ func (s *UpdaterService) DownloadUpdate() (updater.DownloadResult, error) {
 	if rel == nil {
 		return updater.DownloadResult{}, errors.New("请先检查更新")
 	}
+	if !updater.IsNewer(rel.TagName, s.version) {
+		return updater.DownloadResult{}, errors.New("已是最新版本,无需下载")
+	}
 	asset, err := updater.MatchAsset(runtime.GOOS, runtime.GOARCH, rel.Assets)
 	if err != nil {
 		return updater.DownloadResult{}, err
@@ -1512,7 +1724,11 @@ func (s *UpdaterService) DownloadUpdate() (updater.DownloadResult, error) {
 		s.mu.Unlock()
 	}()
 
-	art, err := s.downloader.DownloadReleaseArtifact(ctx, rel, runtime.GOOS, runtime.GOARCH, dir, s.keys, s.emitProgress)
+	art, err := s.downloader.DownloadReleaseArtifact(ctx, rel, runtime.GOOS, runtime.GOARCH, dir, s.keys, func(p updater.Progress) {
+		if ctx.Err() == nil { // 取消后不再推送(事件契约)
+			s.emitProgress(p)
+		}
+	})
 	if err != nil {
 		return updater.DownloadResult{}, err
 	}
@@ -1592,7 +1808,7 @@ func (a *App) startup(ctx context.Context) {
 wails generate module
 go test ./bridge/ -run 'TestUpdaterService' -count=1 -v
 go vet ./bridge/
-grep -n "func (s \*UpdaterService)" bridge/updater_service.go   # 预期恰 4 条且均无参数
+grep -n "^func (s \*UpdaterService) [A-Z]" bridge/updater_service.go | wc -l   # 预期 4(导出方法均无参数)
 grep -n "DownloadUpdate\|CancelDownload" frontend/wailsjs/go/bridge/UpdaterService.d.ts
 grep -n "DownloadResult" frontend/wailsjs/go/models.ts
 ```
@@ -1723,11 +1939,12 @@ package updater
 
 import "testing"
 
-// TestEmbeddedKeys 嵌入公钥必须恰 1 个且可解析(密钥仪式完成标志;失败=仪式未完成)。
+// TestEmbeddedKeys 嵌入公钥至少 1 个且可解析(密钥仪式完成标志;失败=仪式未完成)。
+// 轮换期允许多钥共存(旧钥+新钥),故断言 >=1 而非 ==1。
 func TestEmbeddedKeys(t *testing.T) {
 	keys := EmbeddedKeys()
-	if len(keys) != 1 {
-		t.Fatalf("嵌入公钥数 = %d, want 1(密钥仪式未完成?)", len(keys))
+	if len(keys) < 1 {
+		t.Fatalf("嵌入公钥数 = %d, want >=1(密钥仪式未完成?)", len(keys))
 	}
 	for id, pub := range keys {
 		if id == "" || len(pub) != 32 {
@@ -1961,10 +2178,11 @@ update-signing*.key
 
 ## 2. 每次发布流程(CI 创建 Release 之后)
 
-1. 在 GitHub Release 页下载 `SHA256SUMS`(CI 生成,覆盖全部资产、排除自身)。
-2. 本地签名:`go run ./tools/sign-release -sign -key <私钥路径> -in SHA256SUMS -out SHA256SUMS.sig`
-3. 将 `SHA256SUMS.sig` 上传到该 Release(网页拖拽,或 `gh release upload <tag> SHA256SUMS.sig`)。
-4. 自检:文件内容为单行 `<keyid> <base64>`;keyid 与 `signing_pubkey.go` 公钥一致。
+1. 在 GitHub Release 页下载 `SHA256SUMS`(CI 生成,覆盖全部资产、排除自身)与全部资产文件到临时目录。
+2. 核对(签名前置步骤,防“盲签”):本地重算 `go run ./tools/sign-release -sums -dir <临时目录> -out /tmp/SHA256SUMS.check`,与第 1 步的 `SHA256SUMS` 逐行比对——不一致必须停止签名并排查(历史版本无 CI 版 sums 时,以本地重算结果为准并记录)。
+3. 本地签名:`go run ./tools/sign-release -sign -key <私钥路径> -in SHA256SUMS -out SHA256SUMS.sig`
+4. 将 `SHA256SUMS.sig` 上传到该 Release(网页拖拽,或 `gh release upload <tag> SHA256SUMS.sig`)。
+5. 自检:文件内容为单行 `<keyid> <base64>`;keyid 与 `signing_pubkey.go` 公钥一致。
    (P4 启用不可变发布后,流程改为 draft → attach → publish,签名在上传阶段完成)
 
 ## 3. 本地演练(可选)
@@ -2061,13 +2279,18 @@ export interface WailsEventMap {
 // 追加导入
 import { onWailsEvent, type UpdateProgressEvent } from '../../api/events'
 
+// errText 统一解包:Wails 拒绝值为 Error(Go error → new Error(msg));直接 String(e) 会带 "Error: " 前缀
+function errText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e)
+}
+
 // 追加状态(P1 既有状态保留)
 const downloading = ref(false)
 const progress = ref<UpdateProgressEvent | null>(null)
 const ready = ref<updater.DownloadResult | null>(null)
 let offProgress: (() => void) | null = null
 
-// check() 中追加一行:ready.value = null(重新检查时复位)
+// check() 改动:追加 ready.value = null(重新检查时复位);catch 内 message.error(String(e)) 改为 message.error(errText(e))(消除 "Error: " 前缀,与下载链路一致)
 
 async function download() {
   downloading.value = true
@@ -2078,7 +2301,7 @@ async function download() {
   try {
     ready.value = await UpdaterService.DownloadUpdate()
   } catch (e) {
-    if (String(e) !== '已取消下载') message.error(String(e))
+    if (errText(e) !== '已取消下载') message.error(errText(e))
   } finally {
     downloading.value = false
     offProgress?.()
@@ -2103,7 +2326,7 @@ const progressText = computed(() => {
 })
 ```
 
-模板变更(把 `hasUpdate` 分支中原「about-actions」块替换为):
+模板变更(替换「`hasUpdate` 分支中自 `<div v-if="info.notes" ...>` 到 `about-actions` 的 `</div>`」整段;避免与原 notes 块重复):
 
 ```html
             <div v-if="info.notes" class="about-notes" :class="{ expanded: notesExpanded }">
@@ -2184,7 +2407,9 @@ const stubs = {
 ```ts
 describe('下载与校验', () => {
   it('下载:进度事件驱动文案,完成后展示就绪态', async () => {
-    downloadUpdate.mockResolvedValue({ tag: 'v0.2.0', assetName: 'gbt32960-simulator.app.zip', size: 200, sha256: 'x' })
+    // 可控 promise:进度事件必须在下载挂起期间发出(否则 finally 已清理订阅与状态)
+    let resolveDownload: (v: unknown) => void = () => {}
+    downloadUpdate.mockImplementation(() => new Promise((res) => { resolveDownload = res }))
     const wrapper = mount(SettingsAboutPanel, { global: { stubs } })
     await flushPromises()
     await findBtn(wrapper, '检查更新').trigger('click')
@@ -2196,6 +2421,7 @@ describe('下载与校验', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('512 B / 1.0 KB')
 
+    resolveDownload({ tag: 'v0.2.0', assetName: 'gbt32960-simulator.app.zip', size: 200, sha256: 'x' })
     await flushPromises()
     expect(wrapper.text()).toContain('更新包已就绪:v0.2.0')
     expect(downloadUpdate).toHaveBeenCalledTimes(1)
@@ -2217,7 +2443,7 @@ describe('下载与校验', () => {
     await flushPromises()
 
     await findBtn(wrapper, '取消下载').trigger('click')
-    rejectDownload('已取消下载')
+    rejectDownload(new Error('已取消下载')) // 生产同形:Wails 拒绝值为 Error(非裸字符串)
     await flushPromises()
 
     expect(cancelDownload).toHaveBeenCalledTimes(1)
@@ -2225,10 +2451,23 @@ describe('下载与校验', () => {
     expect(wrapper.text()).toContain('下载更新') // 回到可下载态
     errSpy.mockRestore()
   })
+
+  it('下载失败:展示纯文案(无 Error 前缀)', async () => {
+    downloadUpdate.mockRejectedValue(new Error('发布未附校验信息,已拒绝更新'))
+    const errSpy = vi.spyOn(message, 'error')
+    const wrapper = mount(SettingsAboutPanel, { global: { stubs } })
+    await flushPromises()
+    await findBtn(wrapper, '检查更新').trigger('click')
+    await flushPromises()
+    await findBtn(wrapper, '下载更新').trigger('click')
+    await flushPromises()
+    expect(errSpy).toHaveBeenCalledWith('发布未附校验信息,已拒绝更新')
+    errSpy.mockRestore()
+  })
 })
 ```
 
-> 注:`message` 从 `ant-design-vue` 导入(既有 import 处);`beforeEach` 中追加 `downloadUpdate.mockReset()` / `cancelDownload.mockReset()`。若 `vi.spyOn(message, 'error')` 因冻结对象失败,改用 `vi.mock('ant-design-vue', async (orig) => ({ ...(await orig()), message: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }))` 并断言 mock;二选一,以能稳定断言「取消不弹错误」为准。
+> 注:测试文件需**新增** `import { message } from 'ant-design-vue'`(既有测试未导入该符号);`beforeEach` 中追加 `downloadUpdate.mockReset()` / `cancelDownload.mockReset()`。首选 `vi.spyOn(message, 'error')`;若因冻结对象失败,回退为整体 `vi.mock('ant-design-vue', ...)` 并断言 mock(二选一,以能稳定断言为准)。
 
 - [ ] **Step 4: 前端四件套 + 提交**
 
@@ -2283,7 +2522,7 @@ func TestIntegrationReleaseChain(t *testing.T) {
 	if err := CheckDownloadURL(u); err != nil {
 		t.Fatalf("初始 URL 不在白名单: %v", err)
 	}
-	var hops []string
+	hops := []string{u.Hostname()} // 含初始站,便于断言 ≥2 host
 	client := &http.Client{
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			hops = append(hops, req.URL.Hostname())
@@ -2296,7 +2535,7 @@ func TestIntegrationReleaseChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Range", "bytes=0-65535") // 只取前 64KiB
+	req.Header.Set("Range", "bytes=0-65535") // 声明读取上限;实际只需少量字节验证链路
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -2312,8 +2551,8 @@ func TestIntegrationReleaseChain(t *testing.T) {
 	if n < 4096 {
 		t.Fatalf("读取字节过少: %d", n)
 	}
-	if len(hops) < 1 || !strings.Contains(strings.Join(hops, ","), "release-assets.githubusercontent.com") {
-		t.Fatalf("302 跳转链异常(期望 ≥2 host):%v", hops)
+	if len(hops) < 2 || !strings.Contains(strings.Join(hops, ","), "release-assets.githubusercontent.com") {
+		t.Fatalf("302 跳转链异常(期望 ≥2 host,含 release-assets):%v", hops)
 	}
 }
 ```
@@ -2328,14 +2567,16 @@ UPDATER_INTEGRATION=1 go test ./internal/updater/ -run TestIntegrationReleaseCha
 
 创建 `.superpowers/sdd/updater-p2/rehearsal-checklist.md`,逐项执行并记录:
 
-1. **构建非 dev 版本**:`wails build -ldflags "-X main.version=v0.0.0"` → 启动 `build/bin/gbt32960-simulator.app`。
-2. **启动清理证据**:启动前在 `~/Library/Caches/gbt32960-simulator/updates/` 预置 dummy 文件 → 启动后目录被清空。
-3. **检查 → 下载(真实 302 链)**:关于面板检查更新(若限流则等窗口重试)→ 找到 v0.1.0 → 点“下载更新”→ 进度条推进(截图)。
-4. **拒签路径(v0.1.0 未附校验资产)**:下载完成后验签阶段 → 文案 `发布未附校验信息,已拒绝更新`;检查缓存目录:无 `*.part`、无残留产物。
-5. **取消路径**:再次下载(或任一大资产场景),中途点“取消下载”→ 无错误弹窗、回到可下载态;缓存目录无 `*.part`。
-6. **回归**:关闭应用;`behind: 既有功能(连接/解析/服务端)不受影响` 由 PAC-6 自动化保证。
+1. **构建与启动**:`wails build -ldflags "-X main.version=v0.0.0"` → 打开 `build/bin/gbt32960-simulator.app`。
+2. **启动清理证据**:启动前预置 `~/Library/Caches/gbt32960-simulator/updates/<tag>/dummy` → 启动后 tag 子目录被清空(根级 last-result.json/helper.log 保留)。
+3. **拒签路径(先行,补传前)**:检查更新(若限流等窗口重试)→ 找到 v0.1.0 → 点“下载更新”→ **立即**提示 `发布未附校验信息,已拒绝更新`(未发起产物下载、无进度条);缓存目录无 `*.part`、无残留产物。
+4. **补传校验资产(必做,不再是“增强”)**:按 `docs/release-signing.md` §2——v0.1.0 的 4 个资产下载到临时目录 → 本地重算 `-sums` 核对 → `-sign` → 在 GitHub Release 页上传 `SHA256SUMS` + `SHA256SUMS.sig`(P4 起改为 draft→attach→publish)。
+5. **真实 302 链下载(happy path)**:重新检查 → 下载 → 进度条推进(截图;真实链 github.com → release-assets.githubusercontent.com)→ 校验通过 → 落定“更新包已就绪:v0.1.0”。
+7. **回归**:关闭应用;`既有功能(连接/解析/服务端)不受影响` 由 PAC-6 自动化保证。
 
-> 增强(推荐、不阻塞):按 `docs/release-signing.md` 对 v0.1.0 补传 SHA256SUMS + SHA256SUMS.sig(需在 GitHub Release 页上传)→ 重复第 3~4 步 → 预期落定“更新包已就绪:v0.1.0”(真实 happy path,证据留存)。
+6. **取消路径**:再次触发下载,中途点“取消下载”→ **无错误弹窗**、回到可下载态;缓存目录无 `*.part`。
+
+> 说明:第 3→4→5 步为必做顺序——未补传时下载被立即拒绝(拒签路径证据);补传后第 5 步产出真实 happy path 与进度/302 链证据;第 6 步覆盖取消 UX。
 
 - [ ] **Step 3: 提交**
 
@@ -2348,7 +2589,7 @@ GIT_MASTER=1 git commit -m "test(updater): 真实 Release 302 链集成测试(en
 
 ## Self-Review Record
 
-- **Spec coverage:** 设计文档 §5.3(下载/校验契约)→ T2/T3;§5.5(update:progress 事件)→ T3/T5;§5.7(白名单/单飞/清理)→ T2/T3;§5.8(单元/桥接/真实链路测试)→ T1/T2/T3/T6;发布侧签名流程(§5.3 发布侧 + AC-12)→ T4。P3 内容(替换/回滚/toast)不在本计划,已由 Master Plan 映射。
+- **Spec coverage:** 设计文档 §5.1(P2 修订:网络文案代理提示 + 拒签提示)→ T2/T3;§5.3(下载/校验契约,含 total 回退 assetSize、非 HTML 形态校验)→ T2/T3;§5.5(update:progress 事件)→ T3/T5;§5.7(白名单逐跳/单飞/清理)→ T2/T3;§5.8(单元/桥接/真实链路测试,含 403 限流 JSON 与 200 缺字段两例)→ T1/T2/T3/T6;发布侧签名流程(§5.3 发布侧 + AC-12,含签名前核对防盲签)→ T4。P3 内容(替换/回滚/toast)不在本计划,已由 Master Plan 映射。
 - **Placeholder scan:** 无 TBD/TODO;唯一占位 = `signing_pubkey.go` 空公钥常量(T4 密钥仪式填实,`TestEmbeddedKeys` 作为完成门槛);`docs/release-signing.md` 的 keyid 空位在 T4 仪式时填写。
 - **Type/interface consistency:** `Progress{Phase,Received,Total}`+`Percent()` 在 T2/T3 一致;`progressDTO` JSON 字段(phase/received/total/percent)与前端 `UpdateProgressEvent` 一致;`DownloadResult` 定义于 `updater` 包并被 bridge 透出(wailsjs 生成 `updater.DownloadResult`);错误文案在 Global Constraints、T1/T2 实现、PAC 三处一致;`CheckURL` 注入缝命名在 T2 定义、T3 测试使用一致。
 - **Decomposition decision:** 本 Phase 为已批准的 4 阶段拆分之 P2;自身 6 个任务(≤8-10),不再二次拆分。
@@ -2357,13 +2598,17 @@ GIT_MASTER=1 git commit -m "test(updater): 真实 Release 302 链集成测试(en
 - **Task Gate completeness:** L2 = task reviewer + focused checks;L3 = task reviewer + linked AC + 证据,均与 Level 匹配。
 - **L3 AC binding:** T2(PAC-1/2/3)、T3(PAC-1/2/4)、T4(PAC-5)、T5(PAC-1/4)、T6(PAC-1..5)均非空绑定且 AC 存在。
 - **Final acceptance coverage:** PAC-1~6 均绑定到非 L1 任务;跨模块项(绑定面/事件/清理)由 T3/T5 与 PAC-4 覆盖。
-- **Executable final acceptance:** 每条 PAC refinement 均含具体命令、注入参数与边界值(如 `ProgressInterval=1h`、`StallTimeout=80ms`、恰 <300ms 判定、keyid 矩阵、≥2 host)。
+- **Executable final acceptance:** 每条 PAC refinement 均含具体命令、注入参数与边界值(如 `ProgressInterval=1h`、`StallTimeout=100ms`、<600ms 判定、keyid 矩阵、含初始站 ≥2 host、无 Content-Length 回退)。
 - **Source consistency:** PAC 的 Source 名称与设计文档一致(Overall Business Flow / Current Requirement Flow / Development Architecture / New Architecture Enablement / Existing Architecture Fit)。
 - **依赖完整性:** `signing_pubkey.go` 占位创建于 T1(供 T3 编译),真实公钥在 T4 仪式填实;T3 测试注入测试密钥,不依赖仪式完成。
+- **跨 Phase 时序:** `CleanupCache` 只清 tag 子目录,根级 `last-result.json`/`helper.log` 保留——P3 的 `ConsumeLastResult()` 与失败排障不受启动清理影响(§5.4/§5.3 协调点已锁定)。
+- **双门评审整改记录(2026-09-15):** C1 Wails 错误包装解包(前端 `errText`)/C2 下载用例时序修正/C3 §5.8 两例补齐/C4 T6 演练重构为「拒签→补传→happy path→取消」;I1 非 HTML 校验/I2 total 回退/I3 代理文案/I4 `fmt` 导入/I5 PAC-4 grep 修正/I6 PAC-5 证据改写/I7 测试缓存隔离(`redirectUserCache`);Minor 1-8 全部落地。
 
 ## Execution Handoff
 
 计划已保存至 `docs/superpowers/plans/2026-09-15-updater-phase-2-download-plan.md`。
+
+> Phase 出口治理(主控):全部任务与 PAC 终验通过后,更新 Master Plan 台账 P2 行(status=done、commit 区间、证据位置),按 P1 惯例独立 ledger 提交。
 
 三种执行方式:
 
