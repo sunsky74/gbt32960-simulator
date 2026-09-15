@@ -11,6 +11,9 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// version 由发布流程经 -ldflags "-X main.version=${GITHUB_REF_NAME}" 注入;未注入(本地开发)为 dev。
+var version = "dev"
+
 func main() {
 	app := NewApp()
 
@@ -36,6 +39,7 @@ func main() {
 			app.server,
 			app.track,
 			app.settings,
+			app.updater,
 		},
 	})
 

@@ -20,6 +20,7 @@ type App struct {
 	track     *bridge.TrackService
 	forwarder *bridge.Forwarder
 	settings  *bridge.SettingsService
+	updater   *bridge.UpdaterService
 
 	// fwdCancel 取消事件转发 goroutine(shutdown 时先停转发,再断开连接)。
 	fwdCancel context.CancelFunc
@@ -48,13 +49,14 @@ func NewApp() *App {
 		track:     track,
 		forwarder: fwd,
 		settings:  bridge.NewSettingsService(fwd),
+		updater:   bridge.NewUpdaterService(version),
 	}
 }
 
 // startup wails 启动回调:注入上下文并启动事件转发。
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	bridge.WireContexts(ctx, a.console, a.extsvc, a.sys, a.server, a.track)
+	bridge.WireContexts(ctx, a.console, a.extsvc, a.sys, a.server, a.track, a.updater)
 	fwdCtx, cancel := context.WithCancel(ctx)
 	a.fwdCancel = cancel
 	go a.forwarder.Start(fwdCtx)

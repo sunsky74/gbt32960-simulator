@@ -8,12 +8,13 @@ import "context"
 // 这些函数只应在 app 装配与 startup 阶段调用一次。
 
 // WireContexts 把 wails 上下文注入各服务(原生对话框等能力需要)。
-func WireContexts(ctx context.Context, console *ConsoleService, ext *ExtService, sys *SystemService, server *ServerService, track *TrackService) {
+func WireContexts(ctx context.Context, console *ConsoleService, ext *ExtService, sys *SystemService, server *ServerService, track *TrackService, updater *UpdaterService) {
 	console.ctx = ctx
 	ext.ctx = ctx
 	sys.ctx = ctx
 	server.ctx = ctx
 	track.ctx = ctx
+	updater.ctx = ctx
 }
 
 // WireTrackReplay 装配轨迹回放钩子:周期上报每次 tick 经钩子推进轨迹点。

@@ -678,3 +678,34 @@ export namespace tlsconf {
 
 }
 
+export namespace updater {
+	
+	export class UpdateInfo {
+	    current: string;
+	    latest: string;
+	    hasUpdate: boolean;
+	    devBuild: boolean;
+	    notes: string;
+	    publishedAt: string;
+	    assetName: string;
+	    assetSize: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.current = source["current"];
+	        this.latest = source["latest"];
+	        this.hasUpdate = source["hasUpdate"];
+	        this.devBuild = source["devBuild"];
+	        this.notes = source["notes"];
+	        this.publishedAt = source["publishedAt"];
+	        this.assetName = source["assetName"];
+	        this.assetSize = source["assetSize"];
+	    }
+	}
+
+}
+
