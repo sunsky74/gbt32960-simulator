@@ -2572,9 +2572,8 @@ UPDATER_INTEGRATION=1 go test ./internal/updater/ -run TestIntegrationReleaseCha
 3. **拒签路径(先行,补传前)**:检查更新(若限流等窗口重试)→ 找到 v0.1.0 → 点“下载更新”→ **立即**提示 `发布未附校验信息,已拒绝更新`(未发起产物下载、无进度条);缓存目录无 `*.part`、无残留产物。
 4. **补传校验资产(必做,不再是“增强”)**:按 `docs/release-signing.md` §2——v0.1.0 的 4 个资产下载到临时目录 → 本地重算 `-sums` 核对 → `-sign` → 在 GitHub Release 页上传 `SHA256SUMS` + `SHA256SUMS.sig`(P4 起改为 draft→attach→publish)。
 5. **真实 302 链下载(happy path)**:重新检查 → 下载 → 进度条推进(截图;真实链 github.com → release-assets.githubusercontent.com)→ 校验通过 → 落定“更新包已就绪:v0.1.0”。
-7. **回归**:关闭应用;`既有功能(连接/解析/服务端)不受影响` 由 PAC-6 自动化保证。
-
 6. **取消路径**:再次触发下载,中途点“取消下载”→ **无错误弹窗**、回到可下载态;缓存目录无 `*.part`。
+7. **回归**:关闭应用;`既有功能(连接/解析/服务端)不受影响` 由 PAC-6 自动化保证。
 
 > 说明:第 3→4→5 步为必做顺序——未补传时下载被立即拒绝(拒签路径证据);补传后第 5 步产出真实 happy path 与进度/302 链证据;第 6 步覆盖取消 UX。
 
