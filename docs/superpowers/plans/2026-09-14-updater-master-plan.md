@@ -20,10 +20,10 @@ Phase Plan 生成策略:各 Phase 启动时即时生成(基于上一 Phase 落�
 
 | Phase | Plan | Status | Current Gate | Depends On | Final Intent Coverage |
 |---|---|---|---|---|---|
-| P1 版本与检查 | `plans/2026-09-14-updater-phase-1-check-plan.md` | **in-progress**(计划已生成,待选执行方式) | 执行方式待选 | 无 | AC-1/2/3 |
+| P1 版本与检查 | `plans/2026-09-14-updater-phase-1-check-plan.md` | **in-progress**(Quality-LTDD 执行:9 commits `b3a8c41..e8c9899`,任务评审×6 + oracle 终审 Ready + 机器侧验收全绿;待用户目击确认与合并决策) | 用户目击确认 → 合并决策 | 无 | AC-1/2/3 |
 | P2 下载与校验 | (待生成) | not-started | — | P1 | AC-4/5;AC-12(SHA256SUMS 部分) |
 | P3 替换与重启 | (待生成) | not-started | — | P2 | AC-6/7/8/13/14;AC-12(installscope 部分) |
-| P4 发布链收尾与终验 | (待生成) | not-started | — | P3 | AC-12(wails.json)/15;全局终验 |
+| P4 发布链收尾与终验 | (待生成) | not-started | — | P3 | AC-12(wails.json)/15;全局终验;文档随动(frontend-ui-spec "9 分类"/README/backlog) |
 
 状态取值:not-started / in-progress / done / blocked。每完成一个 Phase 更新本表,并记录 commit 区间与验收证据位置。
 
