@@ -7,6 +7,7 @@ import {
   DatabaseOutlined,
   ExperimentOutlined,
   GlobalOutlined,
+  InfoCircleOutlined,
   SettingOutlined,
   SearchOutlined,
   ToolOutlined,
@@ -22,6 +23,7 @@ import SettingsStoragePanel from '../components/settings/SettingsStoragePanel.vu
 import SettingsNetworkPanel from '../components/settings/SettingsNetworkPanel.vue'
 import SettingsKeysPanel from '../components/settings/SettingsKeysPanel.vue'
 import SettingsAdvancedPanel from '../components/settings/SettingsAdvancedPanel.vue'
+import SettingsAboutPanel from '../components/settings/SettingsAboutPanel.vue'
 
 // ---------- 分类注册表:左侧导航 + 右侧面板一一对应 ----------
 interface SettingsCategory {
@@ -39,6 +41,7 @@ const categories: SettingsCategory[] = [
   { key: 'network', title: '网络', icon: markRaw(GlobalOutlined) },
   { key: 'keys', title: '快捷键', icon: markRaw(ToolOutlined) },
   { key: 'advanced', title: '高级', icon: markRaw(ExperimentOutlined) },
+  { key: 'about', title: '关于', icon: markRaw(InfoCircleOutlined) },
 ]
 
 const activeCategory = ref('appearance')
@@ -152,6 +155,9 @@ async function openDir(path?: string) {
             :storage-paths="storagePaths"
             :open-dir="openDir"
           />
+
+          <!-- ================ 关于 ================ -->
+          <SettingsAboutPanel v-else-if="activeCategory === 'about'" />
         </div>
       </div>
     </section>
