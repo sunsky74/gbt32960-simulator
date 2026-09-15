@@ -154,3 +154,14 @@ func TestHashFile(t *testing.T) {
 		t.Fatal("不存在文件应报错")
 	}
 }
+
+// TestVerifySumSignatureRejectsMalformedKey 防御:键表中错误长度的公钥不得引发 panic(fail-closed;评审 Minor-1)。
+func TestVerifySumSignatureRejectsMalformedKey(t *testing.T) {
+	pub, priv := newTestKey(t)
+	sums := []byte("data")
+	sig := signLine(t, priv, sums)
+	keys := map[string]ed25519.PublicKey{KeyID(pub): ed25519.PublicKey{1, 2, 3}}
+	if err := VerifySumSignature(sums, sig, keys); !errors.Is(err, ErrSigVerify) {
+		t.Fatalf("err = %v, want ErrSigVerify", err)
+	}
+}

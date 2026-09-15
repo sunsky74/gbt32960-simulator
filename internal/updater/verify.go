@@ -51,7 +51,7 @@ func VerifySumSignature(sums, sigRaw []byte, keys map[string]ed25519.PublicKey) 
 		return ErrSigVerify
 	}
 	pub, ok := keys[keyID]
-	if !ok || !ed25519.Verify(pub, sums, sig) {
+	if !ok || len(pub) != ed25519.PublicKeySize || !ed25519.Verify(pub, sums, sig) {
 		return ErrSigVerify
 	}
 	return nil
