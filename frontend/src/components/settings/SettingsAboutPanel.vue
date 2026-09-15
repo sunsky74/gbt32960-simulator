@@ -151,4 +151,9 @@ const platformUnsupported = computed(() => hasUpdate.value && !info.value?.asset
   display: flex;
   gap: 8px;
 }
+
+/* 分组:组内末行去分隔线 */
+.row-group :deep(.setting-row:last-child) {
+  border-bottom: none;
+}
 </style>
