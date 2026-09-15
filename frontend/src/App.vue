@@ -5,7 +5,11 @@ import SideNav from './components/layout/SideNav.vue'
 import { activeNavKey, bottomNavItems, navItems } from './navigation'
 import { antdThemes } from './theme'
 import { useTheme } from './theme/useTheme'
-import { rememberNavPage, restoreLastNavPage } from './composables/useAppSettings'
+import { message } from 'ant-design-vue'
+import * as UpdaterService from '../wailsjs/go/bridge/UpdaterService'
+import { appSettings, rememberNavPage, restoreLastNavPage } from './composables/useAppSettings'
+import { UPDATE_CHECK_DELAY_MS, markChecked, shouldAutoCheck, shouldPrompt } from './composables/useUpdater'
+import { openSettingsCategory, settingsFocusCategory } from './composables/settingsFocus'
 
 // 左侧导航展开/收起(持久化到 localStorage)
 const NAV_COLLAPSED_KEY = 'app-nav-collapsed'
@@ -23,6 +27,32 @@ onMounted(() => {
   if (restored !== activeNavKey.value) activeNavKey.value = restored
 })
 watch(activeNavKey, (k) => rememberNavPage(k))
+
+// 跨页跳转:settingsFocusCategory 被写入时切到设置页(具体分类由 SettingsPage 消费)
+watch(settingsFocusCategory, (k) => {
+  if (k) activeNavKey.value = 'settings'
+})
+
+// 启动自动检查:延迟 ~3s、24h 冷却、失败静默(设置「常用 → 启动时检查更新」控制)
+onMounted(() => {
+  window.setTimeout(async () => {
+    const now = Date.now()
+    if (!shouldAutoCheck(appSettings, now)) return
+    try {
+      const info = await UpdaterService.CheckUpdate()
+      if (!info.devBuild && info.hasUpdate && shouldPrompt(appSettings, info.latest)) {
+        message.info({
+          content: `发现新版本 ${info.latest},点击查看`,
+          onClick: () => openSettingsCategory('about'),
+        })
+      }
+    } catch {
+      // 静默失败:不打扰;冷却期内不重试(手动检查始终可用)
+    } finally {
+      markChecked(now)
+    }
+  }, UPDATE_CHECK_DELAY_MS)
+})
 
 const activePage = computed(() => allNavItems.value.find((i) => i.key === activeNavKey.value) ?? allNavItems.value[0])
 

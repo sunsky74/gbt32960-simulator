@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, markRaw, onMounted, ref, type Component } from 'vue'
+import { computed, markRaw, onMounted, ref, watch, type Component } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   ApiOutlined,
@@ -24,6 +24,7 @@ import SettingsNetworkPanel from '../components/settings/SettingsNetworkPanel.vu
 import SettingsKeysPanel from '../components/settings/SettingsKeysPanel.vue'
 import SettingsAdvancedPanel from '../components/settings/SettingsAdvancedPanel.vue'
 import SettingsAboutPanel from '../components/settings/SettingsAboutPanel.vue'
+import { settingsFocusCategory } from '../composables/settingsFocus'
 
 // ---------- 分类注册表:左侧导航 + 右侧面板一一对应 ----------
 interface SettingsCategory {
@@ -45,6 +46,17 @@ const categories: SettingsCategory[] = [
 ]
 
 const activeCategory = ref('appearance')
+
+// 跨页跳转:消费 focus 目标(toast「发现新版本」→ 关于);先设目标后挂载的两序均可
+function consumeFocus() {
+  const key = settingsFocusCategory.value
+  if (!key) return
+  if (categories.some((c) => c.key === key)) activeCategory.value = key
+  settingsFocusCategory.value = null
+}
+consumeFocus()
+watch(settingsFocusCategory, consumeFocus)
+
 const currentCategory = computed(() => categories.find((c) => c.key === activeCategory.value))
 
 // ---------- 数据与存储:后端只读路径(存储 / 高级两个面板共用,页面挂载时取一次) ----------
