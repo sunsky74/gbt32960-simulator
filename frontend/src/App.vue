@@ -43,6 +43,7 @@ onMounted(() => {
       if (!info.devBuild && info.hasUpdate && shouldPrompt(appSettings, info.latest)) {
         message.info({
           content: `发现新版本 ${info.latest},点击查看`,
+          duration: 15,
           onClick: () => openSettingsCategory('about'),
         })
       }
