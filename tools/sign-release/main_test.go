@@ -79,3 +79,23 @@ func TestRunSumsExclusions(t *testing.T) {
 		t.Fatalf("应覆盖资产:\n%s", got)
 	}
 }
+
+func TestRunSumsExcludesOutputFile(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "a.bin"), []byte("a"), 0o644)
+	first := filepath.Join(dir, "SHA256SUMS.check")
+	if err := runSums(dir, first); err != nil {
+		t.Fatal(err)
+	}
+	second := filepath.Join(dir, "SHA256SUMS.check2")
+	if err := runSums(dir, second); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(second)
+	if strings.Contains(string(got), "SHA256SUMS.check") {
+		t.Fatalf("上轮输出文件不应计入:\n%s", got)
+	}
+	if !strings.Contains(string(got), "a.bin") {
+		t.Fatalf("应覆盖资产:\n%s", got)
+	}
+}

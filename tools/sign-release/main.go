@@ -135,11 +135,15 @@ func runSums(dir, outPath string) error {
 	if err != nil {
 		return err
 	}
+	outAbs, _ := filepath.Abs(outPath)
 	var names []string
 	for _, e := range entries {
 		n := e.Name()
 		if e.IsDir() || n == "SHA256SUMS" || strings.HasSuffix(n, ".sig") {
 			continue
+		}
+		if abs, err := filepath.Abs(filepath.Join(dir, n)); err == nil && abs == outAbs {
+			continue // 输出文件自身(非 SHA256SUMS 命名时,如 SHA256SUMS.check 重跑)
 		}
 		names = append(names, n)
 	}
