@@ -98,6 +98,19 @@ jobs:
           merge-multiple: true
           path: release
 
+      - name: 生成 SHA256SUMS(排除自身;客户端契约 `hash  name`)
+        run: |
+          cd release
+          for f in *; do
+            [ "$f" = "SHA256SUMS" ] && continue
+            sha256sum "$f"
+          done > SHA256SUMS
+          echo "—— SHA256SUMS ——"
+          cat SHA256SUMS
+        shell: bash
+
+      # 说明:SHA256SUMS.sig 不在 CI 生成(私钥离线保管);发布者本地签名后上传,见 docs/release-signing.md
+
       - uses: softprops/action-gh-release@v3
         with:
           files: release/**

@@ -44,3 +44,6 @@ coverage.*
 
 # ---- playwright-mcp 调试产物(截图/日志) ----
 .playwright-mcp/
+
+# 更新签名私钥(离线保管,绝不入库)
+update-signing*.key

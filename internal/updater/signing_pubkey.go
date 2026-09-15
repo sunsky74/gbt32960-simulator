@@ -7,7 +7,7 @@ import (
 
 // signingPubKeyB64 发布签名公钥(Ed25519,std base64;由 tools/sign-release -gen 生成)。
 // 私钥离线保管、绝不入库;轮换:保留旧钥条目直至所有在用版本都升级到含新钥的版本。
-const signingPubKeyB64 = "" // 由 T4 密钥仪式填入
+const signingPubKeyB64 = "AVkLcnNunEYb9BqmkjRSwTXTvJjhBqbIOCWpBIDXSt4="
 
 // EmbeddedKeys 返回 keyid→公钥表;未配置/解析失败时返回空表(下载校验 fail-closed,拒绝一切更新)。
 func EmbeddedKeys() map[string]ed25519.PublicKey {
