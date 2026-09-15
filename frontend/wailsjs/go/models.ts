@@ -680,6 +680,24 @@ export namespace tlsconf {
 
 export namespace updater {
 	
+	export class DownloadResult {
+	    tag: string;
+	    assetName: string;
+	    size: number;
+	    sha256: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DownloadResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tag = source["tag"];
+	        this.assetName = source["assetName"];
+	        this.size = source["size"];
+	        this.sha256 = source["sha256"];
+	    }
+	}
 	export class UpdateInfo {
 	    current: string;
 	    latest: string;

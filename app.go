@@ -57,6 +57,7 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	bridge.WireContexts(ctx, a.console, a.extsvc, a.sys, a.server, a.track, a.updater)
+	bridge.WireUpdaterStartup(a.updater) // 更新缓存不跨会话复用(设计文档 §5.3)
 	fwdCtx, cancel := context.WithCancel(ctx)
 	a.fwdCancel = cancel
 	go a.forwarder.Start(fwdCtx)

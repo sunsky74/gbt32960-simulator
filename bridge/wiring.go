@@ -27,3 +27,8 @@ func WireTrackReplay(msg *MessageService, track *TrackService) {
 func WireAutoReportResume(conn *ConnectionService, msg *MessageService) {
 	conn.setOnConnected(func() { _ = msg.resumeAutoReport() })
 }
+
+// WireUpdaterStartup 装配更新服务启动行为:清理更新缓存(不跨会话复用;尽力清理,失败忽略)。
+func WireUpdaterStartup(u *UpdaterService) {
+	u.cleanupCache()
+}
