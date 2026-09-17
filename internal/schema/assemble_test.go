@@ -149,6 +149,91 @@ func TestAssembleInvalidSOC(t *testing.T) {
 	}
 }
 
+// TestV2016DocCompliance 锁定 2016 文档语义修复:
+// 挡位按附录 A.1 位域编码、充电状态含 0x04 充电完成、储能电压超 200 单体自动拆帧。
+func TestV2016DocCompliance(t *testing.T) {
+	t.Run("gear A.1 nibble", func(t *testing.T) {
+		cfg := GroupsConfig{"vehicle": {Enabled: true, Rows: []RowValue{
+			{"gear": 0x0F, "drivingForce": true, "brakingForce": true},
+		}}}
+		body, err := AssembleRealtime(cfg, time.Now())
+		if err != nil {
+			t.Fatalf("assemble P挡: %v", err)
+		}
+		// bit5 驱动力 | bit4 制动力 | nibble 0xF(停车P挡)
+		if got := body.VehicleData.GearPosition.Origin; got != 0x3F {
+			t.Errorf("P挡 origin = 0x%02X, want 0x3F", got)
+		}
+		d := decodeRealtime(t, body)
+		if d.VehicleData.GearPosition.GP != 0x0F ||
+			!d.VehicleData.GearPosition.DrivingForceActive ||
+			!d.VehicleData.GearPosition.BrakingTorqueApplied {
+			t.Errorf("P挡 decode = %+v", d.VehicleData.GearPosition)
+		}
+
+		cfg["vehicle"] = GroupConfig{Enabled: true, Rows: []RowValue{{"gear": 0x00}}}
+		body, err = AssembleRealtime(cfg, time.Now())
+		if err != nil {
+			t.Fatalf("assemble 空挡: %v", err)
+		}
+		if got := body.VehicleData.GearPosition.Origin; got != 0x00 {
+			t.Errorf("空挡 origin = 0x%02X, want 0x00", got)
+		}
+
+		// A.1 未定义的挡位码(如 0x07)应被拒绝
+		cfg["vehicle"] = GroupConfig{Enabled: true, Rows: []RowValue{{"gear": 0x07}}}
+		if _, err := AssembleRealtime(cfg, time.Now()); err == nil {
+			t.Error("gear=0x07 (A.1 预留) should fail validation")
+		}
+	})
+
+	t.Run("charging state 0x04 充电完成", func(t *testing.T) {
+		cfg := GroupsConfig{"vehicle": {Enabled: true, Rows: []RowValue{{"chargingState": 4}}}}
+		body, err := AssembleRealtime(cfg, time.Now())
+		if err != nil {
+			t.Fatalf("assemble: %v", err)
+		}
+		if got := byte(body.VehicleData.ChargingState); got != 0x04 {
+			t.Errorf("chargingState = 0x%02X, want 0x04", got)
+		}
+		d := decodeRealtime(t, body)
+		if got := byte(d.VehicleData.ChargingState); got != 0x04 {
+			t.Errorf("roundtrip chargingState = 0x%02X, want 0x04", got)
+		}
+	})
+
+	t.Run("voltage frames split at 200 cells", func(t *testing.T) {
+		volts := make([]any, 250)
+		for i := range volts {
+			volts[i] = 3.5
+		}
+		cfg := GroupsConfig{"voltage": {Enabled: true, Rows: []RowValue{{
+			"subsystem": 1, "voltage": 400, "current": -10, "batteryTotal": 250,
+			"frameStartSeq": 1, "batteryVoltages": volts,
+		}}}}
+		body, err := AssembleRealtime(cfg, time.Now())
+		if err != nil {
+			t.Fatalf("assemble: %v", err)
+		}
+		l := body.ChargeableSubsystemElectricList
+		if l.ElectricCount != 2 || len(l.Items) != 2 {
+			t.Fatalf("expect 2 frames after split, got count=%d items=%d", l.ElectricCount, len(l.Items))
+		}
+		if l.Items[0].BatteryCount != 200 || l.Items[0].FrameStartBatterySeq != 1 {
+			t.Errorf("frame0 = %d cells @seq %d, want 200 @1", l.Items[0].BatteryCount, l.Items[0].FrameStartBatterySeq)
+		}
+		if l.Items[1].BatteryCount != 50 || l.Items[1].FrameStartBatterySeq != 201 {
+			t.Errorf("frame1 = %d cells @seq %d, want 50 @201", l.Items[1].BatteryCount, l.Items[1].FrameStartBatterySeq)
+		}
+		// 整帧编解码闭环:线上按个数读条目,拆帧后仍应可完整解码
+		d := decodeRealtime(t, body)
+		if len(d.ChargeableSubsystemElectricList.Items) != 2 ||
+			len(d.ChargeableSubsystemElectricList.Items[0].BatteryVoltages) != 200 {
+			t.Errorf("roundtrip split frames wrong: %+v", d.ChargeableSubsystemElectricList)
+		}
+	})
+}
+
 // TestAlarmBoolSettersReflect 锁定反射写入口径:两版已知字段均可写入,
 // 未知字段两版均返回错误(v2016 旧 switch 实现曾静默忽略)。
 func TestAlarmBoolSettersReflect(t *testing.T) {

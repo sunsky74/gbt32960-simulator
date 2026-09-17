@@ -145,9 +145,14 @@ func AssembleRealtime(cfg GroupsConfig, at time.Time) (*mdl.RealTimeData, error)
 }
 
 func assembleVehicle(r RowValue) (*realtime.VehicleData, error) {
+	// 附录 A.1:挡位字节 bit3~0 为挡位码(0x0 空挡,0x1~0x6 = 1~6 挡,
+	// 0xD 倒挡,0xE 自动D,0xF 停车P),bit4 制动力,bit5 驱动力。
+	// gearEnum2016 的枚举值即挡位码,此处仅校验合法集合。
 	gearCode := getInt(r, "gear", 1)
-	if gearCode < 1 || gearCode > 5 {
-		return nil, fmt.Errorf("档位取值非法: %d", gearCode)
+	switch gearCode {
+	case 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x0D, 0x0E, 0x0F:
+	default:
+		return nil, fmt.Errorf("档位取值非法: 0x%02X", gearCode)
 	}
 	var origin byte
 	if getBool(r, "drivingForce", false) {
@@ -294,25 +299,37 @@ func setBoolFieldByName(target any, field string, on bool) error {
 	return nil
 }
 
+// maxCellsPerVoltageFrame 表 B.6:本帧单体电池总数 m 有效值 1~200,超过应拆帧。
+const maxCellsPerVoltageFrame = 200
+
 func assembleVoltageList(rows []RowValue) (*realtime.ChargeableSubsystemElectricList, error) {
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("至少需要一行储能电压数据")
 	}
-	list := &realtime.ChargeableSubsystemElectricList{ElectricCount: len(rows)}
+	list := &realtime.ChargeableSubsystemElectricList{}
 	for _, r := range rows {
-		list.Items = append(list.Items, realtime.ChargeableSubsystemElectric{
-			ChargeableSubSystemNumber: getInt(r, "subsystem", 1),
-			Voltage:                   getFloat(r, "voltage", 0),
-			Current:                   getFloat(r, "current", 0),
-			BatteryTotalCount:         getIntDefault(r, "batteryTotal", 0),
-			FrameStartBatterySeq:      getIntDefault(r, "frameStartSeq", 1),
-			BatteryCount:              0,
-			BatteryVoltages:           getFloatArray(r, "batteryVoltages"),
-		})
+		volts := getFloatArray(r, "batteryVoltages")
+		start := getIntDefault(r, "frameStartSeq", 1)
+		// 每帧最多 200 个单体;超出按表 B.6 拆成多帧,起始序号依次递进。
+		// 空数组仍生成一条记录(本帧单体总数 0),保持"一行=一个子系统"的语义。
+		for begin := 0; begin < len(volts) || begin == 0; begin += maxCellsPerVoltageFrame {
+			end := min(begin+maxCellsPerVoltageFrame, len(volts))
+			list.Items = append(list.Items, realtime.ChargeableSubsystemElectric{
+				ChargeableSubSystemNumber: getInt(r, "subsystem", 1),
+				Voltage:                   getFloat(r, "voltage", 0),
+				Current:                   getFloat(r, "current", 0),
+				BatteryTotalCount:         getIntDefault(r, "batteryTotal", 0),
+				FrameStartBatterySeq:      start + begin,
+				BatteryCount:              end - begin,
+				BatteryVoltages:           volts[begin:end],
+			})
+			if end == len(volts) {
+				break
+			}
+		}
 	}
-	for i := range list.Items {
-		list.Items[i].BatteryCount = len(list.Items[i].BatteryVoltages)
-	}
+	// 拆帧后条目数可能多于行数,个数必须与条目数一致(线上按个数读取条目)。
+	list.ElectricCount = len(list.Items)
 	return list, nil
 }
 

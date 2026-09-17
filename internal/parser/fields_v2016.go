@@ -260,7 +260,7 @@ func parseTLVGroup(w *walker, flag byte) {
 		}
 		w.conv("氢系统最高温度", "°C", 2, &codec.HighestTempHydrogenConverter)
 		w.u8("氢系统最高温度探针代号", "")
-		w.u16("氢气最高浓度", "ppm")
+		w.u16("氢气最高浓度", "mg/kg")
 		w.u8("氢气最高浓度传感器代号", "")
 		w.conv("氢气最高压力", "MPa", 2, &codec.HydrogenMaxPressureConverter)
 		w.u8("氢气最高压力传感器代号", "")
@@ -330,7 +330,12 @@ func parseGear(w *walker) {
 	if b[0]&(1<<4) != 0 {
 		parts = append(parts, "制动力")
 	}
-	parts = append(parts, gearLabels[g])
+	// 附录 A.1 未定义的挡位码(0x7~0xC 等)给出兜底文案,避免漏查得到空串
+	gearLabel, ok := gearLabels[g]
+	if !ok {
+		gearLabel = fmt.Sprintf("预留(0x%X)", g)
+	}
+	parts = append(parts, gearLabel)
 	w.emit("档位", "u8", b, fmt.Sprintf("0x%02X", b[0]), "-", strings.Join(parts, "+"), "")
 }
 
