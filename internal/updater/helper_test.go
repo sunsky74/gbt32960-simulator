@@ -101,6 +101,46 @@ func (f *fakeHelper) wantRelaunch(t *testing.T, want ...string) {
 	}
 }
 
+// relaunchSnapshot 一次拉起调用时点的结果文件快照:「写结果先于拉起」(§5.4)顺序契约的断言依据。
+type relaunchSnapshot struct {
+	exists bool       // 拉起时点结果文件是否已落盘
+	result LastResult // exists 为真时的内容
+}
+
+// captureRelaunchSnapshots 在既有 relaunchFn 外再包一层(保留原实现语义):
+// 每次拉起调用时点读取结果文件入 sink——调用前须 redirectUserCache。
+func (f *fakeHelper) captureRelaunchSnapshots(t *testing.T, sink *[]relaunchSnapshot) {
+	t.Helper()
+	inner := f.relaunchFn
+	f.relaunchFn = func(target string) error {
+		got, err := ReadLastResult()
+		if err != nil {
+			t.Fatalf("拉起时点读取结果文件失败: %v", err)
+		}
+		snap := relaunchSnapshot{}
+		if got != nil {
+			snap.exists, snap.result = true, *got
+		}
+		*sink = append(*sink, snap)
+		return inner(target)
+	}
+}
+
+// wantRelaunchSnapshot 断言第 i 次(0 基)拉起调用时点结果文件已落盘且为 {ok, reason}。
+func wantRelaunchSnapshot(t *testing.T, snaps []relaunchSnapshot, i int, wantOK bool, wantReason string) {
+	t.Helper()
+	if i >= len(snaps) {
+		t.Fatalf("拉起时点快照数 = %d, want > %d", len(snaps), i)
+	}
+	snap := snaps[i]
+	if !snap.exists {
+		t.Fatalf("第 %d 次拉起时点结果文件未落盘:写结果必须先于拉起", i+1)
+	}
+	if snap.result.OK != wantOK || snap.result.Reason != wantReason {
+		t.Fatalf("第 %d 次拉起时点结果 = %+v, want {ok:%v reason:%q}", i+1, snap.result, wantOK, wantReason)
+	}
+}
+
 // newHelperFixture 构造临时布局与完整 helper 参数:appDir 内为替换目标,artifact 独立成文件。
 // Result/Log 仅作参数透传(实际落盘位置由缓存根推导,测试以 redirectUserCache 隔离)。
 func newHelperFixture(t *testing.T, tag string) (HelperArgs, string) {
@@ -193,10 +233,13 @@ func TestHelperEntrySentinel(t *testing.T) {
 	})
 }
 
-// TestHelperMainSuccess 成功链:等待→预检→暂存→交换→写结果→拉起;拉起恰 1 次且实参为 target。
+// TestHelperMainSuccess 成功链:等待→预检→暂存→交换→写结果→拉起;拉起恰 1 次且实参为 target,
+// 且拉起时点结果文件已落盘为 {ok:true, reason 空}(§5.4 写结果先于拉起)。
 func TestHelperMainSuccess(t *testing.T) {
 	redirectUserCache(t)
 	f := newFakeHelper()
+	var snaps []relaunchSnapshot
+	f.captureRelaunchSnapshots(t, &snaps)
 	args, _ := newHelperFixture(t, "v1.2.3")
 
 	if code := HelperMain(helperArgv(args), f.deps()); code != 0 {
@@ -204,6 +247,7 @@ func TestHelperMainSuccess(t *testing.T) {
 	}
 	f.wantCalls(t, "wait", "preflight", "stage", "swap", "relaunch")
 	f.wantRelaunch(t, args.Target)
+	wantRelaunchSnapshot(t, snaps, 0, true, "") // 拉起时点:成功结果已落盘
 	if f.waitPID != args.ParentPID || f.waitPoll != helperPollInterval || f.waitTMO != helperParentTimeout {
 		t.Fatalf("WaitParent 实参 = (%d, %v, %v), want (%d, %v, %v)",
 			f.waitPID, f.waitPoll, f.waitTMO, args.ParentPID, helperPollInterval, helperParentTimeout)
@@ -240,10 +284,13 @@ func TestHelperMainStageFailure(t *testing.T) {
 	wantFailResult(t, args, ErrStageFailed.Error())
 }
 
-// TestHelperMainSwapFailure 交换失败:Rollback(backup, target) 恰 1 次、原因「替换失败」、拉起旧版、码 1。
+// TestHelperMainSwapFailure 交换失败:Rollback(backup, target) 恰 1 次、原因「替换失败」、拉起旧版、码 1,
+// 且拉起旧版前失败结果已落盘(§5.4)。
 func TestHelperMainSwapFailure(t *testing.T) {
 	redirectUserCache(t)
 	f := newFakeHelper()
+	var snaps []relaunchSnapshot
+	f.captureRelaunchSnapshots(t, &snaps)
 	f.swapFn = func(_, target string) (string, error) { return target + ".bak", ErrSwapFailed }
 	args, _ := newHelperFixture(t, "v1.2.3")
 
@@ -255,10 +302,12 @@ func TestHelperMainSwapFailure(t *testing.T) {
 		t.Fatalf("Rollback 实参 = %v, want [[%s %s]]", f.rollbackArg, args.Target+".bak", args.Target)
 	}
 	f.wantRelaunch(t, args.Target)
+	wantRelaunchSnapshot(t, snaps, 0, false, ErrSwapFailed.Error()) // 拉起旧版时点:失败结果已落盘
 	wantFailResult(t, args, ErrSwapFailed.Error())
 }
 
-// TestHelperMainRelaunchFailure 新版本拉起失败:回滚 1 次后二次拉起旧版、原因「无法启动新版本」、码 1。
+// TestHelperMainRelaunchFailure 新版本拉起失败:回滚 1 次后二次拉起旧版、原因「无法启动新版本」、码 1,
+// 且首次拉起(新版本)前成功结果已落盘、二次拉起(旧版本)前失败结果已落盘(§5.4)。
 func TestHelperMainRelaunchFailure(t *testing.T) {
 	redirectUserCache(t)
 	f := newFakeHelper()
@@ -268,6 +317,8 @@ func TestHelperMainRelaunchFailure(t *testing.T) {
 		}
 		return nil
 	}
+	var snaps []relaunchSnapshot
+	f.captureRelaunchSnapshots(t, &snaps) // 包装注入实现:快照读取先于注入失败判定
 	args, _ := newHelperFixture(t, "v1.2.3")
 
 	if code := HelperMain(helperArgv(args), f.deps()); code != 1 {
@@ -278,6 +329,8 @@ func TestHelperMainRelaunchFailure(t *testing.T) {
 		t.Fatalf("Rollback 实参 = %v, want [[%s %s]]", f.rollbackArg, args.Target+".bak", args.Target)
 	}
 	f.wantRelaunch(t, args.Target, args.Target)
+	wantRelaunchSnapshot(t, snaps, 0, true, "")                         // 首次拉起(新版本)时点:成功结果已落盘
+	wantRelaunchSnapshot(t, snaps, 1, false, ErrRelaunchFailed.Error()) // 二次拉起(旧版本)时点:失败结果已落盘
 	wantFailResult(t, args, ErrRelaunchFailed.Error())
 }
 
