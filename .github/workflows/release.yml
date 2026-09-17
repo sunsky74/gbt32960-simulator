@@ -69,7 +69,7 @@ jobs:
 
       - name: 构建 (windows/amd64 + NSIS 安装包)
         if: runner.os == 'Windows'
-        run: wails build -platform windows/amd64 -clean -trimpath -nsis -webview2 download -ldflags "-X main.version=${GITHUB_REF_NAME}"
+        run: wails build -platform windows/amd64 -clean -trimpath -nsis -installscope user -webview2 download -ldflags "-X main.version=${GITHUB_REF_NAME}"
         shell: bash
 
       - name: 构建 (darwin universal)
