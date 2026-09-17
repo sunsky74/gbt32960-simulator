@@ -61,7 +61,7 @@ func (a HelperArgs) Encode() []string {
 }
 
 // ParseHelperArgs 解析 args[2:] 起的 helper 参数;
-// 缺 sentinel/必填缺失(含 ParentPID<=0)/非数字/未知 flag 一律 error(fail-closed)。
+// 缺 sentinel/必填缺失(含 ParentPID<=0)/非数字/未知 flag/多余位置参数一律 error(fail-closed)。
 func ParseHelperArgs(args []string) (HelperArgs, error) {
 	if !IsHelperInvocation(args) {
 		return HelperArgs{}, fmt.Errorf("非 helper 调用:缺少 %s", HelperSentinel)
@@ -77,6 +77,9 @@ func ParseHelperArgs(args []string) (HelperArgs, error) {
 	fs.StringVar(&a.Log, "log", "", "日志文件路径")
 	if err := fs.Parse(args[2:]); err != nil {
 		return HelperArgs{}, err
+	}
+	if fs.NArg() > 0 {
+		return HelperArgs{}, fmt.Errorf("helper 参数非法: %v", fs.Args())
 	}
 	for _, req := range []struct {
 		name, value string

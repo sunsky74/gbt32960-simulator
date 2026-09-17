@@ -197,6 +197,28 @@ func TestLastResultClearIdempotent(t *testing.T) {
 	}
 }
 
+// TestLastResultRenameFailureCleansTemp 原子 rename 失败(目标被目录占据)时:返回 error 且不留 .tmp 残留。
+func TestLastResultRenameFailureCleansTemp(t *testing.T) {
+	redirectUserCache(t)
+	root := mustPath(t, UpdatesRoot)
+	path := mustPath(t, LastResultPath)
+	if err := os.MkdirAll(path, 0o755); err != nil { // 目标为目录 → os.Rename(临时文件, 目录) 必失败
+		t.Fatal(err)
+	}
+	if err := WriteLastResult(LastResult{OK: true, TargetVersion: "v9.9.9", LogPath: "l"}); err == nil {
+		t.Fatal("目标为目录时 WriteLastResult 应报错")
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".tmp") {
+			t.Fatalf("rename 失败后残留临时文件: %s", e.Name())
+		}
+	}
+}
+
 // TestOpenHelperLogTruncates 日志文件契约:>1MiB 打开即截断;追加写可读回;未超限保留;目录缺失自动创建。
 func TestOpenHelperLogTruncates(t *testing.T) {
 	redirectUserCache(t)

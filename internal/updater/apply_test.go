@@ -65,6 +65,24 @@ func TestHelperArgsRejections(t *testing.T) {
 		}
 	})
 
+	t.Run("必填空串", func(t *testing.T) {
+		for _, c := range []struct {
+			name string
+			mut  func(*HelperArgs)
+		}{
+			{"--artifact", func(a *HelperArgs) { a.Artifact = "" }},
+			{"--tag", func(a *HelperArgs) { a.Tag = "" }},
+			{"--result", func(a *HelperArgs) { a.Result = "" }},
+			{"--log", func(a *HelperArgs) { a.Log = "" }},
+		} {
+			a := base
+			c.mut(&a)
+			if _, err := ParseHelperArgs(append([]string{"app"}, a.Encode()...)); err == nil {
+				t.Fatalf("ParseHelperArgs(缺 %s) 应报错", c.name)
+			}
+		}
+	})
+
 	t.Run("缺 --parent-pid", func(t *testing.T) {
 		args := []string{"app", HelperSentinel,
 			"--artifact", "a", "--target", "t", "--tag", "v1", "--result", "r", "--log", "l"}
@@ -81,10 +99,33 @@ func TestHelperArgsRejections(t *testing.T) {
 		}
 	})
 
+	t.Run("--parent-pid 为 0", func(t *testing.T) {
+		args := []string{"app", HelperSentinel,
+			"--parent-pid", "0", "--artifact", "a", "--target", "t", "--tag", "v1", "--result", "r", "--log", "l"}
+		if _, err := ParseHelperArgs(args); err == nil {
+			t.Fatal("ParseHelperArgs(--parent-pid 0) 应报错")
+		}
+	})
+
+	t.Run("--parent-pid 为负", func(t *testing.T) {
+		args := []string{"app", HelperSentinel,
+			"--parent-pid", "-1", "--artifact", "a", "--target", "t", "--tag", "v1", "--result", "r", "--log", "l"}
+		if _, err := ParseHelperArgs(args); err == nil {
+			t.Fatal("ParseHelperArgs(--parent-pid -1) 应报错")
+		}
+	})
+
 	t.Run("未知 flag", func(t *testing.T) {
 		args := append(append([]string{"app"}, base.Encode()...), "--bogus", "x")
 		if _, err := ParseHelperArgs(args); err == nil {
 			t.Fatal("ParseHelperArgs(未知 flag) 应报错")
+		}
+	})
+
+	t.Run("多余位置参数", func(t *testing.T) {
+		args := append(append([]string{"app"}, base.Encode()...), "stray")
+		if _, err := ParseHelperArgs(args); err == nil {
+			t.Fatal("ParseHelperArgs(多余位置参数) 应报错")
 		}
 	})
 }
