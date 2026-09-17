@@ -3,6 +3,8 @@ package main
 import (
 	"embed"
 
+	"gbt32960-simulator/internal/updater"
+
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -15,6 +17,7 @@ var assets embed.FS
 var version = "dev"
 
 func main() {
+	updater.RunHelperIfRequested() // helper 模式:最早拦截,不初始化 Wails(设计文档 §5.7)
 	app := NewApp()
 
 	err := wails.Run(&options.App{
