@@ -1,0 +1,159 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# GitLab CI:推送 v* 标签 → 构建三平台产物 → 发布到 GitLab Release(可直接下载)
+#
+# 与 .github/workflows/release.yml 同源(命令 / 依赖 / 版本逐字对齐):
+#   · Linux runner 一次产出:linux 二进制 + Windows exe + NSIS 安装包(交叉编译)
+#   · macOS runner 产出:darwin universal .app.zip(Wails CLI 硬限制:只能 Mac 编)
+#   · 产物上传 Generic Package(不过期)→ Release 页给出永久下载链接
+#
+# 下载入口(发布后):
+#   · Release 页:项目 → Deploy → Releases(推荐)
+#   · 永久最新直链:/-/releases/permalink/latest/downloads/{macos,windows,windows-installer,linux}
+#   · 兜底:项目 → Build → Artifacts(job 产物归档)
+#
+# 前置条件与待确认事项(影响首次运行成败):见 docs/backlog.md「3. 工具链:GitLab CI」条目
+# ─────────────────────────────────────────────────────────────────────────────
+
+workflow:
+  rules:
+    # 仅 v* 标签触发(与 GitHub Actions 共用同一批 tag);后续如需分支构建再放宽
+    - if: '$CI_COMMIT_TAG =~ /^v/'
+
+stages: [build, package, release]
+
+variables:
+  WAILS_VERSION: "v2.15.0" # wails CLI 固定版本,勿用 latest(与 GitHub Actions 一致)
+  NODE_OPTIONS: "--max-old-space-size=4096" # 前端构建防 OOM(wails 官方文档推荐)
+  GOMODCACHE: "$CI_PROJECT_DIR/.cache/go-mod"
+  GOCACHE: "$CI_PROJECT_DIR/.cache/go-build"
+
+.go_cache: &go_cache
+  cache:
+    key: go-$CI_COMMIT_REF_SLUG
+    paths:
+      - .cache/go-mod
+      - .cache/go-build
+
+# ── Linux runner:原生编 Linux + 交叉编 Windows(含 NSIS 安装包) ─────────────
+# 注:image 若内网不可达,替换为内网镜像仓库地址
+build_linux:
+  stage: build
+  image: golang:1.25-bookworm # 需 Docker executor
+  <<: *go_cache
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v/'
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq --no-install-recommends
+      libgtk-3-dev libwebkit2gtk-4.1-dev build-essential pkg-config libegl1 ca-certificates curl nsis
+    # Debian 12 自带 Node 18 带不动 Vite 7(要求 ≥20.19);经 NodeSource 装 Node 22
+    # 内网受限时:改用内网 Node 镜像或预装 Node 的构建镜像
+    - curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+    - apt-get install -y -qq nodejs
+    - go install github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}
+    - export PATH="$HOME/go/bin:$PATH"
+  script:
+    - mkdir -p dist
+    # ① Linux 目标(Debian 12 只有 WebKitGTK 4.1,必须带 webkit2_41 标签)
+    - wails build -platform linux/amd64 -clean -trimpath -tags webkit2_41 -ldflags "-X main.version=${CI_COMMIT_TAG}"
+    - cp build/bin/gbt32960-simulator dist/gbt32960-simulator
+    # ② Windows 目标(Linux 交叉编译:WebView2 绑定为纯 Go;makensis 来自 apt 的 nsis)
+    - wails build -platform windows/amd64 -clean -trimpath -nsis -installscope user -webview2 download -ldflags "-X main.version=${CI_COMMIT_TAG}"
+    - cp build/bin/gbt32960-simulator.exe dist/
+    - cp build/bin/gbt32960-simulator-amd64-installer.exe dist/
+  artifacts:
+    name: "gbt32960-simulator-$CI_COMMIT_TAG-linux+windows"
+    paths:
+      - dist/
+    expire_in: never # job artifacts 为兜底下载渠道;长期下载走 Release(Generic Package)
+
+# ── macOS runner:macOS 产物只能 Mac 编(Wails CLI 对非 darwin 宿主直接拒绝) ──
+# runner 前置:Xcode Command Line Tools、Go 1.25、Node 22、Git
+# tags 需替换为实例上注册的 macOS runner 标签(如 macos / macos-m1)
+build_macos:
+  stage: build
+  tags: [macos]
+  <<: *go_cache
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v/'
+  script:
+    - export PATH="$HOME/go/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+    - go install github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}
+    - wails build -platform darwin/universal -clean -trimpath -ldflags "-X main.version=${CI_COMMIT_TAG}"
+    # ditto 保留 bundle 符号链接/权限(与 GitHub Actions 一致)
+    - mkdir -p dist
+    - ditto -c -k --keepParent "build/bin/gbt32960-simulator.app" "dist/gbt32960-simulator.app.zip"
+  artifacts:
+    name: "gbt32960-simulator-$CI_COMMIT_TAG-macos"
+    paths:
+      - dist/
+    expire_in: never
+
+# ── 上传 Generic Package(Release 永久链接的落脚点;包文件不过期) ─────────────
+# alpine 基础镜像确保 job 为 root,可写工作目录;内网不可达则替换为内网镜像
+upload:
+  stage: package
+  image: alpine:3
+  needs: [build_linux, build_macos]
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v/'
+  before_script:
+    - apk add --no-cache curl
+  script:
+    # Generic Package 版本号必须为 X.Y.Z;tag 形如 v1.2.3 → 剥掉 v
+    - PKG_VERSION="${CI_COMMIT_TAG#v}"
+    - echo "PKG_VERSION=${PKG_VERSION}" > pkg.env # 经 dotenv 传给 release job(needs 自动传递)
+    - BASE="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/gbt32960-simulator/${PKG_VERSION}"
+    - cd dist
+    - sha256sum gbt32960-simulator gbt32960-simulator.exe gbt32960-simulator-amd64-installer.exe gbt32960-simulator.app.zip > SHA256SUMS
+    - |
+      for f in gbt32960-simulator gbt32960-simulator.exe gbt32960-simulator-amd64-installer.exe gbt32960-simulator.app.zip SHA256SUMS; do
+        curl --fail --silent --show-error --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "$f" "${BASE}/$f"
+      done
+  artifacts:
+    reports:
+      dotenv: pkg.env
+
+# ── GitLab Release:给用户的下载列表(filepath 提供永久重定向链接) ────────────
+# filepath 生成的永久链接:/-/releases/<tag>/downloads/<filepath>
+#                           /-/releases/permalink/latest/downloads/<filepath>(永远指最新)
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest # 较新实例亦可换 gitlab-org/cli:latest(glab)
+  needs: [upload]
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v/'
+  script:
+    # 提前失败:若 dotenv 未透传(老版本实例),宁可不建 Release,也不生成坏链接
+    - |
+      if [ -z "${PKG_VERSION}" ]; then
+        echo "PKG_VERSION 未从 upload job 的 dotenv 传入(检查 artifacts:reports:dotenv 支持情况)"
+        exit 1
+      fi
+    - echo "Publishing release ${CI_COMMIT_TAG} (package ${PKG_VERSION})"
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: "gbt32960-simulator ${CI_COMMIT_TAG}"
+    description: "gbt32960-simulator ${CI_COMMIT_TAG} — 构建产物见下方 Assets 下载列表"
+    assets:
+      links:
+        - name: "macOS (universal, .app.zip)"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/gbt32960-simulator/${PKG_VERSION}/gbt32960-simulator.app.zip"
+          filepath: "/macos"
+          link_type: "package"
+        - name: "Windows x64 (.exe)"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/gbt32960-simulator/${PKG_VERSION}/gbt32960-simulator.exe"
+          filepath: "/windows"
+          link_type: "package"
+        - name: "Windows 安装包 (NSIS)"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/gbt32960-simulator/${PKG_VERSION}/gbt32960-simulator-amd64-installer.exe"
+          filepath: "/windows-installer"
+          link_type: "package"
+        - name: "Linux x64"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/gbt32960-simulator/${PKG_VERSION}/gbt32960-simulator"
+          filepath: "/linux"
+          link_type: "package"
+        - name: "SHA256SUMS"
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/gbt32960-simulator/${PKG_VERSION}/SHA256SUMS"
+          filepath: "/sha256sums"
+          link_type: "other"
