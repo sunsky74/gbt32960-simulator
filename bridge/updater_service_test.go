@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -77,6 +78,14 @@ func TestUpdaterServiceCheckUpdate(t *testing.T) {
 	}
 	if info.AssetName == "" {
 		t.Fatalf("资产应已匹配: %+v", info)
+	}
+	// 新检查使旧就绪产物复位(与前端 check() 复位一致)
+	svc.ready = &updater.Artifact{Path: "stale", Tag: "v0.1.0"}
+	if _, err := svc.CheckUpdate(); err != nil {
+		t.Fatal(err)
+	}
+	if svc.ready != nil {
+		t.Fatalf("检查后 ready 应复位: %+v", svc.ready)
 	}
 
 	// 已是最新:tag 与当前一致
@@ -207,6 +216,9 @@ func TestUpdaterServiceDownloadAndVerify(t *testing.T) {
 	}
 	if fi.Size() != int64(len(content)) {
 		t.Fatalf("落定文件大小 = %d, want %d", fi.Size(), len(content))
+	}
+	if svc.ready == nil || svc.ready.Path != filepath.Join(dir, res.AssetName) || svc.ready.Tag != "v0.2.0" {
+		t.Fatalf("ready 未留存: %+v", svc.ready)
 	}
 	if matches, _ := filepath.Glob(filepath.Join(dir, "*.part")); len(matches) != 0 {
 		t.Fatalf(".part 残留: %v", matches)
@@ -350,4 +362,319 @@ func TestUpdaterServiceErrorClassification(t *testing.T) {
 			t.Fatalf("err = %v, want 暂无发布版本", err)
 		}
 	})
+}
+
+// ==== Phase 3 追加:应用服务(ApplyUpdate / ConsumeLastResult / 启动清理扩展) ====
+
+// applyTestFixture 构造"已就绪"的应用服务:真实产物文件 / 新版本 lastRelease /
+// 目标与预检注入 / spawn 与 quit 注入(测试绝不真的退出进程或拉起 helper)。
+type applyTestFixture struct {
+	svc       *UpdaterService
+	artifact  string
+	target    string
+	spawnArgs []updater.HelperArgs
+	spawnErr  error
+	quitN     atomic.Int32
+	quitCh    chan struct{}
+}
+
+func newApplyFixture(t *testing.T) *applyTestFixture {
+	t.Helper()
+	redirectUserCache(t)
+	f := &applyTestFixture{
+		svc:    NewUpdaterService("v0.1.0"),
+		target: t.TempDir(),
+		quitCh: make(chan struct{}),
+	}
+	f.artifact = filepath.Join(t.TempDir(), "gbt32960-simulator.app.zip")
+	if err := os.WriteFile(f.artifact, []byte("artifact"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f.svc.ready = &updater.Artifact{Path: f.artifact, Name: filepath.Base(f.artifact), Tag: "v0.2.0"}
+	f.svc.lastRelease = &updater.Release{TagName: "v0.2.0"}
+	f.svc.resolveTarget = func() (string, error) { return f.target, nil }
+	f.svc.preflight = func(string) error { return nil }
+	f.svc.quitDelay = 10 * time.Millisecond
+	f.svc.spawn = func(a updater.HelperArgs) error {
+		f.spawnArgs = append(f.spawnArgs, a)
+		return f.spawnErr
+	}
+	f.svc.quit = func(context.Context) {
+		if f.quitN.Add(1) == 1 {
+			close(f.quitCh)
+		}
+	}
+	return f
+}
+
+// waitQuit 等待退出信号(≤1s);waitQuiet 观察 quit 是否被误调用。
+func (f *applyTestFixture) waitQuit(t *testing.T) {
+	t.Helper()
+	select {
+	case <-f.quitCh:
+	case <-time.After(time.Second):
+		t.Fatal("延迟退出未触发")
+	}
+}
+
+func (f *applyTestFixture) assertQuitCount(t *testing.T, want int32) {
+	t.Helper()
+	time.Sleep(50 * time.Millisecond) // 观察窗口:晚到的第二次 quit 也应被抓到
+	if n := f.quitN.Load(); n != want {
+		t.Fatalf("quit 调用 %d 次, want %d", n, want)
+	}
+}
+
+func TestUpdaterServiceApplyGuards(t *testing.T) {
+	// 守卫顺序即契约:dev → 下载中 → 进行中 → 未就绪(内存无产物 / 文件丢失)→ 版本。
+	cases := []struct {
+		name  string
+		setup func(t *testing.T) *UpdaterService
+		want  string
+	}{
+		{
+			name: "dev 构建",
+			setup: func(t *testing.T) *UpdaterService {
+				return NewUpdaterService("dev")
+			},
+			want: "开发构建不参与更新",
+		},
+		{
+			name: "下载中",
+			setup: func(t *testing.T) *UpdaterService {
+				svc := NewUpdaterService("v0.1.0")
+				svc.downloading = true
+				return svc
+			},
+			want: "更新正在下载中,请稍候",
+		},
+		{
+			name: "应用进行中(二次调用)",
+			setup: func(t *testing.T) *UpdaterService {
+				svc := NewUpdaterService("v0.1.0")
+				svc.applying = true
+				return svc
+			},
+			want: "更新已在进行中",
+		},
+		{
+			name: "无就绪产物",
+			setup: func(t *testing.T) *UpdaterService {
+				return NewUpdaterService("v0.1.0")
+			},
+			want: "更新包未就绪,请先下载",
+		},
+		{
+			name: "就绪产物文件丢失",
+			setup: func(t *testing.T) *UpdaterService {
+				svc := NewUpdaterService("v0.1.0")
+				svc.ready = &updater.Artifact{Path: filepath.Join(t.TempDir(), "gone.zip"), Tag: "v0.2.0"}
+				return svc
+			},
+			want: "更新包未就绪,请先下载",
+		},
+		{
+			name: "同版本",
+			setup: func(t *testing.T) *UpdaterService {
+				svc := NewUpdaterService("v1.0.0")
+				p := filepath.Join(t.TempDir(), "same.zip")
+				if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				svc.ready = &updater.Artifact{Path: p, Tag: "v1.0.0"}
+				svc.lastRelease = &updater.Release{TagName: "v1.0.0"}
+				return svc
+			},
+			want: "已是最新版本,无需安装",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			redirectUserCache(t)
+			svc := tc.setup(t)
+			// 守卫回归若放行:立刻暴露,绝不真的 spawn/退出
+			svc.spawn = func(updater.HelperArgs) error { t.Fatal("守卫应拦截,不应到 spawn 阶段"); return nil }
+			svc.quit = func(context.Context) { t.Fatal("守卫应拦截,不得退出应用") }
+			if err := svc.ApplyUpdate(); err == nil || err.Error() != tc.want {
+				t.Fatalf("ApplyUpdate() err = %v, want %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestUpdaterServiceApplySpawnsAndQuits(t *testing.T) {
+	f := newApplyFixture(t)
+	wantResult, err := updater.LastResultPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantLog, err := updater.HelperLogPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 预置陈旧结果:ApplyUpdate 必须在 spawn 前清除(防上次残留误报)
+	if err := updater.WriteLastResult(updater.LastResult{OK: true, TargetVersion: "v0.1.0", LogPath: wantLog}); err != nil {
+		t.Fatal(err)
+	}
+	spawnCheck := f.svc.spawn
+	f.svc.spawn = func(a updater.HelperArgs) error {
+		if _, err := os.Stat(wantResult); !os.IsNotExist(err) {
+			t.Errorf("spawn 前结果文件应已清除: %v", err)
+		}
+		return spawnCheck(a)
+	}
+
+	if err := f.svc.ApplyUpdate(); err != nil {
+		t.Fatalf("ApplyUpdate() = %v", err)
+	}
+	f.waitQuit(t)
+	f.assertQuitCount(t, 1)
+
+	if len(f.spawnArgs) != 1 {
+		t.Fatalf("spawn 调用 %d 次, want 1", len(f.spawnArgs))
+	}
+	got := f.spawnArgs[0]
+	if got.ParentPID != os.Getpid() {
+		t.Errorf("ParentPID = %d, want %d", got.ParentPID, os.Getpid())
+	}
+	if got.Artifact != f.artifact {
+		t.Errorf("Artifact = %q, want %q", got.Artifact, f.artifact)
+	}
+	if got.Target != f.target {
+		t.Errorf("Target = %q, want %q", got.Target, f.target)
+	}
+	if got.Tag != "v0.2.0" {
+		t.Errorf("Tag = %q, want v0.2.0", got.Tag)
+	}
+	if got.Result != wantResult {
+		t.Errorf("Result = %q, want %q", got.Result, wantResult)
+	}
+	if got.Log != wantLog {
+		t.Errorf("Log = %q, want %q", got.Log, wantLog)
+	}
+	if !f.svc.applying {
+		t.Error("spawn 成功后 applying 应为 true")
+	}
+	if _, err := os.Stat(wantResult); !os.IsNotExist(err) {
+		t.Errorf("结果文件应保持清除: %v", err)
+	}
+}
+
+func TestUpdaterServiceApplySpawnFailure(t *testing.T) {
+	f := newApplyFixture(t)
+	f.spawnErr = errors.New("boom")
+	if err := f.svc.ApplyUpdate(); err == nil || err.Error() != "无法启动更新进程,请手动更新" {
+		t.Fatalf("err = %v, want 无法启动更新进程,请手动更新", err)
+	}
+	f.assertQuitCount(t, 0)
+	if f.svc.applying {
+		t.Fatal("spawn 失败 applying 必须保持 false")
+	}
+	// 失败不锁死:修复后可再次应用
+	f.spawnErr = nil
+	if err := f.svc.ApplyUpdate(); err != nil {
+		t.Fatalf("重试 ApplyUpdate() = %v", err)
+	}
+	f.waitQuit(t)
+	f.assertQuitCount(t, 1)
+	if len(f.spawnArgs) != 2 {
+		t.Fatalf("spawn 调用 %d 次, want 2", len(f.spawnArgs))
+	}
+}
+
+func TestUpdaterServiceApplyPreflightGuidance(t *testing.T) {
+	f := newApplyFixture(t)
+	f.svc.preflight = func(string) error { return updater.ErrTranslocated }
+	if err := f.svc.ApplyUpdate(); !errors.Is(err, updater.ErrTranslocated) {
+		t.Fatalf("err = %v, want ErrTranslocated 原文透出", err)
+	}
+	if len(f.spawnArgs) != 0 {
+		t.Fatalf("预检失败不得 spawn: %+v", f.spawnArgs)
+	}
+	f.assertQuitCount(t, 0)
+	if f.svc.applying {
+		t.Fatal("预检失败 applying 必须保持 false")
+	}
+}
+
+func TestUpdaterServiceConsumeLastResult(t *testing.T) {
+	redirectUserCache(t)
+	resultPath, err := updater.LastResultPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := NewUpdaterService("v1.0.0")
+
+	t.Run("无文件", func(t *testing.T) {
+		res, err := svc.ConsumeLastResult()
+		if err != nil || res.Present {
+			t.Fatalf("res = %+v, err = %v, want 无记录", res, err)
+		}
+	})
+
+	t.Run("失败结果读取即清除", func(t *testing.T) {
+		logPath := filepath.Join(t.TempDir(), "helper.log")
+		if err := updater.WriteLastResult(updater.LastResult{OK: false, TargetVersion: "v0.2.0", Reason: "替换失败", LogPath: logPath}); err != nil {
+			t.Fatal(err)
+		}
+		res, err := svc.ConsumeLastResult()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !res.Present || res.OK || res.TargetVersion != "v0.2.0" || res.Reason != "替换失败" || res.LogPath != logPath {
+			t.Fatalf("res = %+v", res)
+		}
+		if _, err := os.Stat(resultPath); !os.IsNotExist(err) {
+			t.Fatalf("结果文件应已清除: %v", err)
+		}
+		res2, err := svc.ConsumeLastResult()
+		if err != nil || res2.Present {
+			t.Fatalf("二次消费 res = %+v, err = %v, want Present=false", res2, err)
+		}
+	})
+
+	t.Run("成功结果", func(t *testing.T) {
+		if err := updater.WriteLastResult(updater.LastResult{OK: true, TargetVersion: "v0.2.0", LogPath: "log"}); err != nil {
+			t.Fatal(err)
+		}
+		res, err := svc.ConsumeLastResult()
+		if err != nil || !res.Present || !res.OK {
+			t.Fatalf("res = %+v, err = %v, want OK=true", res, err)
+		}
+		if _, err := os.Stat(resultPath); !os.IsNotExist(err) {
+			t.Fatalf("结果文件应已清除: %v", err)
+		}
+	})
+
+	t.Run("损坏 JSON", func(t *testing.T) {
+		if err := os.MkdirAll(filepath.Dir(resultPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(resultPath, []byte("{not json"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		defer os.Remove(resultPath)
+		if _, err := svc.ConsumeLastResult(); err == nil {
+			t.Fatal("损坏 JSON 应报错")
+		}
+	})
+}
+
+func TestUpdaterServiceStartupCleanup(t *testing.T) {
+	redirectUserCache(t)
+	dir, err := updater.ReleaseDir("v0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.WriteFile(filepath.Join(dir, "x"), []byte("x"), 0o644)
+
+	svc := NewUpdaterService("v1.0.0")
+	WireUpdaterStartup(svc) // 测试二进制非 .app:CleanupStaleBackups 报错须被吞掉(不 panic)
+
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatal("tag 子目录未清空")
+	}
 }

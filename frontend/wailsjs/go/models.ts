@@ -760,6 +760,26 @@ export namespace tlsconf {
 
 export namespace updater {
 	
+	export class ApplyOutcome {
+	    present: boolean;
+	    ok: boolean;
+	    targetVersion: string;
+	    reason: string;
+	    logPath: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ApplyOutcome(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.present = source["present"];
+	        this.ok = source["ok"];
+	        this.targetVersion = source["targetVersion"];
+	        this.reason = source["reason"];
+	        this.logPath = source["logPath"];
+	    }
+	}
 	export class DownloadResult {
 	    tag: string;
 	    assetName: string;

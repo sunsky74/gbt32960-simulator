@@ -1,6 +1,10 @@
 package bridge
 
-import "context"
+import (
+	"context"
+
+	"gbt32960-simulator/internal/updater"
+)
 
 // wiring.go 汇总 app 装配期的服务接线(替代原导出的 SetContext/SetXxx 方法:
 // Wails v2 会把绑定结构体上所有导出方法暴露为 RPC,内部注入方法不应出现在
@@ -28,7 +32,9 @@ func WireAutoReportResume(conn *ConnectionService, msg *MessageService) {
 	conn.setOnConnected(func() { _ = msg.resumeAutoReport() })
 }
 
-// WireUpdaterStartup 装配更新服务启动行为:清理更新缓存(不跨会话复用;尽力清理,失败忽略)。
+// WireUpdaterStartup 装配更新服务启动行为:清理更新缓存(不跨会话复用)+ 清理陈旧替换备份
+// (.bak-*/.old/暂存,上一会话失败或中断的残留;尽力而为,失败忽略)。
 func WireUpdaterStartup(u *UpdaterService) {
 	u.cleanupCache()
+	_ = updater.CleanupStaleBackups()
 }
