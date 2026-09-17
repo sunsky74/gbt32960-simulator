@@ -1,6 +1,9 @@
 package updater
 
-import "errors"
+import (
+	"errors"
+	"net/url"
+)
 
 // ErrUnsupportedPlatform 当前平台无匹配的更新产物。
 var ErrUnsupportedPlatform = errors.New("当前平台暂不支持自动更新")
@@ -21,6 +24,30 @@ func expectedAssetName(goos, goarch string) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+// releaseAssets 按命名契约确定性构造发布资产列表(3 平台产物 + SHA256SUMS + SHA256SUMS.sig,共 5 项):
+// 直链 = {BaseURL}/{Repo}/releases/download/{PathEscape(tag)}/{name};网页路由不提供资产大小,Size 恒为 0。
+func releaseAssets(baseURL, tag string) []Asset {
+	names := make([]string, 0, 5)
+	for _, plat := range []struct{ goos, goarch string }{
+		{"darwin", "amd64"}, // darwin 产物为 universal,goarch 不参与匹配
+		{"windows", "amd64"},
+		{"linux", "amd64"},
+	} {
+		name, ok := expectedAssetName(plat.goos, plat.goarch)
+		if !ok {
+			continue
+		}
+		names = append(names, name)
+	}
+	names = append(names, "SHA256SUMS", "SHA256SUMS.sig")
+	prefix := baseURL + "/" + Repo + "/releases/download/" + url.PathEscape(tag) + "/"
+	assets := make([]Asset, 0, len(names))
+	for _, name := range names {
+		assets = append(assets, Asset{Name: name, URL: prefix + name})
+	}
+	return assets
 }
 
 // MatchAsset 从发布资产中选出当前平台的更新产物;无匹配时返回 ErrUnsupportedPlatform。

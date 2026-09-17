@@ -2,16 +2,17 @@ package updater
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 )
 
 // 检查链路的错误分类:文案即前端展示文案(bridge 层直接透出)。
 var (
-	// ErrNoRelease 仓库暂无 Release(404)。
+	// ErrNoRelease 仓库暂无 Release(404,或 302 指向无 tag 段的 releases 列表页)。
 	ErrNoRelease = errors.New("暂无发布版本")
 	// ErrRateLimit GitHub 接口限流(403/429)。
 	ErrRateLimit = errors.New("接口限流,请稍后再试")
@@ -38,21 +39,25 @@ func userAgent(version string) string {
 	return ua
 }
 
-// NewClient 默认客户端:官方 API 端点 + 10s 超时;version 进入 User-Agent。
+// NewClient 默认客户端:网页端点 + 10s 超时;version 进入 User-Agent。
+// 不跟随重定向:releases/latest 的 302 Location 即版本 tag 来源(网页路由不消耗 API 配额)。
 func NewClient(version string) *Client {
 	return &Client{
-		BaseURL: "https://api.github.com",
-		HTTP:    &http.Client{Timeout: 10 * time.Second},
-		ua:      userAgent(version),
+		BaseURL: "https://github.com",
+		HTTP: &http.Client{
+			Timeout: 10 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		},
+		ua: userAgent(version),
 	}
 }
 
 // Release 检查所需的最小发布信息。
 type Release struct {
-	TagName     string
-	Body        string
-	PublishedAt string
-	Assets      []Asset
+	TagName string
+	Assets  []Asset
 }
 
 // Asset 发布资产(更新产物)。
@@ -64,38 +69,22 @@ type Asset struct {
 
 // UpdateInfo 检查结果(前端展示契约,字段与设计文档 §5.1 对齐)。
 type UpdateInfo struct {
-	Current     string `json:"current"`
-	Latest      string `json:"latest"`
-	HasUpdate   bool   `json:"hasUpdate"`
-	DevBuild    bool   `json:"devBuild"`
-	Notes       string `json:"notes"`
-	PublishedAt string `json:"publishedAt"`
-	AssetName   string `json:"assetName"`
-	AssetSize   int64  `json:"assetSize"`
+	Current   string `json:"current"`
+	Latest    string `json:"latest"`
+	HasUpdate bool   `json:"hasUpdate"`
+	DevBuild  bool   `json:"devBuild"`
+	AssetName string `json:"assetName"`
 }
 
-// latestReleaseDTO GitHub releases/latest 响应的子集。
-type latestReleaseDTO struct {
-	TagName     string `json:"tag_name"`
-	Body        string `json:"body"`
-	PublishedAt string `json:"published_at"`
-	Assets      []struct {
-		Name string `json:"name"`
-		Size int64  `json:"size"`
-		URL  string `json:"browser_download_url"`
-	} `json:"assets"`
-}
-
-// LatestRelease 查询最新版本(releases/latest 语义:排除 draft 与 prerelease)。
+// LatestRelease 查询最新版本:GET {BaseURL}/{Repo}/releases/latest,由 302 Location 的 tag 段解析版本号。
+// 网页路由语义同 API(releases/latest 排除 draft 与 prerelease),且不消耗 API 配额。
 func (c *Client) LatestRelease(ctx context.Context) (*Release, error) {
-	url := c.BaseURL + "/repos/" + Repo + "/releases/latest"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	rawURL := c.BaseURL + "/" + Repo + "/releases/latest"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, ErrNetwork
 	}
 	req.Header.Set("User-Agent", c.ua)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
@@ -104,23 +93,49 @@ func (c *Client) LatestRelease(ctx context.Context) (*Release, error) {
 	defer resp.Body.Close()
 
 	switch resp.StatusCode {
-	case http.StatusOK:
-		// 正常解析
 	case http.StatusNotFound:
 		return nil, ErrNoRelease
 	case http.StatusForbidden, http.StatusTooManyRequests:
 		return nil, ErrRateLimit
+	case http.StatusMovedPermanently, http.StatusFound, http.StatusSeeOther,
+		http.StatusTemporaryRedirect, http.StatusPermanentRedirect:
+		// 302:Location 指向 /{Repo}/releases/tag/{tag}
 	default:
 		return nil, fmt.Errorf("GitHub 返回异常状态(%d)", resp.StatusCode)
 	}
 
-	var dto latestReleaseDTO
-	if err := json.NewDecoder(resp.Body).Decode(&dto); err != nil {
-		return nil, ErrNetwork
+	tag, err := releaseTag(resp)
+	if err != nil {
+		return nil, err
 	}
-	rel := &Release{TagName: dto.TagName, Body: dto.Body, PublishedAt: dto.PublishedAt}
-	for _, a := range dto.Assets {
-		rel.Assets = append(rel.Assets, Asset{Name: a.Name, Size: a.Size, URL: a.URL})
+	return &Release{TagName: tag, Assets: releaseAssets(c.BaseURL, tag)}, nil
+}
+
+// releaseTag 从 302 Location 解析版本 tag:仅信任同站地址与 tag 路径契约,形状异常一律 fail-closed。
+func releaseTag(resp *http.Response) (string, error) {
+	loc := resp.Header.Get("Location")
+	if loc == "" {
+		return "", ErrNetwork
 	}
-	return rel, nil
+	u, err := url.Parse(loc)
+	if err != nil {
+		return "", ErrNetwork
+	}
+	if u.Host != resp.Request.URL.Host { // 仅接受同站跳转(绝对 Location)
+		return "", ErrNetwork
+	}
+	path := u.EscapedPath()
+	prefix := "/" + Repo + "/releases/tag/"
+	if !strings.HasPrefix(path, prefix) {
+		// 无 tag 段(如 /{Repo}/releases):仓库尚无已发布版本,等同 404
+		if path == "/"+Repo+"/releases" {
+			return "", ErrNoRelease
+		}
+		return "", ErrNetwork
+	}
+	tag, err := url.PathUnescape(strings.TrimPrefix(path, prefix))
+	if err != nil || tag == "" {
+		return "", ErrNetwork
+	}
+	return tag, nil
 }

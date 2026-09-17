@@ -24,7 +24,7 @@ func TestCheckDownloadURL(t *testing.T) {
 		raw  string
 		want bool
 	}{
-		{"https://api.github.com/repos/x/y", true},
+		{"https://api.github.com/repos/x/y", false}, // 检查链路改走网页路由后不再放行 API host
 		{"https://github.com/sunsky74/gbt32960-simulator/releases/download/v0.1.0/a.zip", true},
 		{"https://release-assets.githubusercontent.com/github-production-release-asset/1/2", true},
 		{"https://objects.githubusercontent.com/foo", true},

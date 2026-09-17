@@ -31,6 +31,9 @@ vi.mock('../../api/events', () => ({
 
 import SettingsAboutPanel from './SettingsAboutPanel.vue'
 import { appSettings } from '../../composables/useAppSettings'
+import { BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
+
+const REPO_URL = 'https://github.com/sunsky74/gbt32960-simulator'
 
 // a-button 渲染为真实按钮,便于点击与文本断言;声明 emits 防止 @click 经 attrs 透传到根元素导致一次点击双触发
 const stubs = {
@@ -51,18 +54,17 @@ describe('SettingsAboutPanel', () => {
     downloadUpdate.mockReset()
     cancelDownload.mockReset()
     appSettings.skippedVersion = ''
+    vi.mocked(BrowserOpenURL).mockClear()
     checkUpdate.mockResolvedValue({
       current: 'v0.1.0',
       latest: 'v0.2.0',
       hasUpdate: true,
       devBuild: false,
-      notes: '本次更新说明',
       assetName: 'gbt32960-simulator.app.zip',
-      assetSize: 11430000,
     })
   })
 
-  it('展示当前版本;检查后展示新版本/说明;可跳过版本', async () => {
+  it('展示当前版本;检查后展示新版本并可打开发布说明/跳过版本', async () => {
     const wrapper = mount(SettingsAboutPanel, { global: { stubs } })
     await flushPromises()
     expect(wrapper.text()).toContain('v0.1.0')
@@ -70,8 +72,9 @@ describe('SettingsAboutPanel', () => {
     await findBtn(wrapper, '检查更新').trigger('click')
     await flushPromises()
     expect(wrapper.text()).toContain('v0.2.0')
-    expect(wrapper.text()).toContain('本次更新说明')
-    expect(wrapper.text()).toContain('10.9 MB')
+
+    await findBtn(wrapper, '查看发布说明').trigger('click')
+    expect(BrowserOpenURL).toHaveBeenCalledWith(`${REPO_URL}/releases/tag/v0.2.0`)
 
     await findBtn(wrapper, '跳过此版本').trigger('click')
     expect(appSettings.skippedVersion).toBe('v0.2.0')

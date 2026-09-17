@@ -31,9 +31,9 @@ var (
 	ErrDisk = errors.New("写入失败,请检查磁盘空间与权限")
 )
 
-// AllowedHosts 下载白名单(设计文档 §5.7;release-assets 为实测 302 目标,objects 为历史兼容)。
+// AllowedHosts 下载白名单(设计文档 §5.7;release-assets 为实测 302 目标,objects 为历史兼容;
+// 检查链路已改走网页路由,无需 api.github.com)。
 var AllowedHosts = map[string]bool{
-	"api.github.com":                       true,
 	"github.com":                           true,
 	"release-assets.githubusercontent.com": true,
 	"objects.githubusercontent.com":        true,
@@ -290,20 +290,23 @@ func (d *Downloader) DownloadReleaseArtifact(ctx context.Context, rel *Release, 
 	}
 
 	part := filepath.Join(dir, asset.Name+".part")
-	// total 回退:响应无 Content-Length 时,用 API 声明的资产大小填充事件载荷(截断判定仍依据 Content-Length)
-	if _, err := d.Fetch(ctx, asset.URL, part, func(p Progress) {
+	// total 回退:响应无 Content-Length 时用 asset.Size 填充事件载荷(截断判定仍依据 Content-Length;
+	// 检查链路已无大小来源,该回退由单元测试覆盖)
+	received, err := d.Fetch(ctx, asset.URL, part, func(p Progress) {
 		if p.Total == 0 && asset.Size > 0 {
 			p.Total = asset.Size
 		}
 		if onProgress != nil {
 			onProgress(p)
 		}
-	}); err != nil {
+	})
+	if err != nil {
 		_ = os.Remove(part)
 		return Artifact{}, err
 	}
+	// 网页路由不提供资产大小,verifying 事件以实测字节数为进度基准(成功路径 Percent 为 100)
 	if onProgress != nil {
-		onProgress(Progress{Phase: "verifying", Received: asset.Size, Total: asset.Size})
+		onProgress(Progress{Phase: "verifying", Received: received, Total: received})
 	}
 	got, err := HashFile(part)
 	if err != nil {

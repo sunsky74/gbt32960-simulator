@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,16 +22,13 @@ import (
 	"gbt32960-simulator/internal/updater"
 )
 
-const updaterFixtureJSON = `{
-  "tag_name": "v0.2.0",
-  "body": "更新说明",
-  "published_at": "2026-09-14T08:00:00Z",
-  "assets": [
-    {"name": "gbt32960-simulator", "size": 100, "browser_download_url": "https://example.com/l"},
-    {"name": "gbt32960-simulator.app.zip", "size": 200, "browser_download_url": "https://example.com/m"},
-    {"name": "gbt32960-simulator.exe", "size": 300, "browser_download_url": "https://example.com/w"}
-  ]
-}`
+// latestPath 检查链路的请求路径(网页路由)。
+const latestPath = "/" + updater.Repo + "/releases/latest"
+
+// redirectLatest 以 302 指向 releases/tag/{tag}(检查链路不跟随重定向,Location 即 tag 来源)。
+func redirectLatest(w http.ResponseWriter, r *http.Request, srvURL, tag string) {
+	http.Redirect(w, r, srvURL+"/"+updater.Repo+"/releases/tag/"+tag, http.StatusFound)
+}
 
 func TestUpdaterServiceCurrentVersion(t *testing.T) {
 	svc := NewUpdaterService("v1.2.3")
@@ -59,8 +57,12 @@ func TestUpdaterServiceDevSkipsNetwork(t *testing.T) {
 }
 
 func TestUpdaterServiceCheckUpdate(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(updaterFixtureJSON))
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != latestPath {
+			t.Errorf("请求路径 = %s", r.URL.Path)
+		}
+		redirectLatest(w, r, srv.URL, "v0.2.0")
 	}))
 	defer srv.Close()
 
@@ -70,10 +72,10 @@ func TestUpdaterServiceCheckUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !info.HasUpdate || info.Latest != "v0.2.0" || info.Notes != "更新说明" {
+	if !info.HasUpdate || info.Latest != "v0.2.0" {
 		t.Fatalf("检查结果异常: %+v", info)
 	}
-	if info.AssetName == "" || info.AssetSize == 0 {
+	if info.AssetName == "" {
 		t.Fatalf("资产应已匹配: %+v", info)
 	}
 
@@ -130,22 +132,6 @@ func sigLineFor(t *testing.T, priv ed25519.PrivateKey, data []byte) []byte {
 	return []byte(updater.KeyID(pub) + " " + base64.StdEncoding.EncodeToString(ed25519.Sign(priv, data)) + "\n")
 }
 
-// updaterFixtureFor 构造指向 httptest 的 releases/latest 响应(含校验资产)。
-func updaterFixtureFor(srvURL string) string {
-	return fmt.Sprintf(`{
-  "tag_name": "v0.2.0",
-  "body": "更新说明",
-  "published_at": "2026-09-14T08:00:00Z",
-  "assets": [
-    {"name": "gbt32960-simulator", "size": 100, "browser_download_url": "%[1]s/linux"},
-    {"name": "gbt32960-simulator.app.zip", "size": 200, "browser_download_url": "%[1]s/darwin"},
-    {"name": "gbt32960-simulator.exe", "size": 300, "browser_download_url": "%[1]s/win"},
-    {"name": "SHA256SUMS", "size": 300, "browser_download_url": "%[1]s/sums"},
-    {"name": "SHA256SUMS.sig", "size": 100, "browser_download_url": "%[1]s/sig"}
-  ]
-}`, srvURL)
-}
-
 // redirectUserCache 把 os.UserCacheDir 重定向到测试临时目录(跨包并发隔离;三平台 env 覆盖)。
 func redirectUserCache(t *testing.T) {
 	t.Helper()
@@ -180,11 +166,11 @@ func TestUpdaterServiceDownloadAndVerify(t *testing.T) {
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case strings.HasPrefix(r.URL.Path, "/repos/"):
-			_, _ = io.WriteString(w, updaterFixtureFor(srv.URL))
-		case r.URL.Path == "/sums":
+		case r.URL.Path == latestPath:
+			redirectLatest(w, r, srv.URL, "v0.2.0")
+		case strings.HasSuffix(r.URL.Path, "/SHA256SUMS"):
 			_, _ = w.Write(sums)
-		case r.URL.Path == "/sig":
+		case strings.HasSuffix(r.URL.Path, "/SHA256SUMS.sig"):
 			_, _ = w.Write(sig)
 		default:
 			_, _ = w.Write(content)
@@ -209,13 +195,18 @@ func TestUpdaterServiceDownloadAndVerify(t *testing.T) {
 	if len(*events) < 2 {
 		t.Fatalf("事件过少: %+v", *events)
 	}
+	// verifying 以实测字节数为进度基准:Size 恒为 0 也不再出现 0% 复位
 	last := (*events)[len(*events)-1]
 	if last.Phase != "verifying" || last.Percent != 100 {
 		t.Fatalf("末条事件异常: %+v", last)
 	}
 	dir, _ := updater.ReleaseDir("v0.2.0")
-	if _, err := os.Stat(filepath.Join(dir, res.AssetName)); err != nil {
+	fi, err := os.Stat(filepath.Join(dir, res.AssetName))
+	if err != nil {
 		t.Fatalf("落定文件不存在: %v", err)
+	}
+	if fi.Size() != int64(len(content)) {
+		t.Fatalf("落定文件大小 = %d, want %d", fi.Size(), len(content))
 	}
 	if matches, _ := filepath.Glob(filepath.Join(dir, "*.part")); len(matches) != 0 {
 		t.Fatalf(".part 残留: %v", matches)
@@ -234,11 +225,11 @@ func TestUpdaterServiceDownloadCancel(t *testing.T) {
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case strings.HasPrefix(r.URL.Path, "/repos/"):
-			_, _ = io.WriteString(w, updaterFixtureFor(srv.URL))
-		case r.URL.Path == "/sums":
+		case r.URL.Path == latestPath:
+			redirectLatest(w, r, srv.URL, "v0.2.0")
+		case strings.HasSuffix(r.URL.Path, "/SHA256SUMS"):
 			_, _ = w.Write(sums)
-		case r.URL.Path == "/sig":
+		case strings.HasSuffix(r.URL.Path, "/SHA256SUMS.sig"):
 			_, _ = w.Write(sig)
 		default:
 			w.Header().Set("Content-Length", "9999999")
@@ -316,10 +307,10 @@ func TestUpdaterServiceDownloadGuards(t *testing.T) {
 	}
 }
 
-// TestUpdaterServiceErrorClassification 锁定“状态码优先”分类(spec §5.8):
-// 403 的限流响应体恰为合法 JSON(无 tag_name),不得被 JSON 解析分流;200 缺字段不得误判为错误。
+// TestUpdaterServiceErrorClassification 锁定检查链路分类(spec §5.8,网页 302 语义):
+// 403 限流原样透出;302 缺 Location 等形状异常 fail-closed 为网络错误;302 指向 releases 列表页为暂无发布版本。
 func TestUpdaterServiceErrorClassification(t *testing.T) {
-	t.Run("403 限流 JSON 体", func(t *testing.T) {
+	t.Run("403 限流", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusForbidden)
 			_, _ = io.WriteString(w, `{"message":"API rate limit exceeded for 1.2.3.4"}`)
@@ -333,19 +324,30 @@ func TestUpdaterServiceErrorClassification(t *testing.T) {
 		}
 	})
 
-	t.Run("200 缺字段", func(t *testing.T) {
+	t.Run("302 缺 Location", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, _ = io.WriteString(w, `{}`)
+			w.WriteHeader(http.StatusFound)
 		}))
 		defer srv.Close()
 		svc := NewUpdaterService("v0.1.0")
 		svc.client.BaseURL = srv.URL
-		info, err := svc.CheckUpdate()
-		if err != nil {
-			t.Fatalf("err = %v, want nil(状态码优先,不误分类)", err)
+		_, err := svc.CheckUpdate()
+		if !errors.Is(err, updater.ErrNetwork) {
+			t.Fatalf("err = %v, want ErrNetwork", err)
 		}
-		if info.HasUpdate || info.Latest != "" {
-			t.Fatalf("info = %+v, want 无更新且 Latest 为空", info)
+	})
+
+	t.Run("302 指向 releases 列表", func(t *testing.T) {
+		var srv *httptest.Server
+		srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, srv.URL+"/"+updater.Repo+"/releases", http.StatusFound)
+		}))
+		defer srv.Close()
+		svc := NewUpdaterService("v0.1.0")
+		svc.client.BaseURL = srv.URL
+		_, err := svc.CheckUpdate()
+		if err == nil || err.Error() != "暂无发布版本" {
+			t.Fatalf("err = %v, want 暂无发布版本", err)
 		}
 	})
 }

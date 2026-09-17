@@ -66,16 +66,13 @@ func (s *UpdaterService) CheckUpdate() (updater.UpdateInfo, error) {
 		return updater.UpdateInfo{}, err
 	}
 	info := updater.UpdateInfo{
-		Current:     s.version,
-		Latest:      rel.TagName,
-		HasUpdate:   updater.IsNewer(rel.TagName, s.version),
-		Notes:       rel.Body,
-		PublishedAt: rel.PublishedAt,
+		Current:   s.version,
+		Latest:    rel.TagName,
+		HasUpdate: updater.IsNewer(rel.TagName, s.version),
 	}
 	// 资产匹配失败不阻塞检查结果(前端据 AssetName 空值提示"暂不支持自动更新")
 	if asset, aerr := updater.MatchAsset(runtime.GOOS, runtime.GOARCH, rel.Assets); aerr == nil {
 		info.AssetName = asset.Name
-		info.AssetSize = asset.Size
 	}
 	s.mu.Lock()
 	s.lastRelease = rel

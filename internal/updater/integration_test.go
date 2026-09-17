@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -56,5 +57,37 @@ func TestIntegrationReleaseChain(t *testing.T) {
 	}
 	if len(hops) < 2 || !strings.Contains(strings.Join(hops, ","), "release-assets.githubusercontent.com") {
 		t.Fatalf("302 跳转链异常(期望 ≥2 host,含 release-assets):%v", hops)
+	}
+}
+
+// TestIntegrationLatestRelease 真实链路:网页 302 路由解析最新 tag,并按命名契约构造资产直链。
+// 默认跳过;UPDATER_INTEGRATION=1 运行(需网络)。
+func TestIntegrationLatestRelease(t *testing.T) {
+	if os.Getenv("UPDATER_INTEGRATION") != "1" {
+		t.Skip("设置 UPDATER_INTEGRATION=1 运行真实链路集成测试")
+	}
+	rel, err := NewClient("v0.0.1").LatestRelease(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`^v\d+\.\d+\.\d+$`).MatchString(rel.TagName) {
+		t.Fatalf("TagName = %q, want vX.Y.Z", rel.TagName)
+	}
+	prefix := "https://github.com/" + Repo + "/releases/download/" + rel.TagName + "/"
+	want := []string{
+		"gbt32960-simulator.app.zip",
+		"gbt32960-simulator.exe",
+		"gbt32960-simulator",
+		"SHA256SUMS",
+		"SHA256SUMS.sig",
+	}
+	if len(rel.Assets) != len(want) {
+		t.Fatalf("资产数 = %d, want %d: %+v", len(rel.Assets), len(want), rel.Assets)
+	}
+	for i, name := range want {
+		a := rel.Assets[i]
+		if a.Name != name || a.URL != prefix+name {
+			t.Fatalf("资产[%d] = %+v, want {Name:%s URL:%s}", i, a, name, prefix+name)
+		}
 	}
 }

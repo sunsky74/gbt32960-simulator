@@ -1,9 +1,9 @@
 # GB/T 32960 模拟器 · 应用内更新(App Auto-Update) 设计文档
 
-> 状态:已确认(2026-09-14 grilling 评审:18 项决议 + 11 项修正固化;2026-09-15 P2 修订:审计修订落地——白名单 host、Ed25519 离线签名、SHA256SUMS 取址等)
+> 状态:已确认(2026-09-14 grilling 评审:18 项决议 + 11 项修正固化;2026-09-15 P2 修订:审计修订落地——白名单 host、Ed25519 离线签名、SHA256SUMS 取址等;2026-09-17 修订:检查通道切换为 Releases 网页 302 路由——Notes / PublishedAt / AssetSize 移出契约,见 ADR-0003)
 > 日期:2026-09-14(草案同日评审通过)
 > 关联调研:Wails 自更新生态调研(2026-09-14)。关键证据:Wails v2 无官方 updater 且已明确不做(wailsapp/wails#1178,关闭于 v3);社区无成熟第三方库(全部 0~15 star 或停更 2 年以上);Wails v3 内建 `app.Updater`(仍 beta)采用 helper swap 模式与 Sparkle 同构;minio/selfupdate 的 rename-aside 替换算法经生产验证;GitHub Releases API 未认证限额 60 次/时/IP。
-> 决策 ADR:`docs/adr/0001-updater-architecture.md`、`docs/adr/0002-windows-per-user-install.md`;术语:`CONTEXT.md`
+> 决策 ADR:`docs/adr/0001-updater-architecture.md`、`docs/adr/0002-windows-per-user-install.md`、`docs/adr/0003-update-check-web-302.md`;术语:`CONTEXT.md`
 > Three Pillars applicability: yes - 纯技术编码工作(Go 更新服务 + Vue 设置页接线),按 three-pillars §1 判定
 > Project type: general-backend(混合前端)- 主交付物为内嵌 Wails 桌面应用的更新服务组件 + 配套设置页;不确定时按更严路径取 general-backend
 
@@ -28,7 +28,7 @@
 
 ### Current Requirement Flow
 
-打开"设置 → 关于"面板 → 显示当前版本(如 `v0.1.0`)→ 点击"检查更新" → 有新版:展示最新版本号/发布说明(纯文本截断+展开)/资产大小 → 点击"下载"→ 进度条(可取消;无进展 120s 自动判失败)→ 完成并校验通过 → 点击"安装并重启"→ 二次确认(动态提示运行态中断)→ 应用退出 → helper 完成替换 → 应用以新版本重新启动。
+打开"设置 → 关于"面板 → 显示当前版本(如 `v0.1.0`)→ 点击"检查更新" → 有新版:展示最新版本号(+“查看发布说明”外链) → 点击"下载"→ 进度条(可取消;无进展 120s 自动判失败)→ 完成并校验通过 → 点击"安装并重启"→ 二次确认(动态提示运行态中断)→ 应用退出 → helper 完成替换 → 应用以新版本重新启动。
 
 分支:已是最新 → 文案提示;网络失败/限流/无发布 → 分类错误提示且不阻塞任何既有功能;校验失败 → 拒绝安装并删除产物;替换失败 → 自动回滚、拉起旧版本、下次启动 toast 告知;macOS 从 translocation 路径运行或无写权限 → 明确指引(移到 /Applications 后重试);Windows 安装目录不可写(旧 machine 范围安装)→ 提示使用安装包手动更新;用户可"跳过此版本"(自动检查对其静默、手动检查仍展示、更高版本发布后解锁)。
 
@@ -41,7 +41,7 @@
 ```
 internal/updater/
 ├── semver.go        # 极简语义化版本解析/比较(vX.Y.Z,容忍 v 前缀与不可解析输入)
-├── release.go       # GitHubClient:GET releases/latest;baseURL 与 *http.Client 可注入(测试缝)
+├── release.go       # GitHubClient:GET releases/latest(网页 302,读 Location 解析 tag);baseURL 与 *http.Client 可注入(测试缝)
 ├── asset.go         # 按 GOOS/GOARCH 匹配资产(排除 installer 等干扰项)
 ├── download.go      # 流式下载 + 进度回调(≥100ms 节流)+ 停滞检测(120s)
 ├── verify.go        # SHA256SUMS 解析 + Ed25519 验签与哈希比对(内嵌公钥;验签先于解析,fail-closed)
@@ -84,7 +84,7 @@ app.go                     # 装配、ctx 注入(shutdown 时取消下载)
 ## 3. Final Acceptance Checklist
 
 - [AC-1] (Source: Overall Business Flow) release 构建版本号经 ldflags 生效:关于面板显示 `vX.Y.Z`;未注入(dev/本地构建)显示"开发构建";系统层版本(Finder/文件属性)经发布流程注入后与应用内一致
-- [AC-2] (Source: Current Requirement Flow) 手动"检查更新":有新版展示 版本号/发布说明(纯文本截断+展开)/资产大小;无新版提示"已是最新";404/限流/网络错误分类提示,且不影响任何既有功能
+- [AC-2] (Source: Current Requirement Flow) 手动"检查更新":有新版展示 版本号(+“查看发布说明”外链);无新版提示"已是最新";404/限流/网络错误分类提示,且不影响任何既有功能
 - [AC-3] (Source: Current Requirement Flow) 自动检查:默认开(可关)、启动后延迟 ~3s、24h 冷却、失败静默;"跳过此版本"持久化生效(自动检查对其静默、手动检查仍展示、更高版本解锁);发现新版本 toast 可点击直达"设置→关于"
 - [AC-4] (Source: Current Requirement Flow) 下载:进度事件驱动进度条(≥100ms 节流),支持取消(取消后清理临时文件);无字节进展 120s 判失败;失败可重试
 - [AC-5] (Source: Current Requirement Flow) 校验:Ed25519 验签失败、SHA256SUMS 缺失或哈希不匹配 → 拒绝安装 + 明确提示 + 删除下载产物(fail-closed);验证顺序=先验签后解析哈希
@@ -93,7 +93,7 @@ app.go                     # 装配、ctx 注入(shutdown 时取消下载)
 - [AC-8] (Source: Current Requirement Flow) Linux:rename 覆盖 + `0755` 权限保留 + 自动重启;失败回滚拉起旧版;目录不可写时明确报错(不尝试提权)
 - [AC-9] (Source: Development Architecture) 新增 `internal/updater` 与 `bridge/UpdaterService`;事件契约 `update:progress` 按规范登记;绑定面不暴露任意 URL/路径参数;`ConsumeLastResult()` 供启动消费更新结果
 - [AC-10] (Source: Existing Architecture Fit) 既有功能逐字节不变(全量测试绿);无更新场景下应用行为与现状完全一致
-- [AC-11] (Source: New Architecture Enablement) `go.mod` 零变化;下载仅允许 HTTPS 白名单域名(`api.github.com` / `github.com` / `release-assets.githubusercontent.com` / `objects.githubusercontent.com`,重定向逐跳校验);SHA-256 + Ed25519 强制校验
+- [AC-11] (Source: New Architecture Enablement) `go.mod` 零变化;下载仅允许 HTTPS 白名单域名(`github.com` / `release-assets.githubusercontent.com` / `objects.githubusercontent.com`,重定向逐跳校验);SHA-256 + Ed25519 强制校验
 - [AC-12] (Source: Overall Business Flow) release.yml 增强:SHA256SUMS 生成上传;Windows 构建追加 `-installscope user`;构建前注入 wails.json info 段版本;发布清单含 `SHA256SUMS.sig` 离线签名上传步骤
 - [AC-13] (Source: Current Requirement Flow) 安装确认框动态提示运行态中断(客户端连接中/服务端运行中 → "将断开连接/停止服务并退出")
 - [AC-14] (Source: Current Requirement Flow) 失败闭环:替换失败回滚后自动拉起旧版本;新实例启动读取结果文件,失败时 toast 告知原因与日志位置(成功静默)
@@ -109,7 +109,7 @@ app.go                     # 装配、ctx 注入(shutdown 时取消下载)
   │                         │────────── 创建 Release ─────────────────────────────────────────────▶│
   │                         │                                 │                                    │
   │                         │       启动延迟 ~3s / 手动检查 ──▶│ GET /releases/latest               │
-  │                         │                                 │◀──── tag / notes / assets ────────│
+  │                         │                                 │◀──── 302 Location: tag ───────────│
   │                         │                                 │ semver 比较 → 发现新版(检查跳过版本)│
   │                         │                                 │ 下载资产(直链,进度事件;120s 停滞防护)│
   │                         │                                 │ 验签 + SHA256SUMS 校验                    │
@@ -124,19 +124,19 @@ app.go                     # 装配、ctx 注入(shutdown 时取消下载)
 
 ### 5.1 检查契约
 
-- 端点:`GET https://api.github.com/repos/sunsky74/gbt32960-simulator/releases/latest`
-- 请求头:`User-Agent: gbt32960-simulator/<version>`(GitHub 必填,缺失直接 403)、`Accept: application/vnd.github+json`、`X-GitHub-Api-Version: 2022-11-28`;整体超时 10s
+- 端点:`GET https://github.com/sunsky74/gbt32960-simulator/releases/latest`(网页路由,读取 302 响应的 `Location` 解析 tag;不消耗 API 配额)
+- 请求头:`User-Agent: gbt32960-simulator/<version>`(GitHub 必填,缺失直接 403);整体超时 10s(2026-09-17 修订:网页路由不再使用 API 专用头 `Accept: application/vnd.github+json` / `X-GitHub-Api-Version`)
 - 错误分类与文案:
 
 | 场景 | 行为 |
 |---|---|
-| 200 且有新版本 | 返回 `{hasUpdate: true, latest, notes, publishedAt, assetName, assetSize}` |
-| 200 且已是最新 | `{hasUpdate: false, latest}` |
-| 404 | "暂无发布版本" |
-| 403/429(限流) | "接口限流,请稍后再试"(静态文案;2026-09-15 修订:移除 retry-after 契约以对齐 P1 实现) |
+| 302 且有新版本 | 返回 `{hasUpdate: true, latest, assetName}` |
+| 302 且已是最新 | `{hasUpdate: false, latest}` |
+| 404 / 302 指向无 tag 列表页 | "暂无发布版本" |
+| 403/429(限流) | "接口限流,请稍后再试"(静态文案;2026-09-15 修订:移除 retry-after 契约以对齐 P1 实现;2026-09-17 修订:网页路由无 60 次/时配额,403/429 仅来自滥用限流) |
 | 网络错误/超时 | "无法访问 GitHub,请检查网络"(P2 起附代理提示:如使用代理请确认 TUN 模式或 HTTPS_PROXY 生效) |
 
-- 版本比较:剥离 `v` 前缀后按 X.Y.Z 数值比较;prerelease/draft 由 `releases/latest` 语义天然排除
+- 版本比较:剥离 `v` 前缀后按 X.Y.Z 数值比较;prerelease/draft 由 `releases/latest` 语义天然排除(网页路由语义经抽样与 API 一致);非 `vX.Y.Z` 形态的 tag 由 `IsNewer` fail-closed(不提示更新,prerelease tag 永不触发)
 - `version` 为空或 `dev`:不参与检查,UI 显示"开发构建"(检查按钮禁用并说明)
 
 ### 5.2 资产匹配表
@@ -152,10 +152,10 @@ app.go                     # 装配、ctx 注入(shutdown 时取消下载)
 ### 5.3 下载与校验契约
 
 - 下载目录:`os.UserCacheDir()/gbt32960-simulator/updates/<tag>/`;**启动时全清该缓存目录**(不跨会话复用)
-- 进度事件:`update:progress` `{phase: "downloading", received, total, percent}`,≥100ms 节流;`total` 优先取响应 `Content-Length`,缺失时用 API 返回的 `assetSize`
+- 进度事件:`update:progress` `{phase: "downloading", received, total, percent}`,≥100ms 节流;`total` 取响应 `Content-Length`(2026-09-17 修订:已无 `assetSize` 兜底,缺失时 `percent` 为 0)
 - **停滞检测**:重置式计时(每收到数据块重置),持续 120s 无字节进展 → 判失败;失败清理后可重试
 - 取消(shutdown 或用户取消)立即生效并清理未完成文件;磁盘空间不足/写入失败 → 分类错误提示
-- 校验(fail-closed,两步):① 下载同 tag `SHA256SUMS.sig`,以内嵌 Ed25519 公钥验签(覆盖 `SHA256SUMS` 全文,验签先于解析);② 下载 `SHA256SUMS`(优先取 API 资产列表 `browser_download_url`,并做"非 HTML"形态校验)→ 解析(兼容 `hash  name` / `hash *name`)→ 定位目标资产行 → 比对 SHA-256。任一步失败一律拒绝安装,删除产物并提示
+- 校验(fail-closed,两步):① 下载同 tag `SHA256SUMS.sig`,以内嵌 Ed25519 公钥验签(覆盖 `SHA256SUMS` 全文,验签先于解析);② 下载 `SHA256SUMS`(与资产同按 tag 确定性拼接 URL,并做"非 HTML"形态校验;2026-09-17 修订:不再取自 API `browser_download_url`)→ 解析(兼容 `hash  name` / `hash *name`)→ 定位目标资产行 → 比对 SHA-256。任一步失败一律拒绝安装,删除产物并提示
 - 发布侧:`SHA256SUMS` 由 CI 生成(覆盖 4 个资产、排除自身);发布者用**离线私钥**本地签名生成 `SHA256SUMS.sig`(单行 base64 + keyid,为轮换留缝)并上传至 Release;签名脚本与发布清单随 P2 实施落地
 
 ### 5.4 应用与重启契约(helper 协议)
@@ -190,7 +190,7 @@ app.go                     # 装配、ctx 注入(shutdown 时取消下载)
 
 ### 5.6 前端契约
 
-- 新增第 9 分类"关于"(`SettingsAboutPanel.vue`):当前版本、检查更新按钮、更新状态区(最新版本 / 发布说明[纯文本截断+展开] / 下载进度条+取消 / "安装并重启" / "跳过此版本")、GitHub 仓库链接
+- 新增第 9 分类"关于"(`SettingsAboutPanel.vue`):当前版本、检查更新按钮、更新状态区(最新版本 / “查看发布说明”外链 / 下载进度条+取消 / "安装并重启" / "跳过此版本")、GitHub 仓库链接
 - 状态机:`idle → checking → (up-to-date | available) → downloading → ready → applying`;各态按钮与文案互斥
 - 自动检查:`useAppSettings` 新增 `checkUpdateOnStartup`(默认开)、`lastUpdateCheckAt`(24h 冷却)、`skippedVersion`(跳过版本),均 localStorage 持久化;App 启动后延迟 ~3s 触发;失败静默;发现新版本且未被跳过时 `message.info` 轻提示一次,可点击跳转"设置→关于"(`navigation.ts` 轻量函数)
 - 启动消费结果:App 启动调用 `ConsumeLastResult()`;失败 → toast(原因 + 日志路径);成功静默
@@ -202,7 +202,7 @@ app.go                     # 装配、ctx 注入(shutdown 时取消下载)
 
 - `go.mod` 零变化;不新增第三方依赖(HTTP/JSON/哈希/zip 全部标准库;macOS 解压用系统 `ditto`)
 - 不改变既有服务与页面行为;不影响客户端/服务端模式的任何运行状态
-- 仅 HTTPS 访问白名单域名:`api.github.com` / `github.com` / `release-assets.githubusercontent.com` / `objects.githubusercontent.com`(后两者为下载 302 目标,2026-09-15 实测锁定),重定向逐跳校验
+- 仅 HTTPS 访问白名单域名:`github.com` / `release-assets.githubusercontent.com` / `objects.githubusercontent.com`(后两者为下载 302 目标,2026-09-15 实测锁定;2026-09-17 修订:移除 `api.github.com`,检查改走网页路由),重定向逐跳校验
 - 遵循系统代理环境变量(`HTTPS_PROXY` 等,Go 默认行为),不做 UI 配置
 - 检查/下载/应用为单飞(互斥),重复触发幂等;启动时清理更新缓存(不跨会话复用)
 - helper 模式在 `main()` 最早期拦截(环境变量或参数判定)后直接 `os.Exit`,不初始化 Wails
@@ -210,8 +210,8 @@ app.go                     # 装配、ctx 注入(shutdown 时取消下载)
 ### 5.8 验证策略
 
 - 单元(表驱动):semver 比较(含 v 前缀/非法输入)、资产匹配(三平台 + 排除项)、SHA256SUMS 解析(两种格式)、Ed25519 验签(有效/被篡改/缺失/未知 keyid)、结果文件编解码
-- 桥接层:HTTP 客户端可注入(`baseURL` + `*http.Client` 注入缝,对齐 forwarder 的 `emit` 注入惯例),覆盖 200/404/限流/网络错误/校验失败/停滞 120s 路径;补 2 例:403+限流 JSON 体(无 `tag_name`)、200 缺字段——锁定"状态码优先"分类
-- 真实链路:集成测试覆盖真实 Release 302 链(github.com → release-assets.githubusercontent.com;≥2 host 组合),白名单逐跳校验路径
+- 桥接层:HTTP 客户端可注入(`baseURL` + `*http.Client` 注入缝,对齐 forwarder 的 `emit` 注入惯例),覆盖 302(Location 解析)/404/限流/网络错误/校验失败/停滞 120s 路径;Location 形状异常(缺失/异站/非 tag 路径)与"302 指向列表页"用例锁定 fail-closed 分类(2026-09-17 修订:替换原 JSON 体 / "200 缺字段"用例)
+- 真实链路:集成测试覆盖真实 Release 302 链(github.com → release-assets.githubusercontent.com;≥2 host 组合),白名单逐跳校验路径;2026-09-17 修订:新增检查通道的真实网络测试(同样以 `UPDATER_INTEGRATION=1` 启用)
 - 替换算法:临时目录模拟应用布局执行 rename-aside/同卷暂存/回滚用例(Windows 逻辑在 CI windows runner 覆盖)
 - 端到端演练:发布 `v0.1.1` 后从 `v0.1.0` 真机升级(macOS 主路径),覆盖:下载中断重试 / 校验失败 / 替换失败回滚并拉起旧版 / 跳过版本
 
@@ -245,10 +245,10 @@ app.go                     # 装配、ctx 注入(shutdown 时取消下载)
 | D12 | 安装确认框动态提示运行态中断(连接中/服务运行中) | grilling A3 | 已确认 |
 | D13 | 下载停滞:无字节进展 120s 判失败(重置式计时) | grilling A4 | 已确认 |
 | D14 | 轻提示可点击跳转"设置→关于"(navigation 轻机制) | grilling A6 | 已确认 |
-| D15 | 发布说明纯文本截断 + 展开(不做 markdown 渲染,零依赖) | grilling A7 | 已确认 |
+| D15 | 发布说明纯文本截断 + 展开(不做 markdown 渲染,零依赖) | grilling A7 | 已废弃(2026-09-17:应用内不再展示发布说明,改“查看发布说明”外链;ADR-0003) |
 | D16 | 替换前将产物暂存到目标同目录/同卷,再原子交换(跨卷 rename 不可行) | 工程修正 | 已确认 |
 | D17 | 域名白名单 + 重定向逐跳校验;遵循系统代理环境变量 | 工程修正 | 已确认 |
 | D18 | Windows rename 退避重试(AV 锁);错误分类补齐(磁盘/写入) | 工程修正 | 已确认 |
 | D19 | Ed25519 密钥托管=离线密钥+本地签名(发布清单增补签名步骤;密钥丢失=更新链断裂、轮换需旧钥引导) | 用户裁决(2026-09-15,oracle 审计) | 已确认 |
 | D20 | 下载白名单补 `release-assets.githubusercontent.com`(实测 302 目标;缺此项会 fail-closed 阻断全部下载) | oracle 审计实测(2026-09-15) | 已确认 |
-| D21 | SHA256SUMS 优先取 `browser_download_url` + 非 HTML 形态校验;移除 retry-after 契约;网络失败文案附代理提示 | oracle 审计建议(2026-09-15) | 已确认 |
+| D21 | SHA256SUMS 优先取 `browser_download_url` + 非 HTML 形态校验;移除 retry-after 契约;网络失败文案附代理提示 | oracle 审计建议(2026-09-15);2026-09-17 修订:URL 改按 tag 确定性拼接(ADR-0003) | 已确认 |

@@ -703,10 +703,7 @@ export namespace updater {
 	    latest: string;
 	    hasUpdate: boolean;
 	    devBuild: boolean;
-	    notes: string;
-	    publishedAt: string;
 	    assetName: string;
-	    assetSize: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new UpdateInfo(source);
@@ -718,10 +715,7 @@ export namespace updater {
 	        this.latest = source["latest"];
 	        this.hasUpdate = source["hasUpdate"];
 	        this.devBuild = source["devBuild"];
-	        this.notes = source["notes"];
-	        this.publishedAt = source["publishedAt"];
 	        this.assetName = source["assetName"];
-	        this.assetSize = source["assetSize"];
 	    }
 	}
 

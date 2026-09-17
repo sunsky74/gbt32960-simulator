@@ -16,7 +16,6 @@ const current = ref('')
 const devBuild = ref(false)
 const checking = ref(false)
 const info = ref<updater.UpdateInfo | null>(null)
-const notesExpanded = ref(false)
 const downloading = ref(false)
 const progress = ref<UpdateProgressEvent | null>(null)
 const ready = ref<updater.DownloadResult | null>(null)
@@ -38,7 +37,6 @@ onMounted(async () => {
 
 async function check() {
   checking.value = true
-  notesExpanded.value = false
   ready.value = null
   try {
     info.value = await UpdaterService.CheckUpdate()
@@ -93,6 +91,13 @@ function openRepo() {
   BrowserOpenURL(REPO_URL)
 }
 
+// 查看发布说明:打开新版本对应的 GitHub Release 页(检查通道不再返回说明正文)
+function openReleaseNotes() {
+  const latest = info.value?.latest
+  if (!latest) return
+  BrowserOpenURL(`${REPO_URL}/releases/tag/${latest}`)
+}
+
 const hasUpdate = computed(() => info.value?.hasUpdate === true)
 const upToDate = computed(() => info.value !== null && !info.value.hasUpdate && !info.value.devBuild)
 const platformUnsupported = computed(() => hasUpdate.value && !info.value?.assetName)
@@ -113,14 +118,8 @@ const platformUnsupported = computed(() => hasUpdate.value && !info.value?.asset
           <span v-else-if="checking" class="about-hint">正在检查…</span>
           <span v-else-if="!info" class="about-hint">从 GitHub Releases 查询最新版本</span>
           <template v-else-if="hasUpdate">
-            <span class="about-new">
-              发现新版本 <b>{{ info.latest }}</b>
-              <template v-if="info.assetSize">({{ formatBytes(info.assetSize) }})</template>
-            </span>
+            <span class="about-new">发现新版本 <b>{{ info.latest }}</b></span>
             <span v-if="platformUnsupported" class="about-hint">当前平台暂不支持自动更新</span>
-            <div v-if="info.notes" class="about-notes" :class="{ expanded: notesExpanded }">
-              <pre>{{ info.notes }}</pre>
-            </div>
 
             <template v-if="ready">
               <span class="about-new">更新包已就绪:{{ ready.tag }}(下载与校验完成;安装与重启将在后续阶段开放)</span>
@@ -135,9 +134,7 @@ const platformUnsupported = computed(() => hasUpdate.value && !info.value?.asset
             <template v-else>
               <div class="about-actions">
                 <a-button size="small" type="primary" :disabled="platformUnsupported" @click="download">下载更新</a-button>
-                <a-button v-if="info.notes" size="small" type="link" @click="notesExpanded = !notesExpanded">
-                  {{ notesExpanded ? '收起说明' : '展开说明' }}
-                </a-button>
+                <a-button size="small" type="link" @click="openReleaseNotes">查看发布说明</a-button>
                 <a-button size="small" @click="skip">跳过此版本</a-button>
               </div>
             </template>
@@ -180,29 +177,6 @@ const platformUnsupported = computed(() => hasUpdate.value && !info.value?.asset
 
 .about-new {
   color: var(--text-primary);
-}
-
-.about-notes {
-  max-height: 132px;
-  overflow: hidden;
-  border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-  padding: 6px 10px;
-  background: var(--bg-elevated);
-}
-
-.about-notes.expanded {
-  max-height: none;
-}
-
-.about-notes pre {
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  line-height: 1.6;
-  color: var(--text-secondary);
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 .about-actions {
