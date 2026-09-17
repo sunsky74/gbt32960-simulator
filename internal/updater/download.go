@@ -345,13 +345,13 @@ func findAsset(assets []Asset, name string) (Asset, bool) {
 	return Asset{}, false
 }
 
-// ReleaseDir 更新缓存目录(UserCacheDir/gbt32960-simulator/updates/<safeTag>);tag 做字符白名单清洗。
+// ReleaseDir 更新缓存目录(<UpdatesRoot>/<safeTag>);tag 做字符白名单清洗。
 func ReleaseDir(tag string) (string, error) {
-	cd, err := os.UserCacheDir()
+	root, err := UpdatesRoot()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(cd, "gbt32960-simulator", "updates", safeTag(tag)), nil
+	return filepath.Join(root, safeTag(tag)), nil
 }
 
 var tagSanitize = regexp.MustCompile(`[^A-Za-z0-9._-]`)
@@ -367,11 +367,10 @@ func safeTag(tag string) string {
 // CleanupCache 清空更新缓存:删除各 tag 子目录(下载产物不跨会话复用);
 // 根级 last-result.json / helper.log 保留(P3 启动消费失败结果与排障所需)。
 func CleanupCache() error {
-	cd, err := os.UserCacheDir()
+	root, err := UpdatesRoot()
 	if err != nil {
 		return err
 	}
-	root := filepath.Join(cd, "gbt32960-simulator", "updates")
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -380,7 +379,7 @@ func CleanupCache() error {
 		return err
 	}
 	for _, e := range entries {
-		if !e.IsDir() && (e.Name() == "last-result.json" || e.Name() == "helper.log") {
+		if !e.IsDir() && (e.Name() == lastResultName || e.Name() == helperLogName) {
 			continue
 		}
 		if err := os.RemoveAll(filepath.Join(root, e.Name())); err != nil {
