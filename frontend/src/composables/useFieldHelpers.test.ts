@@ -55,6 +55,7 @@ describe('defaultFor', () => {
     expect(defaultFor(field({ kind: 'int' }))).toBe(0)
     expect(defaultFor(field({ kind: 'bytes', length: 3 }))).toBe('000000')
     expect(defaultFor(field({ kind: 'array_float' }))).toEqual([])
+    expect(defaultFor(field({ kind: 'array_float', minItems: 1 }))).toEqual([0])
     expect(
       defaultFor(
         field({

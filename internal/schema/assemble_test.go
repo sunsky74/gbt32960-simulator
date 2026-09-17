@@ -42,15 +42,16 @@ func fullGroups() GroupsConfig {
 			"insulance": 3000, "accelerationValue": 22, "brakePedal": 5,
 		}}},
 		"motor": {Enabled: true, Rows: []RowValue{
-			{"seq": 1, "state": 1, "controllerTemp": 35.5, "speed": 3000, "torque": 120.5, "motorTemp": 42, "controllerVoltage": 380.2, "controllerCurrent": -30},
-			{"seq": 2, "state": 2, "controllerTemp": 36.5, "speed": 1500.5, "torque": -20.3, "motorTemp": 41, "controllerVoltage": 379.1, "controllerCurrent": 15.5},
+			{"seq": 1, "state": 1, "controllerTemp": 36, "speed": 3000, "torque": 120.5, "motorTemp": 42, "controllerVoltage": 380.2, "controllerCurrent": -30},
+			{"seq": 2, "state": 2, "controllerTemp": 37, "speed": 1500.5, "torque": -20.3, "motorTemp": 41, "controllerVoltage": 379.1, "controllerCurrent": 15.5},
 		}},
 		"location": {Enabled: true, Rows: []RowValue{{"valid": true, "longitude": 121.4737, "latitude": 31.2304}}},
 		"extremum": {Enabled: true, Rows: []RowValue{{
 			"voltageMaxSubsystem": 1, "voltageMaxBattery": 12, "maxVoltage": 3.65,
 			"voltageMinSubsystem": 1, "voltageMinBattery": 13, "minVoltage": 3.55,
-			"tempMaxSubsystem": 1, "tempMaxProbe": 3, "maxTemp": 38.5,
-			"tempMinSubsystem": 1, "tempMinProbe": 4, "minTemp": 22.5,
+			// 极值温度最小计量单元 1℃(表16),夹具用整数以保证往返可断言
+			"tempMaxSubsystem": 1, "tempMaxProbe": 3, "maxTemp": 39,
+			"tempMinSubsystem": 1, "tempMinProbe": 4, "minTemp": 22,
 		}}},
 		"alarm": {Enabled: true, Rows: []RowValue{{
 			"maxAlarmLevel": 1,
@@ -63,7 +64,8 @@ func fullGroups() GroupsConfig {
 			"frameStartSeq": 1, "batteryVoltages": []any{3.65, 3.64, 3.63},
 		}}},
 		"temperature": {Enabled: true, Rows: []RowValue{{
-			"subsystem": 1, "probeTemps": []any{22.5, 23.0, 24.5, 25.0},
+			// 探针温度最小计量单元 1℃(表B.8),夹具用整数
+			"subsystem": 1, "probeTemps": []any{22, 23, 24, 25},
 		}}},
 	}
 }
@@ -232,6 +234,37 @@ func TestV2016DocCompliance(t *testing.T) {
 			t.Errorf("roundtrip split frames wrong: %+v", d.ChargeableSubsystemElectricList)
 		}
 	})
+}
+
+func TestAssembleV2016CountBounds(t *testing.T) {
+	// 表10/表17/表B.5~B.8:个数与数组长度边界
+	rows := func(n int) []RowValue {
+		out := make([]RowValue, n)
+		for i := range out {
+			out[i] = RowValue{"seq": i + 1, "subsystem": i + 1}
+		}
+		return out
+	}
+	faults := make([]any, 253)
+	for i := range faults {
+		faults[i] = float64(i)
+	}
+	cases := []struct {
+		name string
+		cfg  GroupsConfig
+	}{
+		{"驱动电机 254 个(表10:1~253)", GroupsConfig{"motor": {Enabled: true, Rows: rows(254)}}},
+		{"储能子系统 251 个(表B.5:1~250)", GroupsConfig{"voltage": {Enabled: true, Rows: rows(251)}}},
+		{"单体电池电压为空(表B.6:1~200)", GroupsConfig{"voltage": {Enabled: true, Rows: []RowValue{{"subsystem": 1}}}}},
+		{"储能子系统 251 个(表B.7:1~250)", GroupsConfig{"temperature": {Enabled: true, Rows: rows(251)}}},
+		{"温度探针为空(表B.8:1~65531)", GroupsConfig{"temperature": {Enabled: true, Rows: []RowValue{{"subsystem": 1}}}}},
+		{"故障码 253 条(表17:0~252)", GroupsConfig{"alarm": {Enabled: true, Rows: []RowValue{{"batteryFaults": faults}}}}},
+	}
+	for _, c := range cases {
+		if _, err := AssembleRealtime(c.cfg, time.Now()); err == nil {
+			t.Errorf("%s: 应返回错误", c.name)
+		}
+	}
 }
 
 // TestAlarmBoolSettersReflect 锁定反射写入口径:两版已知字段均可写入,

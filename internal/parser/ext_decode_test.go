@@ -242,7 +242,7 @@ func TestParseWithPackVersionMismatch(t *testing.T) {
 // 并记录异常字节区间(Issues)供字节视图微红高亮。
 func TestParseWithPackUnitMismatch(t *testing.T) {
 	pack := parserTestPack()
-	// 定义 9 字节固定宽(u8+u16+i8+bits+bytes2+tail),只发 5 字节 → 尾部字段短缺
+	// 固定字段 7 字节(u8+u16+i8+bits+bytes2)+ tail,只发 5 字节 → 序列号/尾部短缺
 	payload := append([]byte{0x1A, 0x09, 0x03, 0x0B, 0x10, 0x1E}, 0x80, 0x00, 0x05, 0x58, 0x00, 0x7B, 0xB0, 0x01)
 
 	r, err := ParseWithPack(buildRealtimeFrame(payload), pack)
@@ -263,7 +263,8 @@ func TestParseWithPackUnitMismatch(t *testing.T) {
 	if otherWarns != 0 {
 		t.Fatalf("不应有其他告警: %v", r.Warnings)
 	}
-	if !strings.Contains(r.Warnings[0], "1 个字段未解析:序列号") {
+	// 修复后:空 tail 不计为已解析字段,少 2 字节 → 恰好 2 个未解析字段
+	if !strings.Contains(r.Warnings[0], "2 个字段未解析:序列号、尾部") {
 		t.Errorf("汇总告警应列出未解析字段: %q", r.Warnings[0])
 	}
 	if len(r.Issues) != 1 {

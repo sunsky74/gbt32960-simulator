@@ -4,6 +4,14 @@ import { store, showToast } from '../state'
 import { ConsoleService, type ConsoleEvent, type DownlinkInfo } from '../api/backend'
 import * as MessageService from '../../wailsjs/go/bridge/MessageService'
 import { engine } from '../../wailsjs/go/models'
+import { cfg } from '../composables/useConnConfig'
+import {
+  answerHint,
+  answerInputKind,
+  defaultAnswerValue,
+  encodeAnswerValue,
+  type AnswerInputKind,
+} from '../composables/paramAnswer'
 import JsonTree from './JsonTree.vue'
 
 const listEl = ref<HTMLElement | null>(null)
@@ -81,39 +89,71 @@ function downlinkSummary(e: ConsoleEvent): string {
 
 /* ---------------- 应答弹窗(标准 0x80/0x81/0x82) ---------------- */
 
+// 一行待填参数:id + 协议定义(无定义则自由 hex)+ 输入形态 + 当前值(十进制/hex 字符串)
+interface ParamAnswerRow {
+  id: number
+  spec?: engine.ParamSpec
+  kind: AnswerInputKind
+  value: string
+  hint: string
+}
+
 const respondModal = reactive({
   open: false,
   downlink: null as DownlinkInfo | null,
   respCode: 1,
-  paramRows: [] as Array<{ id: number; type: 'u8' | 'u16' | 'u32' | 'hex'; value: string }>,
+  paramRows: [] as ParamAnswerRow[],
+  respCodeOptions: [] as engine.ResponseCode[],
 })
 
-function openRespond(e: ConsoleEvent) {
+// 协议元数据按版本缓存;打开弹窗时按当前 cfg.version 懒加载,切版本后自然取新键
+const paramSpecCache = new Map<string, engine.ParamSpec[]>()
+const respCodeCache = new Map<string, engine.ResponseCode[]>()
+
+async function loadParamSpecs(version: string): Promise<engine.ParamSpec[]> {
+  const cached = paramSpecCache.get(version)
+  if (cached) return cached
+  try {
+    const specs = await ConsoleService.GetParamSpecs(version)
+    paramSpecCache.set(version, specs)
+    return specs
+  } catch (e) {
+    showToast('加载参数定义失败: ' + String(e))
+    return []
+  }
+}
+
+async function loadRespCodes(version: string): Promise<engine.ResponseCode[]> {
+  const cached = respCodeCache.get(version)
+  if (cached) return cached
+  try {
+    const codes = await ConsoleService.GetResponseCodes(version)
+    respCodeCache.set(version, codes)
+    return codes
+  } catch (e) {
+    showToast('加载应答码失败: ' + String(e))
+    return []
+  }
+}
+
+async function openRespond(e: ConsoleEvent) {
   const d = e.downlink
   if (!d) return
   respondModal.downlink = d
-  respondModal.respCode = 1
-  respondModal.paramRows = (d.paramIds ?? []).map((id) => ({ id, type: 'u16', value: '0' }))
   respondModal.open = true
-}
-
-function valueToHex(type: string, v: string): string {
-  const n = Number(v)
-  if (Number.isNaN(n)) throw new Error(`值不是数字: ${v}`)
-  switch (type) {
-    case 'u8':
-      if (n < 0 || n > 255) throw new Error(`u8 范围 0~255`)
-      return n.toString(16).padStart(2, '0')
-    case 'u16':
-      if (n < 0 || n > 65535) throw new Error(`u16 范围 0~65535`)
-      return n.toString(16).padStart(4, '0')
-    case 'u32':
-      if (n < 0 || n > 4294967295) throw new Error(`u32 范围 0~4294967295`)
-      return n.toString(16).padStart(8, '0')
-    default:
-      if (!/^[0-9a-fA-F]*$/.test(v)) throw new Error(`hex 值非法`)
-      return v
+  const version = cfg.version || '2016'
+  if (d.cmd === 0x80) {
+    const specs = await loadParamSpecs(version)
+    respondModal.paramRows = (d.paramIds ?? []).map((id) => {
+      const spec = specs.find((s) => s.id === id)
+      return { id, spec, kind: answerInputKind(spec), value: defaultAnswerValue(spec), hint: answerHint(spec) }
+    })
+  } else {
+    respondModal.paramRows = []
   }
+  const codes = await loadRespCodes(version)
+  respondModal.respCodeOptions = codes
+  respondModal.respCode = codes[0]?.code ?? 1
 }
 
 async function sendRespond() {
@@ -124,7 +164,7 @@ async function sendRespond() {
       const rows = respondModal.paramRows.map((r) => {
         const row = new engine.ParamResponseRow()
         row.id = r.id
-        row.hex = valueToHex(r.type, r.value)
+        row.hex = encodeAnswerValue(r.spec, r.value)
         return row
       })
       await MessageService.RespondParamQuery(rows, respondModal.respCode)
@@ -240,22 +280,24 @@ async function clearConsole() {
         <p class="modal-hint">平台查询了 {{ respondModal.paramRows.length }} 个参数,填写参数值:</p>
         <div class="param-rows">
           <div v-for="(row, ri) in respondModal.paramRows" :key="ri" class="param-row">
-            <span class="param-id">0x{{ row.id.toString(16) }}</span>
+            <div class="param-head">
+              <span class="param-id">0x{{ row.id.toString(16).padStart(2, '0').toUpperCase() }}</span>
+              <span v-if="row.spec?.name" class="param-name">{{ row.spec.name }}</span>
+            </div>
             <a-select
-              v-model:value="row.type"
-              size="small"
-              :options="[
-                { value: 'u8', label: 'u8' },
-                { value: 'u16', label: 'u16' },
-                { value: 'u32', label: 'u32' },
-                { value: 'hex', label: 'hex' },
-              ]"
-            />
-            <a-input
+              v-if="row.kind === 'select'"
               v-model:value="row.value"
               size="small"
-              :placeholder="row.type === 'hex' ? '如 00ff' : '十进制数值'"
+              :options="(row.spec?.options ?? []).map((o) => ({ value: String(o.value), label: o.label }))"
             />
+            <a-input
+              v-else-if="row.kind === 'number'"
+              v-model:value="row.value"
+              size="small"
+              placeholder="十进制数值"
+            />
+            <a-input v-else v-model:value="row.value" size="small" placeholder="hex,如 00ff" />
+            <div v-if="row.hint" class="param-hint">{{ row.hint }}</div>
           </div>
         </div>
       </template>
@@ -264,9 +306,15 @@ async function clearConsole() {
       </template>
       <div class="respond-code">
         <span class="toolbar-label">应答码</span>
-        <a-radio-group v-model:value="respondModal.respCode" button-style="solid" size="small">
-          <a-radio-button :value="1">0x01 成功</a-radio-button>
-          <a-radio-button :value="2">0x02 错误</a-radio-button>
+        <a-radio-group
+          v-model:value="respondModal.respCode"
+          class="resp-code-group"
+          button-style="solid"
+          size="small"
+        >
+          <a-radio-button v-for="c in respondModal.respCodeOptions" :key="c.code" :value="c.code">
+            0x{{ c.code.toString(16).padStart(2, '0').toUpperCase() }} {{ c.label }}
+          </a-radio-button>
         </a-radio-group>
       </div>
     </a-modal>
@@ -344,10 +392,15 @@ async function clearConsole() {
 }
 
 .param-row {
-  display: grid;
-  grid-template-columns: 56px 90px 1fr;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.param-head {
+  display: flex;
+  align-items: baseline;
   gap: 8px;
-  align-items: center;
 }
 
 .param-id {
@@ -356,11 +409,31 @@ async function clearConsole() {
   font-variant-numeric: tabular-nums;
 }
 
+.param-name {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.param-hint {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .respond-code {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+/* 2025 应答码有 7 项,超出弹窗宽度时换行而非撑破 */
+.resp-code-group {
+  display: flex;
+  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
 }
 
 .format-group {

@@ -80,6 +80,31 @@ func TestDefaultGroupsExtDefaults(t *testing.T) {
 	}
 }
 
+func TestDefaultGroupsUseFieldMin(t *testing.T) {
+	// 默认序号/编号取字段 Min(文档下限 1);下限为 1 的数组预置 1 个元素
+	rt := newExtRT(t, false)
+	ms := NewMessageService(rt)
+	g16 := ms.DefaultGroups("2016").ToMap()
+	if seq, _ := g16["motor"].Rows[0]["seq"].(int); seq != 1 {
+		t.Errorf("2016 motor seq 默认 = %v, want 1", g16["motor"].Rows[0]["seq"])
+	}
+	if start, _ := g16["voltage"].Rows[0]["frameStartSeq"].(int); start != 1 {
+		t.Errorf("2016 voltage frameStartSeq 默认 = %v, want 1", g16["voltage"].Rows[0]["frameStartSeq"])
+	}
+	if volts, ok := g16["voltage"].Rows[0]["batteryVoltages"].([]any); !ok || len(volts) != 1 {
+		t.Errorf("2016 电压数组默认应预置 1 个元素, got %+v", g16["voltage"].Rows[0]["batteryVoltages"])
+	}
+	g25 := ms.DefaultGroups("2025").ToMap()
+	if seq, _ := g25["minparallel"].Rows[0]["batteryPackSeq"].(int); seq != 1 {
+		t.Errorf("2025 minparallel batteryPackSeq 默认 = %v, want 1", g25["minparallel"].Rows[0]["batteryPackSeq"])
+	}
+	// 默认配置必须可直接组装(计数校验不得与默认值冲突)
+	rt.SetGroups(g16)
+	if _, err := ms.assembleBody(time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)); err != nil {
+		t.Fatalf("2016 默认组组装失败: %v", err)
+	}
+}
+
 func TestGetGroupsFiltersStaleKeys(t *testing.T) {
 	rt := newExtRT(t, false) // 已解绑
 	// 注意顺序:NewMessageService 构造会读用户目录 message.json 并 SetGroups,

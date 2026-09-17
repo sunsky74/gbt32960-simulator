@@ -26,6 +26,10 @@ export function Sessions() {
   return window['go']['bridge']['ServerService']['Sessions']();
 }
 
+export function SetSignatureVerifier(arg1) {
+  return window['go']['bridge']['ServerService']['SetSignatureVerifier'](arg1);
+}
+
 export function Start(arg1, arg2) {
   return window['go']['bridge']['ServerService']['Start'](arg1, arg2);
 }

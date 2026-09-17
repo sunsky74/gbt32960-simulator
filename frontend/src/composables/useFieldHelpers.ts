@@ -12,7 +12,8 @@ export function defaultFor(f: FieldSchema): unknown {
       return bits
     }
     case 'array_float':
-      return []
+      // 表12/14/25:"总数"下限为 1 的数组预置一个元素(与 Go defaultFieldValue 对齐)
+      return f.minItems ? [0] : []
     case 'bytes':
       return f.length ? '00'.repeat(f.length) : ''
     case 'int':

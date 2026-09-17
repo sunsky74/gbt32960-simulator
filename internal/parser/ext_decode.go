@@ -54,6 +54,7 @@ func customUnitName(code byte, unit *ext.AppendUnit) string {
 // 并经 addIssue 记录异常区间供字节视图高亮。
 func parseCustomUnitBody(w *walker, code byte, unit *ext.AppendUnit, addIssue func(ByteIssue)) {
 	name := customUnitName(code, unit)
+	w.pending = name + " 长度字段" // 截断告警须指认单元长度字段,而非上一字段
 	lenB := w.take(2)
 	if lenB == nil {
 		return
@@ -154,6 +155,11 @@ func extField(w *walker, f ext.FieldSpec) bool {
 		}
 		w.emit(f.Label, "bytes", b, utils.BytesToHex(b), "-", "-", f.Unit)
 	case "tail":
+		if w.remain() == 0 {
+			// 空 tail 未读到任何字节,不计为已解析字段,
+			// 否则缺口对账会出现"少 N 字节却只列 N-1 个未解析字段"
+			return false
+		}
 		b := w.take(w.remain())
 		if b == nil {
 			return false

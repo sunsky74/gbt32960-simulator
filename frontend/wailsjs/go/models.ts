@@ -29,6 +29,9 @@ export namespace bridge {
 	    platformVin?: string;
 	    platformUser?: string;
 	    platformPass?: string;
+	    signatureType: number;
+	    signatureR?: string;
+	    signatureS?: string;
 	    extensionPack?: string;
 	    tls: tlsconf.Config;
 	
@@ -54,6 +57,9 @@ export namespace bridge {
 	        this.platformVin = source["platformVin"];
 	        this.platformUser = source["platformUser"];
 	        this.platformPass = source["platformPass"];
+	        this.signatureType = source["signatureType"];
+	        this.signatureR = source["signatureR"];
+	        this.signatureS = source["signatureS"];
 	        this.extensionPack = source["extensionPack"];
 	        this.tls = this.convertValues(source["tls"], tlsconf.Config);
 	    }
@@ -297,6 +303,20 @@ export namespace bridge {
 
 export namespace engine {
 	
+	export class ParamOption {
+	    value: number;
+	    label: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ParamOption(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.value = source["value"];
+	        this.label = source["label"];
+	    }
+	}
 	export class ParamResponseRow {
 	    id: number;
 	    hex: string;
@@ -309,6 +329,64 @@ export namespace engine {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.hex = source["hex"];
+	    }
+	}
+	export class ParamSpec {
+	    id: number;
+	    name: string;
+	    type: string;
+	    length: number;
+	    rawMin?: number;
+	    rawMax?: number;
+	    note?: string;
+	    options?: ParamOption[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ParamSpec(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.type = source["type"];
+	        this.length = source["length"];
+	        this.rawMin = source["rawMin"];
+	        this.rawMax = source["rawMax"];
+	        this.note = source["note"];
+	        this.options = this.convertValues(source["options"], ParamOption);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ResponseCode {
+	    code: number;
+	    label: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ResponseCode(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.code = source["code"];
+	        this.label = source["label"];
 	    }
 	}
 
@@ -457,6 +535,7 @@ export namespace schema {
 	    enum?: EnumDef[];
 	    bits?: BitDef[];
 	    itemLabel?: string;
+	    minItems?: number;
 	    scaleNote?: string;
 	    length?: number;
 	
@@ -475,6 +554,7 @@ export namespace schema {
 	        this.enum = this.convertValues(source["enum"], EnumDef);
 	        this.bits = this.convertValues(source["bits"], BitDef);
 	        this.itemLabel = source["itemLabel"];
+	        this.minItems = source["minItems"];
 	        this.scaleNote = source["scaleNote"];
 	        this.length = source["length"];
 	    }

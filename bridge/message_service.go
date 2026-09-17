@@ -205,8 +205,16 @@ func defaultFieldValue(f schema.FieldSchema) any {
 		}
 		return bits
 	case "array_float":
+		// 表12/14/25:"总数"下限为 1 的数组预置一个元素,默认报文不至于低于文档下限
+		if f.MinItems > 0 {
+			return []any{float64(0)}
+		}
 		return []any{}
 	case "int":
+		// 与前端 defaultFor 对齐:序号/编号类字段默认取 Min(文档下限,多为 1),避免 0 越界
+		if f.Min != nil {
+			return int(*f.Min)
+		}
 		return 0
 	default:
 		return float64(0)

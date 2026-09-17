@@ -2,7 +2,11 @@
 // 接收车端连接、自动应答、事件推送。与 internal/engine(客户端引擎)零耦合。
 package servermode
 
-import "time"
+import (
+	"time"
+
+	"gbt32960-simulator/internal/signature"
+)
 
 type FrameKind string
 
@@ -86,6 +90,8 @@ type Config struct {
 	LogLines    int
 	IdleEnabled bool
 	IdleTimeout time.Duration
+	// SignatureVerifier 2025 车端签名(表8)的外部验证器;nil = 只解码不校验。
+	SignatureVerifier signature.Verifier
 }
 
 func DefaultConfig(addr string) Config {

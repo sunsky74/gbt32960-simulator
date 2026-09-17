@@ -3,6 +3,7 @@ package bridge
 import (
 	"context"
 	"crypto/tls"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"strings"
@@ -37,6 +38,12 @@ type ConnectionConfig struct {
 	PlatformUser string `json:"platformUser,omitempty"` // 平台账号(协议定长 12 字节,自动填充)
 	PlatformPass string `json:"platformPass,omitempty"` // 平台密码(协议定长 20 字节,自动填充)
 
+	// 2025 车端签名(表8):0=不带;1=SM2;2=RSA;3=ECC。
+	// R/S 为 HEX 串,由外部签名工具用设备私钥生成——模拟器只按规范编码,不做签名运算。
+	SignatureType int    `json:"signatureType"`
+	SignatureR    string `json:"signatureR,omitempty"`
+	SignatureS    string `json:"signatureS,omitempty"`
+
 	ExtensionPack string         `json:"extensionPack,omitempty"` // 绑定的扩展包 id(空=不使用)
 	TLS           tlsconf.Config `json:"tls"`
 }
@@ -59,6 +66,7 @@ func DefaultConnectionConfig() *ConnectionConfig {
 		AutoClockSync:  true,
 		AutoReconnect:  false,
 		ReportInterval: 10,
+		SignatureType:  1, // 2025 规范要求携带签名段;R/S 留空待外部签名工具填充(0=不带)
 	}
 }
 
@@ -366,6 +374,8 @@ func validateConn(cfg *ConnectionConfig) error {
 	cfg.ICCID = strings.TrimSpace(cfg.ICCID)
 	cfg.PlatformVIN = strings.TrimSpace(cfg.PlatformVIN)
 	cfg.PlatformUser = strings.TrimSpace(cfg.PlatformUser)
+	cfg.SignatureR = strings.TrimSpace(cfg.SignatureR)
+	cfg.SignatureS = strings.TrimSpace(cfg.SignatureS)
 	if cfg.Host == "" {
 		return fmt.Errorf("IP 地址不能为空")
 	}
@@ -381,6 +391,14 @@ func validateConn(cfg *ConnectionConfig) error {
 	if cfg.Version != "2016" && cfg.Version != "2025" {
 		return fmt.Errorf("协议版本必须为 2016 或 2025")
 	}
+	// 2025 车辆登入(表6):动力蓄电池包编码每项 24 字节;超长库编码器会直接报错,提前拦截
+	if cfg.Version == "2025" {
+		for i, code := range cfg.SubsystemCodes {
+			if len(code) > 24 {
+				return fmt.Errorf("2025 版可充电储能子系统编码不能超过 24 字节(第 %d 项)", i+1)
+			}
+		}
+	}
 	if cfg.PlatformMode {
 		if len(cfg.PlatformVIN) != 17 {
 			return fmt.Errorf("平台标识 VIN 必须为 17 位(由目标平台颁发),当前 %d 位", len(cfg.PlatformVIN))
@@ -394,6 +412,16 @@ func validateConn(cfg *ConnectionConfig) error {
 		if len(cfg.PlatformPass) > 20 {
 			return fmt.Errorf("平台密码最长 20 位,当前 %d 位", len(cfg.PlatformPass))
 		}
+	}
+	// 2025 车端签名(表8):类型 0~3;R/S 为 HEX(空串合法,长度 0 的签名值可编码)
+	if cfg.SignatureType < 0 || cfg.SignatureType > 3 {
+		return fmt.Errorf("签名类型非法: %d (0=不带, 1=SM2, 2=RSA, 3=ECC)", cfg.SignatureType)
+	}
+	if _, err := hex.DecodeString(cfg.SignatureR); err != nil {
+		return fmt.Errorf("签名 R 值须为 HEX: %v", err)
+	}
+	if _, err := hex.DecodeString(cfg.SignatureS); err != nil {
+		return fmt.Errorf("签名 S 值须为 HEX: %v", err)
 	}
 	return nil
 }

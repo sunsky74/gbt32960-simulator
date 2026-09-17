@@ -79,10 +79,15 @@ type Client struct {
 	opts Options
 	bus  *Bus
 
-	mu     sync.Mutex
-	state  State
-	conn   net.Conn
-	serial uint16
+	mu    sync.Mutex
+	state State
+	conn  net.Conn
+	// serialByVIN 各 VIN 的登入流水号计数器:同一链接内按 VIN 独立递增,从 1 起
+	// (表6/表29「从 1 开始循环累加」)。
+	serialByVIN map[string]uint16
+	// loginSerialByVIN 各 VIN 当次登入使用的流水号:登出必须复用同一值
+	// (表20/表28/表22/表30「登出流水号与当次登入流水号一致」)。
+	loginSerialByVIN map[string]uint16
 
 	writeMu sync.Mutex
 	cancel  context.CancelFunc
@@ -130,11 +135,46 @@ func (c *Client) setState(s State) {
 // Bus 返回事件总线。
 func (c *Client) Bus() *Bus { return c.bus }
 
-func (c *Client) nextSerial() uint16 {
+// resetLoginSerials 新链接建立时清空流水号账本:同一链接内按 VIN 从 1 起递增。
+func (c *Client) resetLoginSerials() {
+	c.mu.Lock()
+	c.serialByVIN = make(map[string]uint16)
+	c.loginSerialByVIN = make(map[string]uint16)
+	c.mu.Unlock()
+}
+
+// nextLoginSerial 分配指定 VIN 的下一次登入流水号并记为「当次登入流水号」。
+// 同一链接内同一 VIN 每次登入 +1(含重试尝试);登出复用该值。
+func (c *Client) nextLoginSerial(vin string) uint16 {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.serial++
-	return c.serial
+	c.ensureSerialMaps()
+	c.serialByVIN[vin]++
+	c.loginSerialByVIN[vin] = c.serialByVIN[vin]
+	return c.serialByVIN[vin]
+}
+
+// currentLoginSerial 返回指定 VIN 当次登入流水号供登出使用;该 VIN 从未登入过时
+// 分配一个,保证登出报文仍带可用流水号。
+func (c *Client) currentLoginSerial(vin string) uint16 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.ensureSerialMaps()
+	if c.loginSerialByVIN[vin] == 0 {
+		c.serialByVIN[vin]++
+		c.loginSerialByVIN[vin] = c.serialByVIN[vin]
+	}
+	return c.loginSerialByVIN[vin]
+}
+
+// ensureSerialMaps 惰性初始化流水号账本(NewClient 后未连接即直接调用亦可用)。
+func (c *Client) ensureSerialMaps() {
+	if c.serialByVIN == nil {
+		c.serialByVIN = make(map[string]uint16)
+	}
+	if c.loginSerialByVIN == nil {
+		c.loginSerialByVIN = make(map[string]uint16)
+	}
 }
 
 // ---------------------------------------------------------------- 连接生命周期

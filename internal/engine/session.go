@@ -89,6 +89,8 @@ func (c *Client) endSession(id uint64) {
 func (c *Client) doConnect(lifeCtx context.Context) error {
 	// 防御性清理上一次会话残留(无活动会话时为空操作)
 	c.endSession(c.currentSessID())
+	// 新链接:登入流水号账本清零(同一链接内按 VIN 从 1 递增;表6/表29)
+	c.resetLoginSerials()
 
 	c.setState(StateConnecting)
 	c.bus.Emit(Event{Kind: EventConn, Message: fmt.Sprintf("正在连接 %s:%d ...", c.opts.Host, c.opts.Port)})

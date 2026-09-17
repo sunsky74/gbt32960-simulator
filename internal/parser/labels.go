@@ -6,7 +6,9 @@ import (
 )
 
 // 枚举标签:parser 仅解析 V2016 帧,标签一律按 GB/T 32960.3-2016 表 9/表 11/附录 A.1。
-// 值优先取自 gb32960-go types 常量;两版定义不同处(充电状态/挡位)按 2016 文档用字面量。
+// 值优先取自 gb32960-go types 常量;充电状态/挡位例外:types.ChargeState* 为
+// "未充电/充电中/充电完成" 三值、GearPositionEnum 为 P/R/N/D/其他,与两版文档均不符,
+// 故按文档用字面量。
 
 var opStateLabels = map[byte]string{
 	byte(types.OpStateOn): "启动", byte(types.OpStateOff): "熄火", byte(types.OpStateOther): "其他",
@@ -14,7 +16,7 @@ var opStateLabels = map[byte]string{
 }
 
 // 2016 表 9:0x01 停车充电;0x02 行驶充电;0x03 未充电;0x04 充电完成。
-// types.ChargeState* 常量是 2025 版语义命名(0x01 未充电…),不适用于 2016,故用字面量。
+// types.ChargeState* 常量(0x01 未充电/0x02 充电中/0x03 充电完成)与 2016、2025 两版文档均不一致,故用字面量。
 var chargeStateLabels = map[byte]string{
 	0x01: "停车充电", 0x02: "行驶充电", 0x03: "未充电", 0x04: "充电完成",
 	0xFE: "异常", 0xFF: "无效",
@@ -31,7 +33,7 @@ var dcLabels = map[byte]string{
 }
 
 // 2016 附录 A.1 挡位状态位 bit3~0:0x0 空挡;0x1~0x6 = 1~6 挡;0xD 倒挡;0xE 自动D;0xF 停车P。
-// types.GearPositionEnum(P=1/R=2/N=3/D=4)是 2025 版定义,不适用于 2016,故用字面量。
+// types.GearPositionEnum(P=1/R=2/N=3/D=4)与两版文档 A.1 挡位码均不一致,故用字面量。
 var gearLabels = map[byte]string{
 	0x00: "空挡", 0x01: "1挡", 0x02: "2挡", 0x03: "3挡",
 	0x04: "4挡", 0x05: "5挡", 0x06: "6挡",

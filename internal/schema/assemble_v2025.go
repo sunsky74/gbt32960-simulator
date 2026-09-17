@@ -65,10 +65,11 @@ func AssembleRealtimeV2025(cfg GroupsConfig, at time.Time) (*mdl.RealTimeV2025Da
 		lon := getFloat(g.Rows[0], "longitude", 0)
 		lat := getFloat(g.Rows[0], "latitude", 0)
 		m.LocationData = &mdlrt.LocationV2025Data{
-			Valid:            getBool(g.Rows[0], "valid", true),
-			NorthernFlag:     lat >= 0,
-			EastFlag:         lon >= 0,
-			CoordinateType:   0,
+			Valid:        getBool(g.Rows[0], "valid", true),
+			NorthernFlag: lat >= 0,
+			EastFlag:     lon >= 0,
+			// 表21:坐标系 0x01 WGS84 / 0x02 GCJ02 / 0x03 其他;未配置默认 WGS84
+			CoordinateType:   byte(getInt(g.Rows[0], "coordinateSystem", 1)),
 			OriginLongitude:  lon,
 			OriginLatitude:   lat,
 			ConvertLongitude: lon,
@@ -97,6 +98,13 @@ func AssembleRealtimeV2025(cfg GroupsConfig, at time.Time) (*mdl.RealTimeV2025Da
 		m.BatteryPackTemperatures = l
 	}
 	if g, ok := cfg[GroupFCStack]; ok && g.Enabled {
+		// 表18:燃料电池电堆个数 1~253
+		if len(g.Rows) == 0 {
+			return nil, fmt.Errorf("燃料电池电堆: 至少需要一行数据")
+		}
+		if len(g.Rows) > 253 {
+			return nil, fmt.Errorf("燃料电池电堆个数超限: %d (1~253)", len(g.Rows))
+		}
 		l := &mdlrt.FuelCellStackDataList{StackCount: len(g.Rows)}
 		for _, r := range g.Rows {
 			l.Items = append(l.Items, mdlrt.FuelCellStackData{
@@ -126,6 +134,13 @@ func AssembleRealtimeV2025(cfg GroupsConfig, at time.Time) (*mdl.RealTimeV2025Da
 		}
 		m.SuperCapacitorData.CapacitorCount = len(m.SuperCapacitorData.CapacitorVoltages)
 		m.SuperCapacitorData.TemperatureProbeCount = len(m.SuperCapacitorData.ProbeTemperatures)
+		// 表25:单体总数与温度探针总数 1~65531,总数即数组长度
+		if m.SuperCapacitorData.CapacitorCount == 0 {
+			return nil, fmt.Errorf("超级电容单体电压为空 (单体总数需 1~65531)")
+		}
+		if m.SuperCapacitorData.TemperatureProbeCount == 0 {
+			return nil, fmt.Errorf("超级电容温度探针为空 (探针总数需 1~65531)")
+		}
 	}
 	if g, ok := cfg[GroupSuperCapExtremum]; ok && g.Enabled && len(g.Rows) > 0 {
 		m.SuperCapacitorExtremumData = &mdlrt.SuperCapacitorExtremumData{
@@ -147,11 +162,20 @@ func AssembleRealtimeV2025(cfg GroupsConfig, at time.Time) (*mdl.RealTimeV2025Da
 }
 
 func assembleVehicleV2025(r RowValue) (*mdlrt16.VehicleData, error) {
+	// 附录 A.1:挡位字节 bit3~0 为挡位码
+	// (0x0 空挡,0x1~0x6 = 1~6 挡,0xD 倒挡,0xE 自动D,0xF 停车P),
+	// bit4 制动力,bit5 驱动力,bit6 预留(恒 0),bit7 挡位无效(1=无效);
+	// gearEnum 的枚举值即挡位码,此处校验合法集合。
 	gearCode := getInt(r, "gear", 1)
-	if gearCode < 1 || gearCode > 5 {
-		return nil, fmt.Errorf("档位取值非法: %d", gearCode)
+	switch gearCode {
+	case 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x0D, 0x0E, 0x0F:
+	default:
+		return nil, fmt.Errorf("档位取值非法: 0x%02X", gearCode)
 	}
 	var origin byte
+	if getBool(r, "gearInvalid", false) {
+		origin |= 1 << 7
+	}
 	if getBool(r, "drivingForce", false) {
 		origin |= 1 << 5
 	}
@@ -176,12 +200,18 @@ func assembleVehicleV2025(r RowValue) (*mdlrt16.VehicleData, error) {
 		SOC:            soc,
 		DC:             types.DCState(getInt(r, "dc", 1)),
 		GearPosition:   mdlrt16.GearPosition{Origin: origin, GP: types.GearPositionEnum(gearCode)},
+		// 表10:高压对地绝缘电阻(WORD,0~60000 kΩ)
+		Insulance: getInt(r, "insulance", 0),
 	}, nil
 }
 
 func assembleMotorsV2025(rows []RowValue) (*mdlrt.MotorDataV2025List, error) {
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("至少需要一行电机数据")
+	}
+	// 表15:驱动电机个数 1~253
+	if len(rows) > 253 {
+		return nil, fmt.Errorf("驱动电机个数超限: %d (1~253)", len(rows))
 	}
 	list := &mdlrt.MotorDataV2025List{MotorCount: len(rows)}
 	for i, r := range rows {
@@ -222,6 +252,37 @@ func assembleAlarmV2025(r RowValue) (*mdlrt.AlarmV2025Data, error) {
 	a.MotorFaultNum = len(a.MotorFaultDatas)
 	a.EngineFaultNum = len(a.EngineFaultDatas)
 	a.OtherFaultNum = len(a.OtherFaultDatas)
+	// 表23:N1~N4 有效值 0~253(0xFE/0xFF 为异常/无效哨兵,不可作为个数上线)
+	for _, c := range []struct {
+		name string
+		n    int
+	}{
+		{"可充电储能装置故障", a.BatteryFaultNum},
+		{"驱动电机故障", a.MotorFaultNum},
+		{"发动机故障", a.EngineFaultNum},
+		{"其他故障", a.OtherFaultNum},
+	} {
+		if c.n > 253 {
+			return nil, fmt.Errorf("%s总数超限: %d (0~253)", c.name, c.n)
+		}
+	}
+
+	// 表23(续):通用报警故障等级列表 2×N5 = (标志位序号, 等级) 对;
+	// 位序号与等级两数组按下标一一配对合成 N5 条目。
+	seqs := getFloatArray(r, "commonAlertSeqs")
+	levels := getFloatArray(r, "commonAlertLevels")
+	if len(seqs) != len(levels) {
+		return nil, fmt.Errorf("通用报警位序号(%d)与等级(%d)数量应一致", len(seqs), len(levels))
+	}
+	if len(seqs) > 253 {
+		return nil, fmt.Errorf("通用报警故障总数超限: %d (0~253)", len(seqs))
+	}
+	for i := range seqs {
+		a.CommonAlertDatas = append(a.CommonAlertDatas, mdlrt.CommonAlertData{
+			Seq: int(seqs[i]), Level: int(levels[i]),
+		})
+	}
+	a.CommonAlertNum = len(a.CommonAlertDatas)
 
 	bitsVal, _ := r["bits"].(map[string]any)
 	for i, name := range v2025AlarmBoolFields {
@@ -246,11 +307,20 @@ func assembleMinParallel(rows []RowValue) (*mdlrt.MinParallelCellVoltageList, er
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("至少需要一行电池包数据")
 	}
+	// 表11:动力蓄电池包个数 0~50
+	if len(rows) > 50 {
+		return nil, fmt.Errorf("动力蓄电池包个数超限: %d (0~50)", len(rows))
+	}
 	list := &mdlrt.MinParallelCellVoltageList{BatteryPackCount: len(rows)}
 	for _, r := range rows {
+		seq := getInt(r, "batteryPackSeq", 1)
 		volts := getFloatArray(r, "batteryVoltages")
+		// 表12:最小并联单元总数 1~65531,总数即数组长度
+		if len(volts) == 0 {
+			return nil, fmt.Errorf("电池包 %d 的最小并联单元电压为空 (总数需 1~65531)", seq)
+		}
 		list.Items = append(list.Items, mdlrt.MinParallelCellVoltage{
-			BatteryPackSeq:   getInt(r, "batteryPackSeq", 1),
+			BatteryPackSeq:   seq,
 			Voltage:          getFloat(r, "voltage", 0),
 			Current:          getFloat(r, "current", 0),
 			MinParallelUnits: len(volts),
@@ -264,11 +334,20 @@ func assembleBatteryTemp(rows []RowValue) (*mdlrt.BatteryTempList, error) {
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("至少需要一行电池包数据")
 	}
+	// 表13:动力蓄电池包个数 0~50
+	if len(rows) > 50 {
+		return nil, fmt.Errorf("动力蓄电池包个数超限: %d (0~50)", len(rows))
+	}
 	list := &mdlrt.BatteryTempList{BatteryPackCount: len(rows)}
 	for _, r := range rows {
+		seq := getInt(r, "batteryPackSeq", 1)
 		probes := getFloatArray(r, "probeTemps")
+		// 表14:温度探针个数 1~65531,个数即数组长度
+		if len(probes) == 0 {
+			return nil, fmt.Errorf("电池包 %d 的温度探针为空 (个数需 1~65531)", seq)
+		}
 		list.Items = append(list.Items, mdlrt.BatteryTemp{
-			BatteryPackSeq:        getInt(r, "batteryPackSeq", 1),
+			BatteryPackSeq:        seq,
 			TemperatureProbeCount: len(probes),
 			ProbeTemperatures:     probes,
 		})

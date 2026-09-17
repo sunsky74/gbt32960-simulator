@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"gbt32960-simulator/internal/engine"
+	"github.com/sunsky74/gb32960/api"
 )
 
 func sampleEvents() []engine.Event {
@@ -61,6 +62,23 @@ func TestFormatEventsCSVAndLog(t *testing.T) {
 	}
 	if !strings.Contains(string(jsonData), `"kind": "tx"`) {
 		t.Fatalf("json format wrong")
+	}
+}
+
+// TestConsoleServiceProtocolMetadata 参数定义表与应答码列表按版本分发,未知版本回落 2016。
+func TestConsoleServiceProtocolMetadata(t *testing.T) {
+	s := NewConsoleService(nil)
+	if got := s.GetParamSpecs("2025"); len(got) != len(engine.ParamSpecs(api.V2025)) {
+		t.Fatalf("2025 参数条目 = %d", len(got))
+	}
+	if got := s.GetResponseCodes("2025"); len(got) != 7 {
+		t.Fatalf("2025 应答码条目 = %d, want 7", len(got))
+	}
+	if got := s.GetResponseCodes("2016"); len(got) != 3 {
+		t.Fatalf("2016 应答码条目 = %d, want 3", len(got))
+	}
+	if got := s.GetResponseCodes("unknown"); len(got) != 3 {
+		t.Fatalf("未知版本应回落 2016, got %d", len(got))
 	}
 }
 

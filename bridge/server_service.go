@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"gbt32960-simulator/internal/servermode"
+	"gbt32960-simulator/internal/signature"
 	"gbt32960-simulator/internal/store"
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -39,9 +40,20 @@ type ServerService struct {
 	rt  *Runtime
 	// last 最近一次启动的表单配置(UpdateIdle 基于其副本回填持久化)
 	last ServerConfig
+	// sigVerifier 2025 车端签名验证器(外部注入;nil=只解码不校验)。
+	sigVerifier signature.Verifier
 }
 
 func NewServerService(rt *Runtime) *ServerService { return &ServerService{rt: rt} }
+
+// SetSignatureVerifier 注入 2025 车端签名(表8)验证器:接口或回调均可
+// (signature.VerifierFunc 可直接包装普通函数)。nil = 只解码签名不做校验。
+// 须在 Start 之前调用(Server 每次重建时读取)。
+func (s *ServerService) SetSignatureVerifier(v signature.Verifier) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sigVerifier = v
+}
 
 func (s *ServerService) emit(name string, data any) {
 	if s.ctx == nil {
@@ -114,6 +126,7 @@ func (s *ServerService) Start(cfg ServerConfig, force bool) (servermode.Status, 
 	base.MaxFrameBytes = cfg.MaxFrameBytes
 	base.LogLines = cfg.LogLines
 	base.MaxVinsPerConn = cfg.MaxVinsPerConn
+	base.SignatureVerifier = s.sigVerifier // 外部注入的车端签名验证器(可为 nil)
 	s.srv = servermode.New(base, servermode.Hooks{
 		OnStatus:  func(st servermode.Status) { s.emit("server:status", st) },
 		OnSession: func(e servermode.SessionEvent) { s.emit("server:session", e) },

@@ -3,7 +3,7 @@ module gbt32960-simulator
 go 1.25.0
 
 require (
-	github.com/sunsky74/gb32960 v0.1.0
+	github.com/sunsky74/gb32960 v0.1.1-0.20260917064818-09546b92d5f5
 	github.com/wailsapp/wails/v2 v2.15.0
 	github.com/xuri/excelize/v2 v2.11.0
 )

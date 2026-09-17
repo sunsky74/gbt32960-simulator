@@ -59,22 +59,34 @@ func ParseDownlink(cmd byte, payload []byte) *DownlinkInfo {
 	return nil
 }
 
+// parseParamQuery 解析 0x80 参数查询命令:表B.9/B.5 =
+// 参数查询时间(6B) + 参数总数 N(1B) + 参数 ID 列表(1×N)。
 func parseParamQuery(payload []byte) *DownlinkInfo {
 	info := &DownlinkInfo{Cmd: 0x80, Kind: "query"}
-	for _, b := range payload {
+	if len(payload) < 7 {
+		return info
+	}
+	count := int(payload[6])
+	ids := payload[7:]
+	if count > len(ids) {
+		count = len(ids)
+	}
+	for _, b := range ids[:count] {
 		info.ParamIDs = append(info.ParamIDs, int(b))
 	}
 	return info
 }
 
+// parseParamSetup 解析 0x81 参数设置命令:表B.13/B.9 =
+// 参数设置时间(6B) + 参数总数(1B) + 参数项列表(每项:参数 ID 1B + 值长度 2B + 值)。
 func parseParamSetup(payload []byte) *DownlinkInfo {
 	info := &DownlinkInfo{Cmd: 0x81, Kind: "setup"}
-	if len(payload) < 1 {
+	if len(payload) < 7 {
 		return info
 	}
-	count := int(payload[0])
-	pos := 1
-	for i := 0; i < count && pos+1 < len(payload); i++ {
+	count := int(payload[6])
+	pos := 7
+	for i := 0; i < count && pos+3 <= len(payload); i++ {
 		id := int(payload[pos])
 		vlen := int(payload[pos+1])<<8 | int(payload[pos+2])
 		pos += 3
@@ -149,13 +161,28 @@ func (r rawBody) Bytes() ([]byte, error)  { return r.b, nil }
 // NewRawBody 构造原始字节报文体。
 func NewRawBody(v api.GBTVersion, b []byte) model.MessageBody { return rawBody{v: v, b: b} }
 
-// BuildParamQueryResponse 组装 0x80 查询应答的数据单元:
-// 参数个数 u8 + (参数ID u8 + 参数值字节)×N。值长度由各行 hex 决定。
-func BuildParamQueryResponse(rows []ParamResponseRow) ([]byte, error) {
+// beanTimeBytes 按表5 编码 6 字节北京时间(年-2000/月/日/时/分/秒,十进制非 BCD;
+// 与库 BeanTime 线格式及 ext.EncodeBeanTime 一致,engine 不依赖 ext 故本地实现)。
+func beanTimeBytes(at time.Time) []byte {
+	y := at.Year() - 2000
+	if y < 0 {
+		y = 0
+	}
+	if y > 255 {
+		y = 255
+	}
+	return []byte{byte(y), byte(at.Month()), byte(at.Day()), byte(at.Hour()), byte(at.Minute()), byte(at.Second())}
+}
+
+// BuildParamQueryResponse 组装 0x80 查询应答的数据单元(表B.10/B.6):
+// 返回查询参数时间(6B) + 参数总数 u8 + (参数 ID u8 + 参数值字节)×N。
+// 值长度由各行 hex 决定;时间取响应时刻 at。
+func BuildParamQueryResponse(rows []ParamResponseRow, at time.Time) ([]byte, error) {
 	if len(rows) > 255 {
 		return nil, fmt.Errorf("参数行数超限: %d", len(rows))
 	}
 	w := utils.NewByteWriter()
+	w.WriteBytes(beanTimeBytes(at))
 	w.WriteUint8(byte(len(rows)))
 	for _, r := range rows {
 		val, err := hex.DecodeString(strings.TrimSpace(r.Hex))
@@ -217,7 +244,7 @@ func (c *Client) RespondRaw(cmd byte, respType types.ResponseType, payload []byt
 
 // RespondParamQuery 发送 0x80 参数查询应答。
 func (c *Client) RespondParamQuery(rows []ParamResponseRow, respType types.ResponseType) error {
-	payload, err := BuildParamQueryResponse(rows)
+	payload, err := BuildParamQueryResponse(rows, time.Now())
 	if err != nil {
 		return err
 	}

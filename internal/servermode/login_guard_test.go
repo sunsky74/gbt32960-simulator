@@ -39,10 +39,10 @@ func TestLoginGuardDirectConnRejectsRelogin(t *testing.T) {
 		t.Fatalf("首次登入应答 = %02X/%02X/%q", cmd, resp, vin)
 	}
 
-	// When 同连接换 VIN 再次 0x01 登入,Then 失败应答 + 重复登入告警,原状态不变
+	// When 同连接换 VIN 再次 0x01 登入,Then VIN重复应答(0x03) + 重复登入告警,原状态不变
 	sendReq(t, conn, vinA17, 0x01, nil)
-	if cmd, resp, vin := readAck(t, fr); cmd != 0x01 || resp != byte(types.ResponseFailed) || vin != vinA17 {
-		t.Fatalf("重复登入应答 = %02X/%02X/%q, want 01/02/%q", cmd, resp, vin, vinA17)
+	if cmd, resp, vin := readAck(t, fr); cmd != 0x01 || resp != byte(types.ResponseVINDup) || vin != vinA17 {
+		t.Fatalf("重复登入应答 = %02X/%02X/%q, want 01/03/%q", cmd, resp, vin, vinA17)
 	}
 	waitFor(t, time.Second, func() bool {
 		c.mu.Lock()
@@ -83,11 +83,11 @@ func TestLoginGuardPlatformVinsLimit(t *testing.T) {
 		}
 	}
 
-	// When 车辆 C 超限登入,Then 失败应答 + 指定告警,C 不注册
+	// When 车辆 C 超限登入,Then VIN重复应答(0x03) + 指定告警,C 不注册
 	const vinC17 = "CCCCCCCCCCCCCCCC3"
 	sendReq(t, conn, vinC17, 0x01, nil)
-	if cmd, resp, vin := readAck(t, fr); cmd != 0x01 || resp != byte(types.ResponseFailed) || vin != vinC17 {
-		t.Fatalf("超限登入应答 = %02X/%02X/%q, want 01/02/%q", cmd, resp, vin, vinC17)
+	if cmd, resp, vin := readAck(t, fr); cmd != 0x01 || resp != byte(types.ResponseVINDup) || vin != vinC17 {
+		t.Fatalf("超限登入应答 = %02X/%02X/%q, want 01/03/%q", cmd, resp, vin, vinC17)
 	}
 	waitFor(t, time.Second, func() bool {
 		c.mu.Lock()

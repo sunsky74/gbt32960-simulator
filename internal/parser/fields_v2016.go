@@ -23,6 +23,7 @@ func parsePayload(v api.GBTVersion, cmd byte, p []byte, pack *ext.Pack, warn war
 	w := &walker{p: p, warn: warn}
 	switch cmd {
 	case 0x01:
+		w.fixed = true
 		w.beanTime()
 		w.u16("登入流水号", "")
 		w.ascii(20, "ICCID", "")
@@ -32,6 +33,7 @@ func parsePayload(v api.GBTVersion, cmd byte, p []byte, pack *ext.Pack, warn war
 			w.bytesF(int(codeLen.num), fmt.Sprintf("子系统编码[%d]", i+1), "ascii")
 		}
 	case 0x04:
+		w.fixed = true
 		w.beanTime()
 		w.u16("登出流水号", "")
 	case 0x02, 0x03:
@@ -42,6 +44,10 @@ func parsePayload(v api.GBTVersion, cmd byte, p []byte, pack *ext.Pack, warn war
 				return w.out
 			}
 			trans := tlvName(flag[0])
+			if trans == "" {
+				// 表 8:0x0A~0x7F 未定义标志,兜底展示(与 enumF 同风格)
+				trans = fmt.Sprintf("未知(0x%02X)", flag[0])
+			}
 			var custom *ext.AppendUnit
 			if isCustomUnitCode(flag[0]) {
 				custom = packUnitByCode(pack, int(flag[0]))
@@ -73,12 +79,14 @@ func parsePayload(v api.GBTVersion, cmd byte, p []byte, pack *ext.Pack, warn war
 // walker 顺序走字节,自动记录 Offset/Length,越界告警不中断。
 // base 为本 walker 数据在所属 payload 中的起始偏移(子 walker 用于自定义单元区间)。
 type walker struct {
-	p       []byte
-	pos     int
-	base    int
-	out     []Field
-	warn    warnFn
-	pending string // take() 截断告警用的当前字段名(每 walker 私有,Parse 可并发)
+	p         []byte
+	pos       int
+	base      int
+	out       []Field
+	warn      warnFn
+	pending   string // take() 截断告警用的当前字段名(每 walker 私有,Parse 可并发)
+	fixed     bool   // 固定布局(0x01 登入/0x04 登出):首次截断后静默跳过剩余字段,不逐条重复告警
+	truncated bool   // 已发生一次截断
 }
 
 type numField struct {
@@ -87,9 +95,13 @@ type numField struct {
 
 func (w *walker) remain() int { return len(w.p) - w.pos }
 func (w *walker) take(n int) []byte {
+	if w.fixed && w.truncated {
+		return nil
+	}
 	if w.pos+n > len(w.p) {
 		w.warn(fmt.Sprintf("报文在字段 %q 处被截断(还需 %d 字节,剩余 %d)", w.pending, n, w.remain()))
 		w.pos = len(w.p)
+		w.truncated = true
 		return nil
 	}
 	b := w.p[w.pos : w.pos+n]
@@ -123,6 +135,68 @@ func (w *walker) u16(name, unit string) numField {
 	}
 	v := int64(b[0])<<8 | int64(b[1])
 	w.emit(name, "u16", b, fmt.Sprint(v), "-", "-", unit)
+	return numField{num: v}
+}
+
+// count8 读取 1 字节计数字段并识别文档定义的哨兵(表17 报警 N1~N4、
+// 表B.5/表B.7 储能子系统个数):0xFE 异常、0xFF 无效。
+// 哨兵时按 0 项处理(不进入列表循环),后续字段继续解析,避免吞掉后续 TLV。
+func (w *walker) count8(name string) numField {
+	w.pending = name
+	b := w.take(1)
+	if b == nil {
+		return numField{}
+	}
+	switch b[0] {
+	case 0xFE:
+		w.emit(name, "u8", b, fmt.Sprint(b[0]), "-", "异常(0xFE):本组无有效列表", "")
+		return numField{}
+	case 0xFF:
+		w.emit(name, "u8", b, fmt.Sprint(b[0]), "-", "无效(0xFF):本组无有效列表", "")
+		return numField{}
+	}
+	w.emit(name, "u8", b, fmt.Sprint(b[0]), "-", "-", "")
+	return numField{num: int64(b[0])}
+}
+
+// u8Sentinel 读取 1 字节数值字段并识别文档定义的哨兵(表17 最高报警等级、
+// 表B.4 SOC/加速踏板行程值/制动踏板状态):0xFE 异常、0xFF 无效。
+// 此类字段后无列表,故仅把哨兵语义写入 Translate,数值仍按原样展示。
+func (w *walker) u8Sentinel(name, unit string) numField {
+	w.pending = name
+	b := w.take(1)
+	if b == nil {
+		return numField{}
+	}
+	trans := "-"
+	switch b[0] {
+	case 0xFE:
+		trans = "异常(0xFE)"
+	case 0xFF:
+		trans = "无效(0xFF)"
+	}
+	w.emit(name, "u8", b, fmt.Sprint(b[0]), "-", trans, unit)
+	return numField{num: int64(b[0])}
+}
+
+// count16 读取 2 字节计数字段并识别文档定义的哨兵(表12 燃料电池温度探针总数、
+// 表B.8 储能温度探针个数):0xFFFE 异常、0xFFFF 无效。哨兵按 0 项处理。
+func (w *walker) count16(name string) numField {
+	w.pending = name
+	b := w.take(2)
+	if b == nil {
+		return numField{}
+	}
+	v := int64(b[0])<<8 | int64(b[1])
+	switch v {
+	case 0xFFFE:
+		w.emit(name, "u16", b, fmt.Sprint(v), "-", "异常(0xFFFE):本组无有效列表", "")
+		return numField{}
+	case 0xFFFF:
+		w.emit(name, "u16", b, fmt.Sprint(v), "-", "无效(0xFFFF):本组无有效列表", "")
+		return numField{}
+	}
+	w.emit(name, "u16", b, fmt.Sprint(v), "-", "-", "")
 	return numField{num: v}
 }
 
@@ -191,7 +265,8 @@ func (w *walker) beanTime() {
 	}
 	trans := fmt.Sprintf("20%02d-%02d-%02d %02d:%02d:%02d", b[0], b[1], b[2], b[3], b[4], b[5])
 	w.out = append(w.out, Field{
-		Offset: 24 + w.pos - 6, Length: 6, Name: "数据采集时间", Type: "bcd",
+		// 表5:6×BYTE 十进制(年 0~99/月/日/时/分/秒),非 BCD
+		Offset: 24 + w.pos - 6, Length: 6, Name: "数据采集时间", Type: "time",
 		RawHex: utils.BytesToHex(b), RawValue: strings.Join(hexBytes(b), " "),
 		OffsetVal: "-", Translate: trans,
 	})
@@ -231,12 +306,13 @@ func parseTLVGroup(w *walker, flag byte) {
 		w.conv("累计里程", "km", 4, &codec.MileageConverter)
 		w.conv("总电压", "V", 2, &codec.VoltageConverter)
 		w.conv("总电流", "A", 2, &codec.CurrentConverter2016)
-		w.u8("SOC", "%")
+		w.u8Sentinel("SOC", "%")
 		w.enumF("DC/DC 状态", dcLabels)
 		parseGear(w)
 		w.u16("绝缘电阻", "kΩ")
-		w.u8("加速踏板行程值", "%")
-		w.u8("制动踏板状态", "%")
+		// 表B.4:0xFE 异常/0xFF 无效
+		w.u8Sentinel("加速踏板行程值", "%")
+		w.u8Sentinel("制动踏板状态", "%")
 	case 0x02:
 		cnt := w.u8("驱动电机个数", "")
 		for i := 0; i < int(cnt.num); i++ {
@@ -254,7 +330,7 @@ func parseTLVGroup(w *walker, flag byte) {
 		w.conv("燃料电池电压", "V", 2, &codec.FuelCellVoltageConverter)
 		w.conv("燃料电池电流", "A", 2, &codec.FuelCellCurrentConverter)
 		w.conv("燃料消耗率", "kg/100km", 2, &codec.FuelConsumptionRateConverter)
-		cnt := w.u16("温度探针总数", "")
+		cnt := w.count16("温度探针总数")
 		for i := 0; i < int(cnt.num); i++ {
 			w.conv(fmt.Sprintf("探针温度[%d]", i+1), "°C", 1, &codec.ProbeTemperatureConverter)
 		}
@@ -287,7 +363,7 @@ func parseTLVGroup(w *walker, flag byte) {
 	case 0x07:
 		parseAlarm(w)
 	case 0x08:
-		cnt := w.u8("电压数据子系统个数", "")
+		cnt := w.count8("电压数据子系统个数")
 		for i := 0; i < int(cnt.num); i++ {
 			pfx := fmt.Sprintf("电压%d·", i+1)
 			w.u8(pfx+"子系统号", "")
@@ -301,16 +377,23 @@ func parseTLVGroup(w *walker, flag byte) {
 			}
 		}
 	case 0x09:
-		cnt := w.u8("温度数据子系统个数", "")
+		cnt := w.count8("温度数据子系统个数")
 		for i := 0; i < int(cnt.num); i++ {
 			pfx := fmt.Sprintf("温度%d·", i+1)
 			w.u8(pfx+"子系统号", "")
-			n := w.u16(pfx+"温度探针个数", "")
+			n := w.count16(pfx + "温度探针个数")
 			for j := 0; j < int(n.num); j++ {
 				w.conv(fmt.Sprintf("%s探针温度[%d]", pfx, j+1), "°C", 1, &codec.TemperatureConverter)
 			}
 		}
 	default:
+		if w.remain() == 0 {
+			// 修复后行为:未知标志为数据单元最后一个字节、其数据 0 字节时,
+			// 空行不计为解析结果(同 A6 空 tail),改由 take() 发一条点名标志字节的截断告警。
+			w.pending = fmt.Sprintf("未知类型数据 (0x%02X)", flag)
+			w.take(1)
+			return
+		}
 		w.warn(fmt.Sprintf("未知 TLV 类型 0x%02X,剩余数据按原始字节展示", flag))
 		w.bytesF(w.remain(), "未知类型数据", "bytes")
 	}
@@ -323,6 +406,10 @@ func parseGear(w *walker) {
 		return
 	}
 	g := b[0] & 0x0F
+	// 表 A.1:Bit7/Bit6 为预留位,预留位用 0 表示
+	if b[0]&0xC0 != 0 {
+		w.warn(fmt.Sprintf("档位 0x%02X 预留位(Bit7/Bit6)非零,表 A.1 要求预留位用 0 表示", b[0]))
+	}
 	parts := []string{}
 	if b[0]&(1<<5) != 0 {
 		parts = append(parts, "驱动力")
@@ -374,7 +461,8 @@ func (w *walker) convLong(name string, width int) {
 }
 
 func parseAlarm(w *walker) {
-	w.u8("最高报警等级", "")
+	// 表17:0~3 级故障,0xFE 异常/0xFF 无效
+	w.u8Sentinel("最高报警等级", "")
 	w.pending = "通用报警标志"
 	b := w.take(4)
 	if b == nil {
@@ -399,7 +487,7 @@ func parseAlarm(w *walker) {
 	for _, seg := range []struct{ name string }{
 		{"可充电储能装置故障"}, {"驱动电机故障"}, {"发动机故障"}, {"其他故障"},
 	} {
-		cnt := w.u8(seg.name+"总数", "")
+		cnt := w.count8(seg.name + "总数")
 		for j := 0; j < int(cnt.num); j++ {
 			w.pending = seg.name + "代码"
 			fb := w.take(4)

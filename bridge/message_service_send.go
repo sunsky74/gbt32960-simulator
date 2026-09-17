@@ -3,13 +3,17 @@ package bridge
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"time"
 
 	"gbt32960-simulator/internal/engine"
 	"gbt32960-simulator/internal/ext"
 	"gbt32960-simulator/internal/schema"
+	"github.com/sunsky74/gb32960/api"
 	"github.com/sunsky74/gb32960/model"
+	mdl "github.com/sunsky74/gb32960/model/gbt2025"
+	v2025rt "github.com/sunsky74/gb32960/model/gbt2025/realtime"
 	"github.com/sunsky74/gb32960/types"
 	"github.com/sunsky74/gb32960/utils"
 )
@@ -32,9 +36,14 @@ func (s *MessageService) assembleBody(at time.Time) (model.MessageBody, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 2025 车端签名(表8):配置了签名类型时,签名段位于报文体最末、涵盖其前全部字节。
+	sig, err := s.v2025Signature()
+	if err != nil {
+		return nil, err
+	}
 	p := s.rt.Pack()
 	if p == nil || p.Meta.BaseVersion != s.versionText() {
-		return base, nil
+		return s.withSignature(base, sig), nil
 	}
 	tail := make([]byte, 0, 64)
 	for _, u := range p.Realtime.AppendUnits {
@@ -51,13 +60,65 @@ func (s *MessageService) assembleBody(at time.Time) (model.MessageBody, error) {
 		}
 	}
 	if len(tail) == 0 {
-		return base, nil
+		return s.withSignature(base, sig), nil
 	}
 	baseBytes, err := base.Bytes()
 	if err != nil {
 		return nil, err
 	}
-	return engine.NewRawBody(s.version(), append(baseBytes, tail...)), nil
+	raw := append(baseBytes, tail...)
+	if sig != nil {
+		// 原始体路径:签名必须在扩展 TLV 之后手工追加(类型化路径由库 codec 固定排最后)。
+		raw = append(raw, encodeSignatureTLV(sig)...)
+	}
+	return engine.NewRawBody(s.version(), raw), nil
+}
+
+// v2025Signature 按连接配置构造 2025 车端签名(表8;TLV 0xFF)。
+// R/S 由外部签名工具用设备私钥生成(HEX)——模拟器不持有私钥,只按规范编码;
+// 未配置(签名类型为 0)或当前非 2025 版本时返回 nil。
+func (s *MessageService) v2025Signature() (*v2025rt.VehicleSignature, error) {
+	if s.version() != api.V2025 {
+		return nil, nil
+	}
+	cfg := s.rt.ConnCfg()
+	if cfg == nil || cfg.SignatureType <= 0 {
+		return nil, nil
+	}
+	r, err := hex.DecodeString(cfg.SignatureR)
+	if err != nil {
+		return nil, fmt.Errorf("签名 R 值不是合法 HEX: %w", err)
+	}
+	sv, err := hex.DecodeString(cfg.SignatureS)
+	if err != nil {
+		return nil, fmt.Errorf("签名 S 值不是合法 HEX: %w", err)
+	}
+	return &v2025rt.VehicleSignature{
+		Type: byte(cfg.SignatureType), RLength: len(r), RValue: r, SLength: len(sv), SValue: sv,
+	}, nil
+}
+
+// withSignature 类型化路径附加签名:库 codec 固定把签名 TLV 编码在最后,
+// 并按已写入字节刷新 SignData(覆盖数据采集时间起至签名段前)。
+func (s *MessageService) withSignature(base model.MessageBody, sig *v2025rt.VehicleSignature) model.MessageBody {
+	if sig == nil {
+		return base
+	}
+	if rt, ok := base.(*mdl.RealTimeV2025Data); ok {
+		rt.VehicleSignature = sig
+	}
+	return base
+}
+
+// encodeSignatureTLV 手写 0xFF 签名 TLV(原始体路径用,须置于全部 TLV 之后)。
+func encodeSignatureTLV(sig *v2025rt.VehicleSignature) []byte {
+	out := make([]byte, 0, 7+len(sig.RValue)+len(sig.SValue))
+	out = append(out, byte(types.RealTimeV2025Signature), sig.Type,
+		byte(sig.RLength>>8), byte(sig.RLength))
+	out = append(out, sig.RValue...)
+	out = append(out, byte(sig.SLength>>8), byte(sig.SLength))
+	out = append(out, sig.SValue...)
+	return out
 }
 
 // Preview 用当前配置生成 0x02 报文 hex(不发送)。

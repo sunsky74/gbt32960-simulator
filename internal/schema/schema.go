@@ -9,13 +9,13 @@ const (
 	GroupMotor            = "motor"            // 驱动电机数据
 	GroupFuelCell         = "fuelcell"         // 燃料电池数据
 	GroupEngine           = "engine"           // 发动机数据
-	GroupLocation         = "location"         // 位置数据
+	GroupLocation         = "location"         // 车辆位置数据
 	GroupExtremum         = "extremum"         // 极值数据 (2016)
 	GroupAlarm            = "alarm"            // 报警数据
 	GroupVoltage          = "voltage"          // 可充电储能装置电压数据 (2016)
 	GroupTemperature      = "temperature"      // 可充电储能装置温度数据 (2016)
-	GroupMinParallel      = "minparallel"      // 最小并联单元电压数据 (2025)
-	GroupBatteryTemp      = "batterytemp"      // 电池包温度数据 (2025)
+	GroupMinParallel      = "minparallel"      // 动力蓄电池最小并联单元电压数据 (2025)
+	GroupBatteryTemp      = "batterytemp"      // 动力蓄电池温度数据 (2025)
 	GroupFCStack          = "fcstack"          // 燃料电池电堆数据 (2025)
 	GroupSuperCap         = "supercap"         // 超级电容数据 (2025)
 	GroupSuperCapExtremum = "supercapextremum" // 超级电容极值数据 (2025)
@@ -43,6 +43,7 @@ type FieldSchema struct {
 	Enum      []EnumDef `json:"enum,omitempty"`      // kind=enum
 	Bits      []BitDef  `json:"bits,omitempty"`      // kind=bitgroup:位定义列表
 	ItemLabel string    `json:"itemLabel,omitempty"` // kind=array_float 的元素名
+	MinItems  int       `json:"minItems,omitempty"`  // kind=array_float 最少元素数(0=不限;表12/14/25 "总数"下限 1)
 	ScaleNote string    `json:"scaleNote,omitempty"` // 换算说明,如 "×0.1 km/h"
 	Length    int       `json:"length,omitempty"`    // bytes 字段字节长度(扩展包编译器使用)
 }
@@ -63,39 +64,17 @@ func ptr(v float64) *float64 { return &v }
 
 func enum(defs ...EnumDef) []EnumDef { return defs }
 
-// 2016 版专用枚举(GB/T 32960.3-2016 表 9 / 表 11 / 附录 A.1)。
-// 充电状态与挡位两版定义不同:下方 chargeEnum/gearEnum 是 2025 版定义,
-// 被 schema_v2025.go 引用;2016 组必须引用本组 2016 语义枚举。
+// 整车/电机枚举(2016 表 9/表 11/附录 A.1 与 2025 表 10/表 16/附录 A.1 对应字段
+// 定义一致,双版本共用同一组枚举,以 docs/standard 标准文本为准)。
 var (
-	// 表 9:0x01 停车充电;0x02 行驶充电;0x03 未充电状态;0x04 充电完成
-	chargeEnum2016 = enum(
-		EnumDef{0x01, "停车充电"}, EnumDef{0x02, "行驶充电"}, EnumDef{0x03, "未充电"},
-		EnumDef{0x04, "充电完成"},
-		EnumDef{0xFE, "异常"}, EnumDef{0xFF, "无效"},
-	)
-	// 附录 A.1 挡位状态位 bit3~0:0x0 空挡;0x1~0x6 = 1~6 挡;0xD 倒挡;0xE 自动D;0xF 停车P
-	gearEnum2016 = enum(
-		EnumDef{0x00, "空挡"}, EnumDef{0x01, "1挡"}, EnumDef{0x02, "2挡"}, EnumDef{0x03, "3挡"},
-		EnumDef{0x04, "4挡"}, EnumDef{0x05, "5挡"}, EnumDef{0x06, "6挡"},
-		EnumDef{0x0D, "倒挡"}, EnumDef{0x0E, "自动D挡"}, EnumDef{0x0F, "停车P挡"},
-	)
-	// 表 9:0x02 为"熄火"(与 2025 通用枚举文案"关闭"不同,值集一致)
-	opStateEnum2016 = enum(
+	opStateEnum = enum(
 		EnumDef{1, "启动"}, EnumDef{2, "熄火"}, EnumDef{3, "其他"},
 		EnumDef{0xFE, "异常"}, EnumDef{0xFF, "无效"},
 	)
-)
-
-// 车辆/充电/运行模式/DC 的通用枚举。
-// chargeEnum/gearEnum 是 2025 版定义(schema_v2025.go 引用);
-// 2016 版不得引用,应使用上方 *2016 枚举。
-var (
-	opStateEnum = enum(
-		EnumDef{1, "启动"}, EnumDef{2, "关闭"}, EnumDef{3, "其他"},
-		EnumDef{0xFE, "异常"}, EnumDef{0xFF, "无效"},
-	)
+	// 充电状态:0x01 停车充电;0x02 行驶充电;0x03 未充电状态;0x04 充电完成
 	chargeEnum = enum(
-		EnumDef{1, "未充电"}, EnumDef{2, "充电中"}, EnumDef{3, "充电完成"},
+		EnumDef{0x01, "停车充电"}, EnumDef{0x02, "行驶充电"}, EnumDef{0x03, "未充电"},
+		EnumDef{0x04, "充电完成"},
 		EnumDef{0xFE, "异常"}, EnumDef{0xFF, "无效"},
 	)
 	modeEnum = enum(
@@ -106,10 +85,13 @@ var (
 		EnumDef{1, "工作"}, EnumDef{2, "断开"},
 		EnumDef{0xFE, "异常"}, EnumDef{0xFF, "无效"},
 	)
+	// 挡位(附录 A.1 挡位状态位 bit3~0):0x0 空挡;0x1~0x6 = 1~6 挡;0xD 倒挡;0xE 自动D;0xF 停车P
 	gearEnum = enum(
-		EnumDef{0x01, "P"}, EnumDef{0x02, "R"}, EnumDef{0x03, "N"},
-		EnumDef{0x04, "D"}, EnumDef{0x05, "其他"},
+		EnumDef{0x00, "空挡"}, EnumDef{0x01, "1挡"}, EnumDef{0x02, "2挡"}, EnumDef{0x03, "3挡"},
+		EnumDef{0x04, "4挡"}, EnumDef{0x05, "5挡"}, EnumDef{0x06, "6挡"},
+		EnumDef{0x0D, "倒挡"}, EnumDef{0x0E, "自动D挡"}, EnumDef{0x0F, "停车P挡"},
 	)
+	// 电机状态:0x01 耗电;0x02 发电;0x03 关闭状态;0x04 准备状态
 	motorStateEnum = enum(
 		EnumDef{1, "耗电"}, EnumDef{2, "发电"}, EnumDef{3, "关闭"}, EnumDef{4, "准备"},
 		EnumDef{0xFE, "异常"}, EnumDef{0xFF, "无效"},
@@ -118,7 +100,7 @@ var (
 		EnumDef{1, "启动/工作"}, EnumDef{2, "关闭/断开"},
 		EnumDef{0xFE, "异常"}, EnumDef{0xFF, "无效"},
 	)
-	// 表17:最高报警等级 0 无故障;1~3 级故障,等级越高越严重
+	// 表17(2016):最高报警等级 0 无故障;1~3 级故障,等级越高越严重
 	alarmLevelEnum = enum(
 		EnumDef{0, "无故障"}, EnumDef{1, "1级故障"}, EnumDef{2, "2级故障"}, EnumDef{3, "3级故障"},
 	)
@@ -130,8 +112,8 @@ func V2016Groups() []GroupSchema {
 		{
 			Key: GroupVehicle, Title: "整车数据", Enabled: true,
 			Fields: []FieldSchema{
-				{Key: "operatingState", Label: "车辆状态", Kind: "enum", Enum: opStateEnum2016},
-				{Key: "chargingState", Label: "充电状态", Kind: "enum", Enum: chargeEnum2016},
+			{Key: "operatingState", Label: "车辆状态", Kind: "enum", Enum: opStateEnum},
+			{Key: "chargingState", Label: "充电状态", Kind: "enum", Enum: chargeEnum},
 				{Key: "operationMode", Label: "运行模式", Kind: "enum", Enum: modeEnum},
 				// 表9/B.4:车速有效值 0~2200(0~220 km/h),0.1 km/h
 				{Key: "speed", Label: "车速", Kind: "float", Unit: "km/h", Min: ptr(0), Max: ptr(220), ScaleNote: "×0.1"},
@@ -142,8 +124,8 @@ func V2016Groups() []GroupSchema {
 				{Key: "current", Label: "总电流", Kind: "float", Unit: "A", Min: ptr(-1000), Max: ptr(1000), ScaleNote: "×0.1, 偏移+1000"},
 				{Key: "soc", Label: "SOC", Kind: "int", Unit: "%", Min: ptr(0), Max: ptr(100)},
 				{Key: "dc", Label: "DC/DC 状态", Kind: "enum", Enum: dcEnum},
-				// 附录 A.1:枚举值即挡位字节 bit3~0(装配时与驱动力 bit5/制动力 bit4 组合)
-				{Key: "gear", Label: "档位", Kind: "enum", Enum: gearEnum2016},
+			// 附录 A.1:枚举值即挡位字节 bit3~0(装配时与驱动力 bit5/制动力 bit4 组合)
+			{Key: "gear", Label: "档位", Kind: "enum", Enum: gearEnum},
 				{Key: "drivingForce", Label: "有驱动力", Kind: "bool"},
 				{Key: "brakingForce", Label: "有制动力", Kind: "bool"},
 				// 表9/B.4:绝缘电阻有效值 0~60000,1 kΩ
@@ -154,7 +136,8 @@ func V2016Groups() []GroupSchema {
 			},
 		},
 		{
-			Key: GroupMotor, Title: "驱动电机数据", Enabled: true, Multiple: true, MaxRows: 30,
+			// 表10:驱动电机个数有效值 1~253
+			Key: GroupMotor, Title: "驱动电机数据", Enabled: true, Multiple: true, MaxRows: 253,
 			Fields: []FieldSchema{
 				{Key: "seq", Label: "电机序号", Kind: "int", Min: ptr(1), Max: ptr(253)},
 				{Key: "state", Label: "电机状态", Kind: "enum", Enum: motorStateEnum},
@@ -241,7 +224,8 @@ func V2016Groups() []GroupSchema {
 			},
 		},
 		{
-			Key: GroupVoltage, Title: "可充电储能装置电压数据", Enabled: true, Multiple: true, MaxRows: 10,
+			// 表B.5:可充电储能子系统个数有效值 1~250
+			Key: GroupVoltage, Title: "可充电储能装置电压数据", Enabled: true, Multiple: true, MaxRows: 250,
 			Fields: []FieldSchema{
 				{Key: "subsystem", Label: "子系统号", Kind: "int", Min: ptr(1), Max: ptr(250)},
 				// 表B.6:可充电储能装置电压有效值 0~10000(0~1000 V),0.1 V
@@ -251,27 +235,28 @@ func V2016Groups() []GroupSchema {
 				{Key: "batteryTotal", Label: "单体电池总数", Kind: "int", Min: ptr(1), Max: ptr(65531)},
 				{Key: "frameStartSeq", Label: "本帧起始电池序号", Kind: "int", Min: ptr(1), Max: ptr(65531)},
 				// 表B.6:本帧单体总数 m 有效值 1~200,超出自动拆帧(装配器按 200/帧拆分)
-				{Key: "batteryVoltages", Label: "单体电池电压", Kind: "array_float", ItemLabel: "电压", Unit: "V", Min: ptr(0), Max: ptr(60), ScaleNote: "×0.001, >200 自动拆帧"},
+				{Key: "batteryVoltages", Label: "单体电池电压", Kind: "array_float", ItemLabel: "电压", Unit: "V", Min: ptr(0), Max: ptr(60), MinItems: 1, ScaleNote: "×0.001, >200 自动拆帧"},
 			},
 		},
 		{
-			Key: GroupTemperature, Title: "可充电储能装置温度数据", Enabled: true, Multiple: true, MaxRows: 10,
+			// 表B.7:可充电储能子系统个数有效值 1~250
+			Key: GroupTemperature, Title: "可充电储能装置温度数据", Enabled: true, Multiple: true, MaxRows: 250,
 			Fields: []FieldSchema{
 				{Key: "subsystem", Label: "子系统号", Kind: "int", Min: ptr(1), Max: ptr(250)},
 				// 表B.8:探针温度有效值 0~250(偏移 40 → -40~+210 ℃),1 ℃
-				{Key: "probeTemps", Label: "探针温度值", Kind: "array_float", ItemLabel: "探针", Unit: "°C", Min: ptr(-40), Max: ptr(210), ScaleNote: "偏移+40"},
+				{Key: "probeTemps", Label: "探针温度值", Kind: "array_float", ItemLabel: "探针", Unit: "°C", Min: ptr(-40), Max: ptr(210), MinItems: 1, ScaleNote: "偏移+40"},
 			},
 		},
 	}
 }
 
-// AlarmBitLabels2016 19 个通用报警位标签(bit0..18)。
+// AlarmBitLabels2016 19 个通用报警位标签(bit0..18),按 2016.md 表18 原文;bit19~31 预留。
 // 导出供 parser 包复用(解析翻译与配置表单同源,避免双份漂移)。
 var AlarmBitLabels2016 = []string{
-	"温度差异报警", "电池高温报警", "储能装置过压", "储能装置欠压", "SOC 过低",
-	"单体过压", "单体欠压", "SOC 过高", "SOC 跳变", "可充电储能系统不匹配报警",
-	"电池一致性差", "绝缘报警", "DC 温度报警", "制动系统报警", "DC 状态报警",
-	"电机控制器温度报警", "高压互锁报警", "驱动电机温度报警", "储能装置过充",
+	"温度差异报警", "电池高温报警", "车载储能装置类型过压报警", "车载储能装置类型欠压报警", "SOC 低报警",
+	"单体电池过压报警", "单体电池欠压报警", "SOC 过高报警", "SOC 跳变报警", "可充电储能系统不匹配报警",
+	"电池单体一致性差报警", "绝缘报警", "DC-DC 温度报警", "制动系统报警", "DC-DC 状态报警",
+	"驱动电机控制器温度报警", "高压互锁状态报警", "驱动电机温度报警", "车载储能装置类型过充",
 }
 
 // alarmBitsField 报警位组字段:Kind=bitgroup,前端按 Bits 渲染开关列表。

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"testing"
+	"time"
 
 	"github.com/sunsky74/gb32960/api"
 	"github.com/sunsky74/gb32960/codec"
@@ -12,7 +13,9 @@ import (
 )
 
 func TestParseParamQuery(t *testing.T) {
-	info := ParseDownlink(0x80, []byte{0x01, 0x03, 0x7F})
+	// 表B.9:参数查询时间(6B) + 参数总数(3) + 参数 ID 列表
+	payload := []byte{0x1a, 0x08, 0x1b, 0x0a, 0x00, 0x00, 3, 0x01, 0x03, 0x7F}
+	info := ParseDownlink(0x80, payload)
 	if info == nil || info.Kind != "query" {
 		t.Fatalf("info = %+v", info)
 	}
@@ -22,8 +25,8 @@ func TestParseParamQuery(t *testing.T) {
 }
 
 func TestParseParamSetup(t *testing.T) {
-	// count=2, (id=1,len=2,val=0x0030), (id=3,len=1,val=0x05)
-	payload := []byte{2, 1, 0, 2, 0x00, 0x30, 3, 0, 1, 0x05}
+	// 表B.13:参数设置时间(6B) + count=2, (id=1,len=2,val=0x0030), (id=3,len=1,val=0x05)
+	payload := []byte{0x1a, 0x08, 0x1b, 0x0a, 0x00, 0x00, 2, 1, 0, 2, 0x00, 0x30, 3, 0, 1, 0x05}
 	info := ParseDownlink(0x81, payload)
 	if info == nil || len(info.Params) != 2 {
 		t.Fatalf("info = %+v", info)
@@ -33,6 +36,16 @@ func TestParseParamSetup(t *testing.T) {
 	}
 	if info.Params[1].ID != 3 || info.Params[1].Hex != "05" {
 		t.Fatalf("p1 = %+v", info.Params[1])
+	}
+}
+
+// TestParseDownlinkShortPayload 缺时间/总数时不得越界,应返回空结果。
+func TestParseDownlinkShortPayload(t *testing.T) {
+	if info := ParseDownlink(0x80, []byte{1, 2, 3}); info == nil || len(info.ParamIDs) != 0 {
+		t.Fatalf("0x80 short = %+v", info)
+	}
+	if info := ParseDownlink(0x81, []byte{1, 2, 3}); info == nil || len(info.Params) != 0 {
+		t.Fatalf("0x81 short = %+v", info)
 	}
 }
 
@@ -60,15 +73,17 @@ func TestBuildParamQueryResponse(t *testing.T) {
 		{ID: 1, Hex: "0ee8"}, // u16 1000
 		{ID: 3, Hex: "05"},
 	}
-	got, err := BuildParamQueryResponse(rows)
+	at := time.Date(2026, 8, 27, 10, 0, 0, 0, time.UTC)
+	got, err := BuildParamQueryResponse(rows, at)
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []byte{2, 1, 0x0E, 0xE8, 3, 0x05}
+	// 表B.10:返回查询参数时间(6B) + 总数 + (ID + 值)×N
+	want := []byte{0x1a, 0x08, 0x1b, 0x0a, 0x00, 0x00, 2, 1, 0x0E, 0xE8, 3, 0x05}
 	if string(got) != string(want) {
 		t.Fatalf("got %x want %x", got, want)
 	}
-	if _, err := BuildParamQueryResponse([]ParamResponseRow{{ID: 1, Hex: "zz"}}); err == nil {
+	if _, err := BuildParamQueryResponse([]ParamResponseRow{{ID: 1, Hex: "zz"}}, at); err == nil {
 		t.Fatal("invalid hex should fail")
 	}
 }

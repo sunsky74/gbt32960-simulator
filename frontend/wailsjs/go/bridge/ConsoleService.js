@@ -9,3 +9,11 @@ export function ClearConsole() {
 export function ExportConsole(arg1, arg2) {
   return window['go']['bridge']['ConsoleService']['ExportConsole'](arg1, arg2);
 }
+
+export function GetParamSpecs(arg1) {
+  return window['go']['bridge']['ConsoleService']['GetParamSpecs'](arg1);
+}
+
+export function GetResponseCodes(arg1) {
+  return window['go']['bridge']['ConsoleService']['GetResponseCodes'](arg1);
+}

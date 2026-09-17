@@ -127,7 +127,7 @@ func (c *Client) sendLogin(ctx context.Context) error {
 		}
 		body = &mdl25.VehicleLoginV2025{
 			BeanTime:  BeanTimeNow(),
-			SerialNum: int(c.nextSerial()),
+			SerialNum: int(c.nextLoginSerial(c.opts.VIN)),
 			ICCID:     c.opts.ICCID,
 			Count:     len(codes),
 			Lengths:   lengths,
@@ -136,7 +136,7 @@ func (c *Client) sendLogin(ctx context.Context) error {
 	} else {
 		body = &mdl.VehicleLogin{
 			BeanTime:  BeanTimeNow(),
-			SerialNum: int(c.nextSerial()),
+			SerialNum: int(c.nextLoginSerial(c.opts.VIN)),
 			ICCID:     c.opts.ICCID,
 			Count:     len(codes),
 			Length:    codeLen,
@@ -151,8 +151,9 @@ func (c *Client) sendLogout(ctx context.Context) {
 	logoutCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	body := &mdl.VehicleLogout{
-		BeanTime:  BeanTimeNow(),
-		SerialNum: int(c.nextSerial()),
+		BeanTime: BeanTimeNow(),
+		// 表20:登出流水号与当次登入流水号一致(同链接同 VIN 递增由登入侧维护)
+		SerialNum: int(c.currentLoginSerial(c.opts.VIN)),
 	}
 	if err := c.writeFrame(logoutCtx, 0x04, body); err != nil {
 		c.bus.Emit(Event{Kind: EventError, Message: "发送登出报文失败: " + err.Error()})
@@ -198,7 +199,8 @@ func (c *Client) platformLoginPhase(ctx context.Context) error {
 // sendPlatformLogin 发送 0x05 平台登入(帧头 VIN = 平台标识;账号/密码为
 // 协议定长字段,编解码器自动空格填充)。2025 复用同一线格式。
 func (c *Client) sendPlatformLogin(ctx context.Context) error {
-	bean, serial := BeanTimeNow(), int(c.nextSerial())
+	vin := c.connVIN()
+	bean, serial := BeanTimeNow(), int(c.nextLoginSerial(vin))
 	user, pass := c.opts.PlatformUser, c.opts.PlatformPass
 	var body model.MessageBody
 	if c.opts.Version == api.V2025 {
@@ -212,20 +214,23 @@ func (c *Client) sendPlatformLogin(ctx context.Context) error {
 			Username: user, Password: pass, Cipher: byte(types.EncryptionNone),
 		}
 	}
-	return c.writeFrameAs(ctx, c.connVIN(), 0x05, body)
+	return c.writeFrameAs(ctx, vin, 0x05, body)
 }
 
-// sendPlatformLogout 发送 0x06 平台登出(尽力而为,与车辆登出同口径)。
+// sendPlatformLogout 发送 0x06 平台登出(尽力而为,与车辆登出同口径:
+// 流水号复用当次平台登入的流水号——表22/表30)。
 func (c *Client) sendPlatformLogout(ctx context.Context) {
 	logoutCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
+	vin := c.connVIN()
+	serial := int(c.currentLoginSerial(vin))
 	var body model.MessageBody
 	if c.opts.Version == api.V2025 {
-		body = &mdl25.PlatformLogoutV2025{BeanTime: BeanTimeNow(), SerialNum: int(c.nextSerial())}
+		body = &mdl25.PlatformLogoutV2025{BeanTime: BeanTimeNow(), SerialNum: serial}
 	} else {
-		body = &mdl.PlatformLogout{BeanTime: BeanTimeNow(), SerialNum: int(c.nextSerial())}
+		body = &mdl.PlatformLogout{BeanTime: BeanTimeNow(), SerialNum: serial}
 	}
-	if err := c.writeFrameAs(logoutCtx, c.connVIN(), 0x06, body); err != nil {
+	if err := c.writeFrameAs(logoutCtx, vin, 0x06, body); err != nil {
 		c.bus.Emit(Event{Kind: EventError, Message: "发送平台登出失败: " + err.Error()})
 		return
 	}

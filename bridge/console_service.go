@@ -85,6 +85,18 @@ func (s *ConsoleService) ClearConsole() {
 	s.fwd.Clear()
 }
 
+// GetParamSpecs 返回指定协议版本的参数定义表(2016 表B.12 / 2025 表B.8),
+// 供控制台的 0x80 参数查询应答按 ID 定长、定值域渲染与校验。
+func (s *ConsoleService) GetParamSpecs(version string) []engine.ParamSpec {
+	return engine.ParamSpecs(parseVersion(version))
+}
+
+// GetResponseCodes 返回指定协议版本的应答码列表(2016/2025 表4),
+// 供控制台的 0x80/0x81/0x82 应答按版本选择标准应答码。
+func (s *ConsoleService) GetResponseCodes(version string) []engine.ResponseCode {
+	return engine.ResponseCodes(parseVersion(version))
+}
+
 func formatEventsCSV(events []engine.Event) ([]byte, error) {
 	var sb strings.Builder
 	w := csv.NewWriter(&sb)

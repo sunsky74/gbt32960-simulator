@@ -139,8 +139,16 @@ func parse(input string, pack *ext.Pack) (*Result, error) {
 	r.addField(22, 2, "数据单元长度", "u16", raw[22:24], fmt.Sprint(payloadLen), "-", fmt.Sprintf("%d 字节", payloadLen), "")
 
 	// 长度一致性
-	if payloadLen != len(raw)-25 {
-		r.Warnings = append(r.Warnings, fmt.Sprintf("长度字段(%d)与实际数据单元(%d 字节)不一致", payloadLen, len(raw)-25))
+	actualLen := len(raw) - 25
+	if payloadLen != actualLen {
+		if actualLen > payloadLen {
+			// 声明长度之外的字节被丢弃:显式给出丢弃字节数,避免"静默截掉"误解
+			r.Warnings = append(r.Warnings, fmt.Sprintf(
+				"长度字段(%d)与实际数据单元(%d 字节)不一致,超出声明长度的 %d 字节已忽略",
+				payloadLen, actualLen, actualLen-payloadLen))
+		} else {
+			r.Warnings = append(r.Warnings, fmt.Sprintf("长度字段(%d)与实际数据单元(%d 字节)不一致", payloadLen, actualLen))
+		}
 	}
 	payloadEnd := 24 + payloadLen
 	if payloadEnd > len(raw)-1 {

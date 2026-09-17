@@ -52,3 +52,27 @@ func TestValidateConnPlatform(t *testing.T) {
 		t.Fatalf("plain cfg rejected: %v", err)
 	}
 }
+
+func TestValidateConnV2025SubsystemCodeLength(t *testing.T) {
+	// 2025 表6:动力蓄电池包编码每项 24 字节;库编码器对超长项报错,这里提前拦截
+	ok := platformCfg()
+	ok.Version = "2025"
+	ok.SubsystemCodes = []string{"0123456789ABCDEFGHIJKLMN"} // 24 字节
+	if err := validateConn(ok); err != nil {
+		t.Fatalf("2025 版 24 字节编码被拒: %v", err)
+	}
+
+	long := platformCfg()
+	long.Version = "2025"
+	long.SubsystemCodes = []string{"0123456789ABCDEFGHIJKLMN", "0123456789ABCDEFGHIJKLMNO"} // 第 2 项 25 字节
+	err := validateConn(long)
+	if err == nil || !strings.Contains(err.Error(), "24 字节") || !strings.Contains(err.Error(), "第 2 项") {
+		t.Fatalf("err = %v, want 第 2 项超 24 字节错误", err)
+	}
+
+	old := platformCfg()                                       // 2016 版无每项 24 字节限制
+	old.SubsystemCodes = []string{"0123456789ABCDEFGHIJKLMNO"} // 25 字节
+	if err := validateConn(old); err != nil {
+		t.Fatalf("2016 版 25 字节编码不应被拒: %v", err)
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"gbt32960-simulator/internal/framing"
+	"gbt32960-simulator/internal/signature"
 	"github.com/sunsky74/gb32960/api"
 	"github.com/sunsky74/gb32960/types"
 )
@@ -99,6 +100,12 @@ func (c *conn) handleRaw(ctx context.Context, raw []byte) {
 	sum := ""
 	if d.Version == api.V2025 {
 		sum = "2025 只读,应答未支持"
+		// 车端签名(表8):有签名段时附上结构与验签结果(验证器由外部注入)。
+		if d.PM != nil {
+			if sigBlock := signature.FromBody(d.PM.Payload); sigBlock != nil {
+				sum += ";" + signature.Describe(c.srv.cfg.SignatureVerifier, sigBlock)
+			}
+		}
 	}
 	c.srv.hooks.OnFrame(FrameEvent{
 		Time: now, VIN: d.VIN, Cmd: cmdName, Hex: fmt.Sprintf("%x", raw), Summary: sum, Kind: d.Kind,
@@ -190,6 +197,8 @@ func respText(resp types.ResponseType) string {
 		return "应答 成功(0x01)"
 	case types.ResponseFailed:
 		return "应答 错误(0x02)"
+	case types.ResponseVINDup:
+		return "应答 VIN重复(0x03)"
 	default:
 		return fmt.Sprintf("应答 0x%02X", byte(resp))
 	}
@@ -201,14 +210,14 @@ func (c *conn) handleLogin(d Decoded, now time.Time) {
 	// 且不改动原会话(重复登入的拒绝语义在此前置,Register 的 putIfAbsent 仅兜底)。
 	if c.authed && !c.platform {
 		c.srv.hooks.OnWarn(WarnEvent{Note: "连接已登入,拒绝重复登入: " + d.VIN})
-		c.reply(d.VIN, d.Cmd, types.ResponseFailed, nil)
+		c.reply(d.VIN, d.Cmd, types.ResponseVINDup, nil) // 表4:0x03 VIN重复
 		return
 	}
 	// 平台链路 VIN 数上限:c.vins 含 0x05 平台标识,故以 > 比较——上限指可复用的
 	// 车辆 VIN 数(平台标识不占额度),与「平台链路 VIN 数超限(上限 N)」文案一致。
 	if cfg := c.srv.cfgSnapshot(); len(c.vins) > cfg.MaxVinsPerConn {
 		c.srv.hooks.OnWarn(WarnEvent{Note: fmt.Sprintf("平台链路 VIN 数超限(上限 %d),拒绝登入: %s", cfg.MaxVinsPerConn, d.VIN)})
-		c.reply(d.VIN, d.Cmd, types.ResponseFailed, nil)
+		c.reply(d.VIN, d.Cmd, types.ResponseVINDup, nil) // 表4:0x03 VIN重复
 		return
 	}
 	if isPlatformLogin {
@@ -216,7 +225,7 @@ func (c *conn) handleLogin(d Decoded, now time.Time) {
 	}
 	if ok := c.srv.registry.Register(d.VIN, c.nc.RemoteAddr().String(), now, c.platform); !ok {
 		c.srv.hooks.OnWarn(WarnEvent{Note: "重复登入拒绝: " + d.VIN})
-		c.reply(d.VIN, d.Cmd, types.ResponseFailed, nil)
+		c.reply(d.VIN, d.Cmd, types.ResponseVINDup, nil) // 表4:0x03 VIN重复
 		return
 	}
 	c.bindAuth(d.VIN)

@@ -189,6 +189,10 @@ func assembleMotors(rows []RowValue) (*realtime.MotorDataList, error) {
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("至少需要一行电机数据")
 	}
+	// 表10:驱动电机个数 1~253
+	if len(rows) > 253 {
+		return nil, fmt.Errorf("驱动电机个数超限: %d (1~253)", len(rows))
+	}
 	list := &realtime.MotorDataList{Count: len(rows), Items: make([]realtime.MotorData, 0, len(rows))}
 	for i, r := range rows {
 		list.Items = append(list.Items, realtime.MotorData{
@@ -261,6 +265,20 @@ func assembleAlarm(r RowValue) (*realtime.AlarmData, error) {
 	a.MotorFaultNum = len(a.MotorFaultDatas)
 	a.EngineFaultNum = len(a.EngineFaultDatas)
 	a.OtherFaultNum = len(a.OtherFaultDatas)
+	// 表17:N1~N4 有效值 0~252(2016 上限为 252,2025 为 253)
+	for _, c := range []struct {
+		name string
+		n    int
+	}{
+		{"可充电储能装置故障", a.BatteryFaultNum},
+		{"驱动电机故障", a.MotorFaultNum},
+		{"发动机故障", a.EngineFaultNum},
+		{"其他故障", a.OtherFaultNum},
+	} {
+		if c.n > 252 {
+			return nil, fmt.Errorf("%s总数超限: %d (0~252)", c.name, c.n)
+		}
+	}
 
 	var mask int64
 	bitsVal, _ := r["bits"].(map[string]any)
@@ -306,16 +324,24 @@ func assembleVoltageList(rows []RowValue) (*realtime.ChargeableSubsystemElectric
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("至少需要一行储能电压数据")
 	}
+	// 表B.5:可充电储能子系统个数 1~250
+	if len(rows) > 250 {
+		return nil, fmt.Errorf("可充电储能子系统个数超限: %d (1~250)", len(rows))
+	}
 	list := &realtime.ChargeableSubsystemElectricList{}
 	for _, r := range rows {
+		sub := getInt(r, "subsystem", 1)
 		volts := getFloatArray(r, "batteryVoltages")
+		// 表B.6:本帧单体电池总数 1~200,个数即数组长度;空数组无有效帧可发
+		if len(volts) == 0 {
+			return nil, fmt.Errorf("子系统 %d 的单体电池电压为空 (本帧总数需 1~200)", sub)
+		}
 		start := getIntDefault(r, "frameStartSeq", 1)
 		// 每帧最多 200 个单体;超出按表 B.6 拆成多帧,起始序号依次递进。
-		// 空数组仍生成一条记录(本帧单体总数 0),保持"一行=一个子系统"的语义。
-		for begin := 0; begin < len(volts) || begin == 0; begin += maxCellsPerVoltageFrame {
+		for begin := 0; begin < len(volts); begin += maxCellsPerVoltageFrame {
 			end := min(begin+maxCellsPerVoltageFrame, len(volts))
 			list.Items = append(list.Items, realtime.ChargeableSubsystemElectric{
-				ChargeableSubSystemNumber: getInt(r, "subsystem", 1),
+				ChargeableSubSystemNumber: sub,
 				Voltage:                   getFloat(r, "voltage", 0),
 				Current:                   getFloat(r, "current", 0),
 				BatteryTotalCount:         getIntDefault(r, "batteryTotal", 0),
@@ -323,9 +349,6 @@ func assembleVoltageList(rows []RowValue) (*realtime.ChargeableSubsystemElectric
 				BatteryCount:              end - begin,
 				BatteryVoltages:           volts[begin:end],
 			})
-			if end == len(volts) {
-				break
-			}
 		}
 	}
 	// 拆帧后条目数可能多于行数,个数必须与条目数一致(线上按个数读取条目)。
@@ -337,16 +360,23 @@ func assembleTemperatureList(rows []RowValue) (*realtime.ChargeableSubsystemTemp
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("至少需要一行储能温度数据")
 	}
+	// 表B.7:可充电储能子系统个数 1~250
+	if len(rows) > 250 {
+		return nil, fmt.Errorf("可充电储能子系统个数超限: %d (1~250)", len(rows))
+	}
 	list := &realtime.ChargeableSubsystemTemperatureList{TemperatureCount: len(rows)}
 	for _, r := range rows {
+		sub := getInt(r, "subsystem", 1)
+		probes := getFloatArray(r, "probeTemps")
+		// 表B.8:温度探针个数 1~65531,个数即数组长度
+		if len(probes) == 0 {
+			return nil, fmt.Errorf("子系统 %d 的温度探针为空 (个数需 1~65531)", sub)
+		}
 		list.Items = append(list.Items, realtime.ChargeableSubsystemTemperature{
-			SubSystemNumber:       getInt(r, "subsystem", 1),
-			TemperatureProbeCount: 0,
-			ProbeTemperatures:     getFloatArray(r, "probeTemps"),
+			SubSystemNumber:       sub,
+			TemperatureProbeCount: len(probes),
+			ProbeTemperatures:     probes,
 		})
-	}
-	for i := range list.Items {
-		list.Items[i].TemperatureProbeCount = len(list.Items[i].ProbeTemperatures)
 	}
 	return list, nil
 }
