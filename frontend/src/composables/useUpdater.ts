@@ -41,3 +41,9 @@ export function markChecked(now: number) {
 export function skipVersion(latest: string) {
   appSettings.skippedVersion = latest
 }
+
+// 上次更新失败的启动告知文案;成功/无记录返回 null(设计 §5.4)
+export function lastResultToast(res: { present: boolean; ok: boolean }, currentVersion: string): string | null {
+  if (!res.present || res.ok) return null
+  return `上次更新未成功,已回滚在 ${currentVersion},详情见日志`
+}

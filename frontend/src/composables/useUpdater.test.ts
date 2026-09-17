@@ -4,6 +4,7 @@ import {
   UPDATE_CHECK_COOLDOWN_MS,
   formatBytes,
   isDevVersion,
+  lastResultToast,
   markChecked,
   shouldAutoCheck,
   shouldPrompt,
@@ -56,5 +57,15 @@ describe('markChecked / skipVersion', () => {
     expect(appSettings.lastUpdateCheckAt).toBe(123)
     skipVersion('v9.9.9')
     expect(appSettings.skippedVersion).toBe('v9.9.9')
+  })
+})
+
+describe('lastResultToast', () => {
+  it.each<[{ present: boolean; ok: boolean }, string, string | null]>([
+    [{ present: false, ok: false }, 'v0.1.0', null],
+    [{ present: true, ok: true }, 'v0.1.0', null],
+    [{ present: true, ok: false }, 'v0.1.0', '上次更新未成功,已回滚在 v0.1.0,详情见日志'],
+  ])('present/ok → 固定文案或静默(%#)', (res, currentVersion, expected) => {
+    expect(lastResultToast(res, currentVersion)).toBe(expected)
   })
 })

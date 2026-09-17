@@ -1,10 +1,12 @@
 <script setup lang="ts">
-// 关于:版本展示、更新检查与下载/校验(安装与重启后续 Phase 接入)。
+// 关于:版本展示、更新检查与下载/校验、安装并重启闭环。
 import { computed, onMounted, ref } from 'vue'
-import { message } from 'ant-design-vue'
+import { Modal, message } from 'ant-design-vue'
 import { GithubOutlined } from '@ant-design/icons-vue'
 import { BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
 import * as UpdaterService from '../../../wailsjs/go/bridge/UpdaterService'
+import * as ConnectionService from '../../../wailsjs/go/bridge/ConnectionService'
+import * as ServerService from '../../../wailsjs/go/bridge/ServerService'
 import { updater } from '../../../wailsjs/go/models'
 import { formatBytes, isDevVersion, skipVersion } from '../../composables/useUpdater'
 import { onWailsEvent, type UpdateProgressEvent } from '../../api/events'
@@ -19,6 +21,7 @@ const info = ref<updater.UpdateInfo | null>(null)
 const downloading = ref(false)
 const progress = ref<UpdateProgressEvent | null>(null)
 const ready = ref<updater.DownloadResult | null>(null)
+const applying = ref(false)
 let offProgress: (() => void) | null = null
 
 // errText 统一解包:Wails 拒绝值为 Error(Go error → new Error(msg));直接 String(e) 会带 "Error: " 前缀
@@ -91,6 +94,34 @@ function openRepo() {
   BrowserOpenURL(REPO_URL)
 }
 
+// 运行态中断文案:仅声明两种影响,四种组合逐一精确(AC-13)
+function interruptionHint(connOnline: boolean, serverRunning: boolean): string {
+  const parts: string[] = []
+  if (connOnline) parts.push('断开连接')
+  if (serverRunning) parts.push('停止服务')
+  return parts.length === 0 ? '安装过程中将退出。' : `安装过程中将${parts.join('、')}并退出。`
+}
+
+// 安装并重启:二次确认框按当前运行态动态追加中断提示
+async function apply() {
+  const [connState, serverStatus] = await Promise.all([ConnectionService.State(), ServerService.Status()])
+  Modal.confirm({
+    title: '安装并重启',
+    content: `将安装 ${ready.value?.tag ?? ''}。${interruptionHint(connState === 'online', serverStatus.running)}`,
+    okText: '安装并重启',
+    cancelText: '取消',
+    onOk: async () => {
+      try {
+        await UpdaterService.ApplyUpdate()
+        applying.value = true
+      } catch (e) {
+        message.error(errText(e)) // 失败不退出应用,保持就绪态可重试
+        throw e
+      }
+    },
+  })
+}
+
 // 查看发布说明:打开新版本对应的 GitHub Release 页(检查通道不再返回说明正文)
 function openReleaseNotes() {
   const latest = info.value?.latest
@@ -121,8 +152,14 @@ const platformUnsupported = computed(() => hasUpdate.value && !info.value?.asset
             <span class="about-new">发现新版本 <b>{{ info.latest }}</b></span>
             <span v-if="platformUnsupported" class="about-hint">当前平台暂不支持自动更新</span>
 
-            <template v-if="ready">
-              <span class="about-new">更新包已就绪:{{ ready.tag }}(下载与校验完成;安装与重启将在后续阶段开放)</span>
+            <template v-if="applying">
+              <span class="about-new">正在安装并重启,应用将在数秒内退出…</span>
+            </template>
+            <template v-else-if="ready">
+              <span class="about-new">更新包已就绪:{{ ready.tag }}(下载与校验完成)</span>
+              <div class="about-actions">
+                <a-button size="small" type="primary" @click="apply">安装并重启</a-button>
+              </div>
             </template>
             <template v-else-if="downloading">
               <div class="about-progress">
@@ -143,7 +180,7 @@ const platformUnsupported = computed(() => hasUpdate.value && !info.value?.asset
         </div>
       </template>
       <template #action>
-        <a-button size="small" :loading="checking" :disabled="devBuild" @click="check">检查更新</a-button>
+        <a-button size="small" :loading="checking" :disabled="devBuild || applying" @click="check">检查更新</a-button>
       </template>
     </SettingRow>
 

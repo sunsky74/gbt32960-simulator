@@ -1,17 +1,29 @@
-// SettingsAboutPanel:版本展示 / 检查更新 / 跳过版本 / 下载与校验(UpdaterService 全 mock)
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+// SettingsAboutPanel:版本展示 / 检查更新 / 跳过版本 / 下载与校验 / 安装并重启(UpdaterService 等绑定全 mock)
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import { message } from 'ant-design-vue'
+import { Modal, message } from 'ant-design-vue'
 
 const checkUpdate = vi.fn()
 const downloadUpdate = vi.fn()
 const cancelDownload = vi.fn()
+const applyUpdate = vi.fn()
 let currentVersion = 'v0.1.0'
 vi.mock('../../../wailsjs/go/bridge/UpdaterService', () => ({
   CurrentVersion: vi.fn(async () => currentVersion),
   CheckUpdate: (...args: unknown[]) => checkUpdate(...args),
   DownloadUpdate: (...args: unknown[]) => downloadUpdate(...args),
   CancelDownload: (...args: unknown[]) => cancelDownload(...args),
+  ApplyUpdate: (...args: unknown[]) => applyUpdate(...args),
+}))
+
+// 运行态查询绑定:由用例按需设定组合(客户端状态 / 服务端是否运行中)
+let mockedConnectionState = 'idle'
+let mockedServerRunning = false
+vi.mock('../../../wailsjs/go/bridge/ConnectionService', () => ({
+  State: vi.fn(async () => mockedConnectionState),
+}))
+vi.mock('../../../wailsjs/go/bridge/ServerService', () => ({
+  Status: vi.fn(async () => ({ running: mockedServerRunning, listenAddr: ':12345' })),
 }))
 
 vi.mock('../../../wailsjs/runtime/runtime', () => ({
@@ -53,6 +65,7 @@ describe('SettingsAboutPanel', () => {
     checkUpdate.mockReset()
     downloadUpdate.mockReset()
     cancelDownload.mockReset()
+    applyUpdate.mockReset()
     appSettings.skippedVersion = ''
     vi.mocked(BrowserOpenURL).mockClear()
     checkUpdate.mockResolvedValue({
@@ -145,6 +158,110 @@ describe('SettingsAboutPanel', () => {
       await findBtn(wrapper, '下载更新').trigger('click')
       await flushPromises()
       expect(errSpy).toHaveBeenCalledWith('发布未附校验信息,已拒绝更新')
+      errSpy.mockRestore()
+    })
+  })
+
+  describe('安装并重启', () => {
+    // Modal.confirm 捕获:不真正弹窗,取出配置供断言与手动触发 onOk
+    type ConfirmCfg = {
+      title?: string
+      content?: string
+      okText?: string
+      cancelText?: string
+      onOk?: () => Promise<void>
+    }
+    let captured: ConfirmCfg | null = null
+    let confirmSpy: { mockRestore: () => void }
+
+    beforeEach(() => {
+      captured = null
+      mockedConnectionState = 'idle'
+      mockedServerRunning = false
+      confirmSpy = vi.spyOn(Modal, 'confirm').mockImplementation((cfg) => {
+        captured = cfg as unknown as ConfirmCfg
+        return {} as never
+      })
+    })
+
+    afterEach(() => confirmSpy.mockRestore())
+
+    // 挂载 → 检查 → 下载完成,进入就绪态(安装并重启可用)
+    async function mountReady() {
+      const wrapper = mount(SettingsAboutPanel, { global: { stubs } })
+      await flushPromises()
+      await findBtn(wrapper, '检查更新').trigger('click')
+      await flushPromises()
+      downloadUpdate.mockResolvedValue({
+        tag: 'v0.2.0',
+        assetName: 'gbt32960-simulator.app.zip',
+        size: 200,
+        sha256: 'x',
+      })
+      await findBtn(wrapper, '下载更新').trigger('click')
+      await flushPromises()
+      return wrapper
+    }
+
+    it('确认框按运行态动态追加中断文案(四种组合精确匹配)', async () => {
+      const cases = [
+        { conn: 'idle', running: false, hint: '安装过程中将退出。' },
+        { conn: 'online', running: false, hint: '安装过程中将断开连接并退出。' },
+        { conn: 'idle', running: true, hint: '安装过程中将停止服务并退出。' },
+        { conn: 'online', running: true, hint: '安装过程中将断开连接、停止服务并退出。' },
+      ]
+      for (const c of cases) {
+        const wrapper = await mountReady()
+        mockedConnectionState = c.conn
+        mockedServerRunning = c.running
+        await findBtn(wrapper, '安装并重启').trigger('click')
+        await flushPromises()
+
+        expect(captured?.title).toBe('安装并重启')
+        expect(captured?.content).toBe(`将安装 v0.2.0。${c.hint}`)
+        expect(captured?.okText).toBe('安装并重启')
+        expect(captured?.cancelText).toBe('取消')
+      }
+    })
+
+    it('确认后进入 applying:ApplyUpdate 恰一次且就绪按钮不再出现', async () => {
+      applyUpdate.mockResolvedValue(undefined)
+      const wrapper = await mountReady()
+      await findBtn(wrapper, '安装并重启').trigger('click')
+      await flushPromises()
+
+      await captured?.onOk?.()
+      await flushPromises()
+
+      expect(applyUpdate).toHaveBeenCalledTimes(1)
+      expect(wrapper.text()).toContain('正在安装并重启,应用将在数秒内退出…')
+      expect(wrapper.findAll('button').filter((b) => b.text().includes('安装并重启'))).toHaveLength(0)
+      expect(findBtn(wrapper, '检查更新').attributes('disabled')).toBeDefined()
+    })
+
+    it('取消不触发:ApplyUpdate 零调用且保持就绪态', async () => {
+      const wrapper = await mountReady()
+      await findBtn(wrapper, '安装并重启').trigger('click')
+      await flushPromises()
+
+      expect(applyUpdate).not.toHaveBeenCalled()
+      expect(wrapper.text()).toContain('更新包已就绪:v0.2.0')
+      expect(findBtn(wrapper, '安装并重启').exists()).toBe(true)
+    })
+
+    it('ApplyUpdate 拒绝:纯文案 toast 且保持可重试', async () => {
+      applyUpdate.mockRejectedValue(new Error('更新包未就绪,请先下载'))
+      const errSpy = vi.spyOn(message, 'error')
+      const wrapper = await mountReady()
+      await findBtn(wrapper, '安装并重启').trigger('click')
+      await flushPromises()
+
+      await captured?.onOk?.().catch(() => {}) // 拒绝被组件重抛(antd 依赖),测试侧吞掉
+      await flushPromises()
+
+      expect(errSpy).toHaveBeenCalledWith('更新包未就绪,请先下载')
+      expect(wrapper.text()).not.toContain('正在安装并重启')
+      expect(findBtn(wrapper, '安装并重启').exists()).toBe(true)
       errSpy.mockRestore()
     })
   })

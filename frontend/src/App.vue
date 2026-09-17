@@ -8,7 +8,7 @@ import { useTheme } from './theme/useTheme'
 import { message } from 'ant-design-vue'
 import * as UpdaterService from '../wailsjs/go/bridge/UpdaterService'
 import { appSettings, rememberNavPage, restoreLastNavPage } from './composables/useAppSettings'
-import { UPDATE_CHECK_DELAY_MS, markChecked, shouldAutoCheck, shouldPrompt } from './composables/useUpdater'
+import { UPDATE_CHECK_DELAY_MS, lastResultToast, markChecked, shouldAutoCheck, shouldPrompt } from './composables/useUpdater'
 import { openSettingsCategory, settingsFocusCategory } from './composables/settingsFocus'
 
 // 左侧导航展开/收起(持久化到 localStorage)
@@ -53,6 +53,17 @@ onMounted(() => {
       markChecked(now)
     }
   }, UPDATE_CHECK_DELAY_MS)
+})
+
+// 启动消费上次更新结果:失败 → 固定文案告知(原因与日志见日志文件);成功或无记录静默
+onMounted(async () => {
+  try {
+    const [res, cur] = await Promise.all([UpdaterService.ConsumeLastResult(), UpdaterService.CurrentVersion()])
+    const text = lastResultToast(res, cur)
+    if (text) message.error(text)
+  } catch {
+    // 静默:更新结果消费失败不影响启动
+  }
 })
 
 const activePage = computed(() => allNavItems.value.find((i) => i.key === activeNavKey.value) ?? allNavItems.value[0])
