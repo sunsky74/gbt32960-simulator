@@ -584,9 +584,13 @@ func TestUpdaterServiceApplySpawnFailure(t *testing.T) {
 
 func TestUpdaterServiceApplyPreflightGuidance(t *testing.T) {
 	f := newApplyFixture(t)
-	f.svc.preflight = func(string) error { return updater.ErrTranslocated }
-	if err := f.svc.ApplyUpdate(); !errors.Is(err, updater.ErrTranslocated) {
-		t.Fatalf("err = %v, want ErrTranslocated 原文透出", err)
+	// 平台中性预检错误:平台专属预检哨兵仅在各自构建标签下定义,
+	// 本测试须跨平台编译,故以本地错误等价验证"指引文案原文透出、不退出应用"。
+	preflightErr := errors.New("预检失败(测试)")
+	f.svc.preflight = func(string) error { return preflightErr }
+	err := f.svc.ApplyUpdate()
+	if !errors.Is(err, preflightErr) || err.Error() != preflightErr.Error() {
+		t.Fatalf("err = %v, want 预检指引原文透出", err)
 	}
 	if len(f.spawnArgs) != 0 {
 		t.Fatalf("预检失败不得 spawn: %+v", f.spawnArgs)
