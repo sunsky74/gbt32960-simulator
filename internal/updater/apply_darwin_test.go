@@ -222,6 +222,34 @@ func TestDarwinStageRejections(t *testing.T) {
 		}
 		assertNoStaging(t, deploy)
 	})
+
+	t.Run("合法 zip 但 Contents/MacOS 无可执行位", func(t *testing.T) {
+		src := t.TempDir()
+		app := filepath.Join(src, "X.app")
+		macos := filepath.Join(app, "Contents", "MacOS")
+		if err := os.MkdirAll(macos, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(app, "Contents", "Info.plist"), []byte("<plist/>"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		nonExec := filepath.Join(macos, "x")
+		if err := os.WriteFile(nonExec, []byte("#!/bin/sh\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(nonExec, 0o644); err != nil { // 显式落 0644,免受 umask 影响
+			t.Fatal(err)
+		}
+		zipPath := filepath.Join(t.TempDir(), "X.app.zip")
+		zipBundle(t, app, zipPath)
+
+		deploy := t.TempDir()
+		target := filepath.Join(deploy, "X.app")
+		if _, _, err := stageDarwinBundle(zipPath, target); !errors.Is(err, ErrStageFailed) {
+			t.Fatalf("err = %v, want ErrStageFailed", err)
+		}
+		assertNoStaging(t, deploy)
+	})
 }
 
 // assertNoStaging 断言目录下无 .gbt32960-update-*.staging 残留。
@@ -290,6 +318,34 @@ func TestDarwinSwapAndRollback(t *testing.T) {
 			t.Fatalf("备份内容 = %q, want old", got)
 		}
 	})
+}
+
+// TestDarwinRollbackMissingBackup 备份已被消费(缺失)时回滚必须拒绝且不得触碰 target(防二次回滚误删新包)。
+func TestDarwinRollbackMissingBackup(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "A.app")
+	staged := filepath.Join(dir, ".gbt32960-update-1.staging", "A.app")
+	writeMarker(t, target, "old")
+	writeMarker(t, staged, "new")
+
+	backup, err := swapDarwinBundle(staged, target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rollbackRename(backup, target); err != nil {
+		t.Fatal(err)
+	}
+	if got := readMarker(t, target); got != "old" {
+		t.Fatalf("首次回滚后 target 内容 = %q, want old", got)
+	}
+
+	// 同一 backup 已被首次回滚消费;再次回滚必须先确认备份可还原,否则会误删已还原的 target。
+	if err := rollbackRename(backup, target); !errors.Is(err, ErrRollbackFailed) {
+		t.Fatalf("err = %v, want ErrRollbackFailed", err)
+	}
+	if got := readMarker(t, target); got != "old" {
+		t.Fatalf("二次回滚后 target 内容 = %q, want old(target 不应被动过)", got)
+	}
 }
 
 // TestDarwinCleanupStaleBackups 仅删 *.bak-* 与 .gbt32960-update-*.staging,无关文件保留。

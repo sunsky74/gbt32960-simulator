@@ -150,10 +150,14 @@ func swapDarwinBundle(staged, target string) (string, error) {
 }
 
 // rollbackRename 通用回滚:backup == "" → nil(幂等);
+// 备份缺失(已被消费)时拒绝且不动 target,避免二次回滚误删已还原的新包;
 // rename 不能覆盖非空目录,故先移除新包(此时备份仍完整),再还原备份;任一失败 → ErrRollbackFailed。
 func rollbackRename(backup, target string) error {
 	if backup == "" {
 		return nil
+	}
+	if _, err := os.Lstat(backup); err != nil {
+		return ErrRollbackFailed
 	}
 	if err := os.RemoveAll(target); err != nil {
 		return ErrRollbackFailed
