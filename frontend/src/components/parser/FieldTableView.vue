@@ -118,10 +118,9 @@ const columns = [
   { title: 'Offset', key: 'offset', width: 72 },
   { title: 'Len', key: 'length', width: 56 },
   { title: '字段名称', key: 'name', width: 210 },
-  { title: '类型', key: 'type', width: 64 },
-  { title: '原始值', key: 'rawValue', width: 132 },
   { title: '解析值', key: 'offsetVal', width: 120 },
   { title: '翻译值', key: 'translate' },
+  { title: '原始值', key: 'rawValue', width: 132 },
 ]
 
 // 区间相交:字段行 ↔ 字节区间
@@ -247,9 +246,6 @@ onBeforeUnmount(() => {
         </template>
         <template v-else-if="column.key === 'name'">
           <span class="ellipsis-cell" :title="record.field.name">{{ record.field.name }}</span>
-        </template>
-        <template v-else-if="column.key === 'type'">
-          <span class="mono">{{ record.field.type }}</span>
         </template>
         <template v-else-if="column.key === 'rawValue'">
           <span class="mono ellipsis-cell" :title="record.field.rawHex">{{ record.field.rawValue }}</span>
