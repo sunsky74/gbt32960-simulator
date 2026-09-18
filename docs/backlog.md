@@ -3,7 +3,7 @@
 > 本文件收录已形成结论、尚未排期实施的功能设计与未来工作项。
 > 启动实施时应升级为 `docs/superpowers/specs/` 下的正式 spec,并按既有流程(计划 → 双门评审 → 验收)执行。
 
-最后更新:2026-09-10
+最后更新:2026-09-17
 
 ## 1. 服务端模式:本地终端测试增强(断言 / 用例 / 报告)
 
@@ -103,6 +103,32 @@ Runtime 持有单个 `*engine.Client`)。多连接/压测作为未来工作,待�
   内存上界复核、UI 事件洪峰处理(可顺带做 server 侧帧事件批处理)。
 - 待决问题:多连接与扩展包/轨迹回放的交互;单窗口 UI 信息密度;失败隔离与重连策略。
 - 触发条件:平台上量联调、多车在线仿真、容量验证需求出现时启动评估(先出设计再排期)。
+
+## 3. 工具链:GitLab CI(自建实例)构建与下载
+
+**现状(2026-09-17)**:`.gitlab-ci.yml` 已提交;首次实测(v0.1.0)全部 job 卡 pending——**公司 runner 的标签未知,
+未打标签的 job 无 runner 匹配,需先向运维确认**。当前流水线范围:**Linux 二进制 + Windows exe / NSIS 安装包**
+(Linux runner 交叉编译);**macOS(.app.zip)本轮暂不构建**(需 macOS runner,恢复方式见下)。
+构建命令与 `.github/workflows/release.yml` 同源;产物上传 Generic Package,Release 页给出永久下载链接。
+
+**待确认(阻塞首次跑通)**:
+
+1. **公司 runner 的标签与可用性(最关键,待确认)**
+   - 项目 Settings → CI/CD → Runners:有哪些可用 runner、各自标签、是否 Docker executor;
+   - 二选一对齐:① 把 job 的 `tags:` 改为公司 runner 实际标签(拿到标签名后改 CI);② 让 runner 开启 "Run untagged jobs"(CI 不动)。
+2. **实例能力**:Package Registry 是否开启(管理员设置);GitLab 版本支持 `release:` 关键字(≥13.x)与 dotenv 变量透传。
+3. **内网网络可达性(自建环境最常见阻塞点)**
+   - Docker 镜像:`golang:1.25-bookworm`、`alpine:3`、`registry.gitlab.com/gitlab-org/release-cli:latest`;
+   - Linux job 内的外部源:`deb.nodesource.com`(Node 22 安装源)、`dl-cdn.alpinelinux.org`(apk)、npm registry(`wails build` 会自动执行 `npm install`)、Go 模块代理(`go install` wails CLI);
+   - 不可达时:同步镜像到内网仓库并替换 `image:`,npm / GOPROXY 配内网源(必要时加 `.npmrc`)。
+4. **触发条件与生效方式**:默认仅 `v*` 标签触发(与 GitHub Actions 共用同一批 tag);流水线使用 tag 指向提交中的
+   `.gitlab-ci.yml`——**修改 CI 后需删除并重打 tag(或打新 tag)才生效**。
+
+**恢复 macOS 的前提**:一台 Mac 注册 shell executor runner(tag `macos`;需 Xcode CLT / Go 1.25 / Node 22);
+恢复 `build_macos` job 与 upload / release 中对应条目(参考 git 历史 `ccd462b`)。
+
+**非阻塞备注**:`internal/updater` 硬编码 GitHub Releases(`release.go` 中 `Repo`/`BaseURL` 常量),
+GitLab Release 仅作"仓库内直接下载"渠道;若要改为从 GitLab 自动更新,需另立任务改代码。
 
 ---
 
