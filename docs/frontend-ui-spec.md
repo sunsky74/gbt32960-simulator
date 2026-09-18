@@ -1,6 +1,6 @@
 # 项目前端 UI 与布局设计规范手册
 
-> 反推自真实代码（2026-09-14 复核基准）。技术栈事实：**Vue 3 + Ant Design Vue 4 + 自定义 CSS 变量体系**，
+> 反推自真实代码（2026-09-18 复核基准；V2.1 设计清理批次：Token 阶梯、文字级语义色、键盘可达性）。技术栈事实：**Vue 3 + Ant Design Vue 4 + 自定义 CSS 变量体系**，
 > 无 Tailwind / 无 components/ui 原子目录——设计系统由 `frontend/src/style.css`（设计 Token + 全局布局类）
 > 与 `frontend/src/theme/index.ts`（antd ConfigProvider Token）双层驱动，主题经 `<html data-theme="dark|light">` 切换。
 > 参数速查版见 `docs/ui-design-reference.md`；本手册为完整规范 + 坏味道清零核对。
@@ -19,37 +19,43 @@
 | 抬升层(输入/悬浮) | `--bg-elevated` | `#262626` | `#ffffff` | colorBgContainer/`#2a2a2a` elevated |
 | 边框(次级/分隔线) | `--border-subtle` | `rgba(255,255,255,.08)` | `rgba(0,0,0,.06)` | colorBorderSecondary |
 | 边框(主级/盒子) | `--border-strong` | `rgba(255,255,255,.15)` | `rgba(0,0,0,.12)` | colorBorder ≈.12 |
-| 文本主/次/弱/禁用 | `--text-primary…disabled` | 白 0.88/0.65/0.45/0.35 | 黑 0.88/0.65/0.45/0.3 | colorText 系 |
+| 文本主/次/弱 | `--text-primary/secondary/tertiary` | 白 0.88/0.65/0.55 | 黑 0.88/0.65/0.55 | colorText 系 |
 | 成功/警告/错误 | `--success/--warning/--error` | `#52c41a/#faad14/#ff4d4f` | `#389e0d/#d46b08/#cf1322` | colorSuccess 系 |
+| 文字级语义色 | `--primary-text/--success-text/--warning-text` | `#4096ff/#52c41a/#faad14` | `#0958d9/#237804/#ad4e00` | colorPrimaryText/InfoText/Link、colorSuccessText、colorWarningText、colorErrorText |
+| 焦点轮廓 | `--focus-ring` | `#4096ff` | `#1677ff` | —（自绘 `:focus-visible` 专用，§3.4） |
 
 辅助交互色：`--primary-hover-bg`(主色 0.08~0.1 淡底)、`--row-hover-bg`(行 hover 0.06)、`--item-hover-bg`(卡片头 hover 白/黑 0.04)、`--hl-bg`+`--hl-shadow`(选中态)。
-**规则：组件样式一律引用变量，双主题各验一遍；特殊语义色需提供 light 覆盖**（如 `--c-encrypted`：dark `#9254de` → light `#6424c2`；`--c-unknown`：dark `#d46b08` → light `#ad4e00`）。
+**规则：组件样式一律引用变量，双主题各验一遍；文字一律用 `-text` 变体（填充/边框/图标保留 `--primary/--success/--warning`），对比度 ≥4.5:1**（`--text-tertiary` 透明度由 0.45 提到 0.55 即为此；`--text-disabled` 已删除、0 引用，禁用文字由 antd colorTextQuaternary 承载）。**特殊语义色需提供 light 覆盖**（如 `--c-encrypted`：dark `#b37feb` → light `#6424c2`；`--c-unknown`：dark `#d46b08` → light `#ad4e00`）。antd 侧同步文字 token（theme/index.ts:29-35 / 57-63，由 colorInfoText 派生 colorLink、两者显式声明），预设标签浅色覆盖：`:root[data-theme='light'] .ant-tag-blue/.ant-tag-geekblue { color: #0958d9; }`（style.css:943-947，其余预设标签沿 antd 默认）。
 
 ### 1.2 字体与排版
 
 - 家族：`-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif`；数据文本（hex/JSON/VIN/时间）统一 `--font-mono` + `font-variant-numeric: tabular-nums`
-- 字号梯度（实测）：**11 / 12 / 13 / 14 / 16 / 22**
+- 字号梯度（实测，V2.1 起全量 token 化）：`--fs-11/12/13/14/16/18/22` = **11 / 12 / 13 / 14 / 16 / 18 / 22px**（style.css:20-26）；**11px 为下限，18px 为页面标题档**（`.ext-title`，ExtensionsPage.vue:237）
 
 | 层级 | 字号×字重 | 实例 |
 |---|---|---|
-| 页面 Hero 标题 | 22×600 | `.hero-title`（解析页输入区,ParserInputHero.vue:104） |
-| 品牌位/大标题 | 16×600 | `.brand`（style.css:166） |
-| 梯度外特例 | 15×600 | 扩展包区两处：抽屉标题（PackDetailDrawer.vue:339）、卡片统计数字 mono（PackCard.vue:230） |
-| 正文/卡片标题 | 14×(400/500/600) | body、`.cc-title`、`.sb-title`、SettingRow `.sr-title`（14×500） |
-| 次要说明 text-muted | 13×400/600 | `.toolbar-label`、`.group-title` |
-| 辅助标签/数据 | 12×400 | `.zone-title`、`.field-label`、`.sr-desc` |
-| 微标签 | 11×400~600 | `.dir-badge`、`.st`、`.server-proto` |
+| 页面 Hero 标题 | 22×600（`--fs-22`） | `.hero-title`（解析页输入区,ParserInputHero.vue:104） |
+| 页面标题档 | 18×600（`--fs-18`） | `.ext-title`（扩展包页,ExtensionsPage.vue:237） |
+| 品牌位/大标题 | 16×600（`--fs-16`） | `.brand`（style.css:198） |
+| 正文/卡片标题 | 14×(400/500/600)（`--fs-14`） | body、`.cc-title`、`.sb-title`、SettingRow `.sr-title`（14×500） |
+| 次要说明 text-muted | 13×400/600（`--fs-13`） | `.toolbar-label`、`.group-title` |
+| 辅助标签/数据 | 12×400（`--fs-12`） | `.zone-title`、`.field-label`、`.sr-desc` |
+| 微标签 | 11×400~600（`--fs-11`） | `.dir-badge`、`.st`、`.server-proto` |
+
+梯度外字号（10 / 15 / 17px）本批次已清零；15px 两处归位 16px（PackDetailDrawer.vue:339、PackCard.vue:230）。
 
 ### 1.3 圆角与阴影
 
-| 级别 | 值 | 使用处 |
-|---|---|---|
-| 盒子级 | 8px | `.zone`/`.side-card`/`.group-collapse` + antd 全局 borderRadius:8 |
-| 子容器 | 6px | `.group-row`(虚线数据行)、`.row-detail` |
-| 小元素 | 4px | `.raw-hex`、`.byte-card`、滚动条 thumb |
-| 微标签 | 2px | `.server-proto`、`.st`、`.sr-badge`；孤例：`.dd-json-label` 3px（PackJsonPanel.vue:61） |
-| 胶囊 | 999px | 分割条手柄（§2.3，V2.0 起统一） |
-| 阴影 | `--shadow`:dark `0 1px 2px rgba(0,0,0,.3)` / light `.06` | **仅**主面板 zone 与悬浮卡片；卡片栈不加重影 |
+| 级别 | Token | 值 | 使用处 |
+|---|---|---|---|
+| 盒子级 | `--radius-lg` | 8px | `.zone`/`.side-card`/`.group-collapse` + antd 全局 borderRadius:8 |
+| 子容器 | `--radius-md` | 6px | `.group-row`(虚线数据行)、`.row-detail` |
+| 小元素 | `--radius-sm` | 4px | `.raw-hex`、`.byte-card`、`.dd-json-label`（PackJsonPanel.vue:61）、滚动条 thumb（style.css:1028） |
+| 微标签 | `--radius-xs` | 2px | `.server-proto`、`.st`、`.sr-badge` |
+| 胶囊 | `--radius-pill` | 999px | 分割条手柄（§2.3，V2.0 起统一） |
+| 阴影 | — | `--shadow`:dark `0 1px 2px rgba(0,0,0,.3)` / light `.06` | **仅**主面板 zone 与悬浮卡片；卡片栈不加重影 |
+
+单值圆角一律引用 `--radius-*`（style.css:14-18）；多值方向性圆角（如 SideNav 选中指示条 `0 2px 2px 0`，SideNav.vue:155）保留字面值。
 
 弹窗圆角/蒙层走 antd 默认（borderRadius token 全局 8 生效）。
 
@@ -103,9 +109,9 @@
 
 ### 3.1 控件尺寸（Ant Design，无自绘控件库）
 
-- **全站 `size="small"`**（工具风）：Button/Input/Select/InputNumber/Switch/Tabs 一律 small（antd small 控件高 24px）
-- 默认尺寸仅用于：模态框确认按钮、解析页 Hero 主输入区
-- 固定宽度：模板统一走 `.w-NNN` 档位类（style.css:916，档位 84/110/130/160/180/200/220/300），如端口 110 / 心跳 180 / 间隔 130 / 数组项 84 / 补发数字 200；内联固定像素宽度已清零
+- **全站 `size="small"`**（工具风）：Button/Input/Select/InputNumber/Switch/Tabs 一律 small（antd small 控件高 24px）；历史偏差已回归，如 RealTimePanel「发送补发 (0x03)」（RealTimePanel.vue:330）
+- 默认尺寸仅用于两类**文档化例外**：模态框确认按钮、解析页 Hero 主输入区按钮组（解析/清空/复制 3 键 + 扩展包 select，ParserInputHero.vue:51-70）
+- 固定宽度：模板统一走 `.w-NNN` 档位类（style.css:992，档位 84/110/130/160/180/200/220/300），如端口 110 / 心跳 180 / 间隔 130 / 数组项 84 / 补发数字 200；内联固定像素宽度仅余共享常量 `CTRL_W = '180px'`（planned.ts:6，SettingsStoragePanel/PlannedSettingRows 引用）
 - 其余固定宽走全局类：档案选择 300（`.profile-select`）、搜索框 220（`.search-input`）、zone 内嵌搜索 160（`.zone-search`）、报文预览 select 200（`.pack-select`）
 - 弹性规则：字段行内控件 `flex:1; min-width:0`；字段网格 `repeat(auto-fill,minmax(210px,1fr))`
 - 按钮语义：主操作 primary / 危险 danger / 行内删除 `text+danger` / 添加 dashed / 行内链接 link(padding 压 0 4px)；筛选组 = button 组(选中 primary,**禁 radio-button**)
@@ -127,6 +133,12 @@
 - 禁用态（规划中）：标题降为 secondary
 - 二级导航项 `.sn-item`：gap 8px / padding 8px 10px（已归位 4px 网格）；active 态 = `--primary-hover-bg` 底 + 主色文字 + 500 字重（SettingsPage.vue:223）
 
+### 3.4 键盘焦点与可达性（V2.1 新增）
+
+- 全局 `:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }`（style.css:151）：自绘可交互元素统一可见轮廓；antd 控件自带焦点样式，不受影响
+- 自绘可展开行必须键盘可达：JsonTree 行 `tabindex="0"` + `aria-expanded` + Enter/Space 切换（JsonTree.vue:93-97）；CollapsibleCard 头部同款（CollapsibleCard.vue:25-29）
+- 文字对比度：正文/说明文字 ≥4.5:1（tertiary 透明度 0.45→0.55 即为此）
+
 ---
 
 ## 4. 弹窗与抽屉（Modal / Drawer）规范
@@ -139,9 +151,10 @@
 
 ---
 
-## 5. 坏味道清零核对（原九项，2026-09-14 复扫）
+## 5. 坏味道清零核对（原九项 + 本轮第 10 项，2026-09-18 复扫）
 
 > 下列九项为本文档首版（`a8670a6`）依据当时代码列出的不一致清单，同批次已按设计规范 V2.0 清零；
+> 第 10 项为 V2.1 设计清理批次（Token 阶梯 / 文字级语义色 / 键盘可达性 / 类名单源化）新增。
 > 下表为复扫结果——位置更新为当前文件与行号，状态注明清零方式或残留。
 
 | # | 当前位置（原引用） | 原问题 | 复扫状态 |
@@ -149,11 +162,19 @@
 | 1 | `ExtensionCommands.vue`（原 `:188`） | `.row-label color:#888` 硬编码灰 + `.row-head` 同名类两套实现 | ✅ 已清零：scoped 重写删除，复用全局 `group-row` 体系（`ExtensionCommands.vue:203` 注释） |
 | 2 | `PacketParserPage.vue`（原 `:1014-1019`） | `#ff7875/#cf1322` 硬编码红（双主题手写第二套） | ✅ 已清零：硬编码删除（页面零硬编码色）；字节告警复用全局主题化 `.bc-issue`（style.css:1547，`HoverInfoCard.vue:159` 注明不再重写） |
 | 3 | 扩展包组件（原 `ExtensionsPage.vue:834-1059`，已拆分） | success 色双主题手写、`rgba(255,77,79,.35)!important`、JSON 预览块自成深色主题 | ✅ 已清零并重新规范：色值全部 token 化；JSON 块按 reference §11.3 定位为**固定深色代码块**（`PackJsonPanel.vue:77`，`#0f0f0f` 底 + 复制按钮 + `max-height:360px`，声明为不随主题切换的独立代码区） |
-| 4 | 全仓（原 12 处） | 内联 `style="width:NNNpx"` 散落模板 | ✅ 已清零：收敛为 `.w-*` 档位类（style.css:916）；固定像素内联 0 处（余 `width:100%` 属豁免） |
+| 4 | 全仓（原 12 处） | 内联 `style="width:NNNpx"` 散落模板 | ✅ 已清零：收敛为 `.w-*` 档位类（style.css:992）；固定像素内联仅余共享常量 `CTRL_W`（见第 10 项残留②，余 `width:100%` 属豁免） |
 | 5 | `ExtensionsPage.vue`（原 `:629`） | `.ext-page` 覆盖 padding 为 16px，偏离 12px 基准 | ✅ 已清零：现 `padding: 12px 16px`（`ExtensionsPage.vue:216`） |
 | 6 | `SettingsPage.vue` / `SettingRow.vue`（原 `:406`） | `.sn-item` gap 9px / padding 7px 10px；`.sr-badge` 10px 字号 + radius 3px | ✅ 已清零：`.sn-item` 归位 `gap:8px / padding:8px 10px`（`SettingsPage.vue:204`）；`.sr-badge` 11px / radius 2px（`SettingRow.vue:61`） |
 | 7 | `SettingsPage.vue`（原 `:391 / :450`） | `.sn-head` 14×600 与 `.sn-item.active` 15×600 字号倒挂 | ✅ 已清零：`.sn-title` 14×600（`SettingsPage.vue:191`），active 不再另设字号（`:223`） |
-| 8 | 弹层共用类（原 `ServerModePage.vue` 下发弹窗） | `modal-hint/extcmd-fields/hex-input` scoped 重写，与 ConsolePanel 重复实现 | ⚠️ 部分清零：全局 `.modal-hint` 已建立（style.css:909，注明"禁止 scoped 重写"）；**残留两处同内容 scoped 副本未删**（`ConsolePanel.vue:331`、`ExtCommandModal.vue:159`，无视觉差异） |
-| 9 | `style.css`（原 `:1325` 等三色行） | 未知橙/加密紫 dark/light 各写两份 rgba 原值（6 处硬编码） | ✅ 已清零：提为 `--c-unknown` / `--c-encrypted` 语义变量（style.css:47-48 / 77-78），`st-*` / `frame-*` / `dir-*` 全量引用变量 |
+| 8 | 弹层共用类（原 `ServerModePage.vue` 下发弹窗） | `modal-hint/extcmd-fields/hex-input` scoped 重写，与 ConsolePanel 重复实现 | ✅ 已清零：全局 `.modal-hint` 单源（style.css:950，注明"禁止 scoped 重写"）；两处同内容 scoped 副本已删（V2.1 补齐）；`.hex-input`/`.parse-alert`/`.alert-*` 同批单源化 |
+| 9 | `style.css`（原 `:1325` 等三色行） | 未知橙/加密紫 dark/light 各写两份 rgba 原值（6 处硬编码） | ✅ 已清零：提为 `--c-unknown` / `--c-encrypted` 语义变量（style.css:66-67 / 100-101），`st-*` / `frame-*` / `dir-*` 全量引用变量（dark 加密紫 V2.1 调为 `#b37feb`） |
+| 10 | 全仓（V2.1 设计清理批次） | 单值圆角/字号硬编码、文字语义色缺失（对比度不足）、自绘行不可键盘操作、跨组件类名冲突与副本 | ✅ 已清零：`--radius-*` / `--fs-*` token 阶梯（全仓 `var(--fs-*)` 128 处、`var(--radius-*)` 38 处；梯度外 10/15/17px 与 3px 圆角归零）；`--*-text` + `--focus-ring`、tertiary 0.45→0.55；`:focus-visible` + JsonTree/CollapsibleCard 键盘操作；共享类单源（`.byte-card`/`.modal-hint`/`.hex-input`/`.parse-alert`/`.alert-*`/`.row-group .setting-row:last-child`，`.track-file` 收 ellipsis），设置面板 `.group-title`→`.settings-group-title`，`CTRL_W`→`w-180`（SettingsAppearancePanel.vue:47,57）；硬编码红 `#cf1322`/`#ffa39e` 换 token、`var(--error-color,…)` 拼写错误修复 ×2 |
 
-**共性结论**：全局体系（style.css 变量 + zone/card 类）覆盖良好；九项坏味道已于设计规范 V2.0 批次清零，唯一残留为第 8 项两处无视觉差异的 scoped 副本。新增页面仍须零 scoped 颜色、布局类从全局取；弹层共用类禁止 scoped 重写。
+**V2.1 残留 4 项（如实记录，未修）**：
+
+1. `PacketDetail.vue` 仍内联复制 HoverInfoCard 的悬浮卡模板/脚本逻辑（样式已全局化，组件级去重延期，PacketDetail.vue:305）；
+2. `CTRL_W` 内联宽度仍用于 `SettingsStoragePanel.vue:62` / `PlannedSettingRows.vue:28`（常量在 `planned.ts:6`）；
+3. `PackJsonPanel.vue` 固定深色代码块保留 6 处硬编码 hex（`#0f0f0f` 底 + 5 处前景，§11.3 有意为之、未 token 化，PackJsonPanel.vue:82-106）；
+4. antd 预设标签仅 blue/geekblue 获得浅色文字覆盖，其余预设标签沿 antd 默认。
+
+**共性结论**：全局体系（style.css 变量 + zone/card 类）覆盖良好；原九项 + 第 10 项均按 V2.0 / V2.1 规范收敛，残留仅上列 4 项（均为无视觉差异的逻辑副本或有意设计）。新增页面仍须零 scoped 颜色、布局类从全局取；弹层共用类禁止 scoped 重写；单值圆角/字号一律走 `--radius-*` / `--fs-*`，文字色走 `-text` 变体。

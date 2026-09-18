@@ -3,7 +3,8 @@
 > 来源基准:客户端模拟页体系 + 全仓审计(`docs/frontend-ui-spec.md`)。
 > 用途:**后续前端开发的唯一准则**——新增页面/组件一律以本文档为准;与本文冲突的存量实现按 §13 迁移清单收敛。
 > 双主题:所有颜色参数提供 Dark / Light 两套,由 `<html data-theme="dark|light">` 驱动。
-> 修订记录:V2.0(2026-09-07)——①分割条统一规范(废除 9px/12px 双标);②新增 §5.1 SettingRow;③新增 §11 弹窗与抽屉;④新增 §12 扩展包/应用网格卡片。
+> 修订记录:V2.1(2026-09-18)——①圆角/字号 token 化(`--radius-*` 38 处 / `--fs-*` 128 处);②文字级语义色 `--*-text` + `--focus-ring`,tertiary 0.45→0.55;③antd 文字 token 与浅色预设标签覆盖;④键盘可达性(`:focus-visible`、JsonTree / CollapsibleCard);⑤类名单源化与残留(§13)。
+> V2.0(2026-09-07)——①分割条统一规范(废除 9px/12px 双标);②新增 §5.1 SettingRow;③新增 §11 弹窗与抽屉;④新增 §12 扩展包/应用网格卡片。
 > V1.0:客户端模拟页基准首版提炼。
 
 ---
@@ -52,6 +53,8 @@
 
 **选用规则**:结构级 12px / 组件级 8px / 紧凑 6px / 微 2~4px;水平留白统一 16px;面板间距 100% 由容器 gap 或分割条占位提供,**禁止手写 margin**。
 
+**Token 边界(V2.1 明确)**:间距**不做** CSS 变量 token 化,继续沿用上表 4px 网格字面值;`--radius-*` / `--fs-*` 只覆盖圆角与字号。新增间距按 2/4/6/8/12/16 书写,勿以"未 token 化"为由改造。
+
 ---
 
 ## 3. 盒子(容器)边框与外观
@@ -75,14 +78,16 @@
 
 ### 3.3 圆角与阴影
 
-| 级别 | 值 | 使用处 |
-|---|---|---|
-| 盒子级 | `8px` | zone / side-card / group-collapse / antd 全局 / §12 网格卡片 |
-| 子容器级 | `6px` | group-row / row-detail |
-| 小元素级 | `4px` | raw-hex / byte-card / 滚动条 thumb |
-| 微标签级 | `2px` | server-proto / st |
-| 胶囊 | `999px` | 分割条手柄(§8) |
-| 阴影 | `--shadow`(dark `0 1px 2px rgba(0,0,0,.3)` / light `.06`) | 仅主面板与悬浮卡;卡片栈不加;§12 网格卡 hover 态加 shadow-md |
+| 级别 | Token | 值 | 使用处 |
+|---|---|---|---|
+| 盒子级 | `--radius-lg` | `8px` | zone / side-card / group-collapse / antd 全局 / §12 网格卡片 |
+| 子容器级 | `--radius-md` | `6px` | group-row / row-detail |
+| 小元素级 | `--radius-sm` | `4px` | raw-hex / byte-card / dd-json-label / 滚动条 thumb |
+| 微标签级 | `--radius-xs` | `2px` | server-proto / st / sr-badge |
+| 胶囊 | `--radius-pill` | `999px` | 分割条手柄(§8) |
+| 阴影 | — | `--shadow`(dark `0 1px 2px rgba(0,0,0,.3)` / light `.06`) | 仅主面板与悬浮卡;卡片栈不加;§12 网格卡 hover 态加 shadow-md |
+
+单值圆角一律取 `--radius-*`(style.css:14-18);多值方向性圆角(如 SideNav.vue:155 `0 2px 2px 0`)保留字面值。
 
 ### 3.4 背景三级分层
 
@@ -96,7 +101,7 @@
 
 ## 4. 按钮体系
 
-**全站按钮 `size="small"`**;模态框确认类用默认尺寸。
+**全站按钮 `size="small"`**;默认尺寸仅两类例外:模态框确认按钮、解析页 Hero 主输入区按钮组与扩展包 select。
 
 | 场景 | 规格 |
 |---|---|
@@ -105,6 +110,7 @@
 | 工具条筛选组 | `small` button 组,选中 `primary`(禁止 radio-button) |
 | 行内删除 / 链接操作 / 添加 | `small + text + danger` / `small + link`(padding 0 4px) / `small + dashed` |
 | 组内间距 | `8px`;语义区之间用 `bar-sep` 或 `spacer` |
+| 默认尺寸例外 | **仅**模态框确认按钮 + 解析页 Hero 操作区(解析/清空/复制 + 扩展包 select,ParserInputHero.vue:51-70);其余一律 `small`(RealTimePanel「发送补发 (0x03)」已回归,RealTimePanel.vue:330) |
 
 ---
 
@@ -134,16 +140,17 @@
 
 ## 6. 字号与文本层级
 
-| 层级 | 字号×字重 | 颜色 |
-|---|---|---|
-| Hero 标题 | 22×600 | --text-primary |
-| 品牌/卡片标题 | 16×600 / 14×600 | --text-primary |
-| 正文 | 14×400 | --text-primary |
-| 次要说明 | 13×400 | --text-secondary |
-| 辅助标签/数据 | 12×400 | --text-secondary / tertiary |
-| 微标签 | 11×400~600 | --text-tertiary |
+| 层级 | Token | 字号×字重 | 颜色 |
+|---|---|---|---|
+| Hero 标题 | `--fs-22` | 22×600 | --text-primary |
+| 页面标题 | `--fs-18` | 18×600 | --text-primary |
+| 品牌/卡片标题 | `--fs-16` / `--fs-14` | 16×600 / 14×600 | --text-primary |
+| 正文 | `--fs-14` | 14×400 | --text-primary |
+| 次要说明 | `--fs-13` | 13×400 | --text-secondary |
+| 辅助标签/数据 | `--fs-12` | 12×400 | --text-secondary / tertiary |
+| 微标签 | `--fs-11` | 11×400~600 | --text-tertiary |
 
-等宽:数据文本统一 `--font-mono` + `font-variant-numeric: tabular-nums`。**字号下限 11px**。
+等宽:数据文本统一 `--font-mono` + `font-variant-numeric: tabular-nums`。**字号一律取 `--fs-*`(style.css:20-26),下限 11px**;梯度外字号(10 / 15 / 17px)已清零,18px 为页面标题档(如 `.ext-title`,ExtensionsPage.vue:237)。`--text-tertiary` 双主题 0.45→0.55(WCAG ≥4.5:1)。
 
 ---
 
@@ -156,7 +163,19 @@
 | 警告 `--warning` | `#faad14` | `#d46b08` |
 | 错误 `--error` | `#ff4d4f` | `#cf1322` |
 
-辅助:`--primary-hover-bg`(0.08~0.1)、`--row-hover-bg`(0.06)、`--item-hover-bg`(0.04)、`--hl-bg`+`--hl-shadow`(选中)、`--success-glow`(状态点光晕)。特殊语义色须提供 light 覆盖(参照 dir-link `#9254de→#6424c2` 先例)。
+辅助:`--primary-hover-bg`(0.08~0.1)、`--row-hover-bg`(0.06)、`--item-hover-bg`(0.04)、`--hl-bg`+`--hl-shadow`(选中)、`--success-glow`(状态点光晕)。特殊语义色须提供 light 覆盖(参照 `--c-encrypted` `#b37feb→#6424c2` 先例)。
+
+### 7.1 文字级语义色与焦点轮廓(V2.1 新增)
+
+| 用途 | CSS 变量 | Dark | Light | antd token |
+|---|---|---|---|---|
+| 主色文字 | `--primary-text` | `#4096ff` | `#0958d9` | colorPrimaryText / colorInfoText / colorLink |
+| 成功文字 | `--success-text` | `#52c41a` | `#237804` | colorSuccessText |
+| 警告文字 | `--warning-text` | `#faad14` | `#ad4e00` | colorWarningText |
+| 错误文字 | —(antd 独有) | `#FF4D4F` | `#CF1322` | colorErrorText |
+| 焦点轮廓 | `--focus-ring` | `#4096ff` | `#1677ff` | —(自绘 `:focus-visible`) |
+
+**规则**:文字用 `-text` 变体,填充/边框/图标保留 `--primary/--success/--warning`;antd 由 colorInfoText 派生 colorLink,两者显式声明(theme/index.ts:29-35 / 57-63)。键盘焦点:全局 `:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }`(style.css:151),antd 控件自带焦点样式不受影响。浅色预设标签可读性覆盖:`:root[data-theme='light'] .ant-tag-blue/.ant-tag-geekblue { color: #0958d9; }`(style.css:943-947),其余预设标签沿 antd 默认。
 
 ---
 
@@ -214,7 +233,7 @@
 
 ### 11.3 弹层内代码预览区(JSON / 原始报文 HEX)
 
-- **强制独立深色代码块容器**:不随主题切换的固定深底(如 `#0f0f0f` 系)+ 前景色 token 化;`border-radius: 6px`;`max-height: 360px; overflow-y: auto`
+- **强制独立深色代码块容器**:不随主题切换的固定深底(如 `#0f0f0f` 系)+ 自配语法前景;`border-radius: var(--radius-md)`(6px);`max-height: 360px; overflow-y: auto`(PackJsonPanel 当前保留 6 处固定 hex 未 token 化,见 §13#10 残留)
 - 字体 `--font-mono` `12px`,`white-space: pre-wrap; word-break: break-all`
 - **右上角必须配备快捷复制按钮**(antd Typography `copyable` 或自绘 icon 按钮),复制成功给 `message.success` 反馈
 - 禁止将 JSON 直接倾倒在正文文本流中
@@ -245,6 +264,10 @@
 | 4 | 服务端配置抽屉 360px、无 blur | 对齐 §11.1:440px + 蒙层 blur | ✅ 已完成 |
 | 5 | ExtensionsPage 网格与卡片未按 §12(底部"已启用"文字态、硬编码 JSON 深色块) | 按 §12 重排;JSON 块对齐 §11.3(补复制按钮) | ✅ 已完成(40×40 徽章/唯一 Switch/复制按钮原已就位;网格 320/gap12、padding 12 16、JSON 块 360px/pre-wrap、success/error token 化) |
 | 6 | `frontend-ui-spec.md` §5 所列 9 项坏味道 | 按该清单逐项修复(硬编码色 → token、内联宽度 → 档位类) | ✅ 已完成(#888→token、重复 row-head/bc-issue/modal-hint 删除、内联宽度→w-* 档位类(余 4 处 100% 豁免)、sn-item 网格归位、三色提 --c-unknown/--c-encrypted 变量、字号倒挂修正) |
+| 7 | 单值圆角/字号散落字面量(含 3px 圆角与 10/15/17px 梯度外字号) | 统一 `--radius-*` / `--fs-*`(11px 下限、18px 页面标题档) | ✅ 已完成(125+ 处;多值方向性圆角保留字面值) |
+| 8 | 文字语义色缺失:文字直接用填充色、tertiary 0.45、无键盘焦点轮廓 | 新增 `--*-text` / `--focus-ring`;tertiary→0.55;antd 文字 token 同步;浅色 preset tag 文字覆盖 | ✅ 已完成 |
+| 9 | 自绘行不可键盘操作(JsonTree 行 / CollapsibleCard 头部) | `tabindex="0"` + `aria-expanded` + Enter/Space;全局 `:focus-visible` | ✅ 已完成 |
+| 10 | 跨组件类名冲突与 scoped 副本(`.group-title`、`.byte-card`、`.modal-hint` 等) | 单源化:设置面板 `.group-title`→`.settings-group-title`;共享类只留全局定义;`.track-file` 收 ellipsis;`CTRL_W`→`w-180` | ⚠️ 主体完成:残留 4 项详见 `frontend-ui-spec.md` §5#10(PacketDetail 逻辑副本 / CTRL_W / PackJsonPanel 固定色块 / 其余预设标签) |
 
 ---
 
@@ -253,10 +276,11 @@
 1. 容器:滚动页 `.page-root`(12px 16px + gap 12);工作台页 `.topbar` + `.zone` 体系。
 2. 盒子:主面板 strong 边框 + 8px + shadow;子卡片 subtle 边框无阴影;可编辑行 dashed。
 3. 内边距:头 8px 16px / 体 16px / 卡片内容 8 16 16 / 行 4~8px 16px。
-4. 按钮:一律 small;语义档位见 §4;筛选 = button 组。
+4. 按钮:一律 small(仅模态确认 + Hero 操作区默认尺寸例外);语义档位见 §4;筛选 = button 组。
 5. 间距:12/8/6/2-4;水平线 16px;零手写 margin 于面板间。
-6. 文本:四级字号 + 三级透明度;数据 mono;下限 11px。
-7. 颜色:仅 CSS 变量与状态 token;双主题各验;特殊语义色成对定义。
+6. 文本:字号走 `--fs-*`(下限 11px,18px 页面标题);三级透明度(tertiary 0.55);数据 mono。
+7. 颜色:仅 CSS 变量与状态 token;文字用 `--*-text` 变体;双主题各验 ≥4.5:1;特殊语义色成对定义。
 8. 分割条:一律 §8 统一组件与规格;钳制常量同步。
 9. 设置行:§5.1;弹窗/抽屉:§11;网格卡片:§12。
 10. 动效 0.15/0.2/0.3s;尊重 reduced-motion。
+11. 键盘:自绘可交互/可展开元素补 `tabindex` + `aria-*`;焦点轮廓走全局 `:focus-visible`(`--focus-ring`)。
