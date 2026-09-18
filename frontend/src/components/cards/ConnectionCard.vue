@@ -147,7 +147,7 @@ onMounted(refreshPacks)
 }
 
 .hint-icon {
-  font-size: 12px;
+  font-size: var(--fs-12);
   opacity: 0.55;
   cursor: help;
 }

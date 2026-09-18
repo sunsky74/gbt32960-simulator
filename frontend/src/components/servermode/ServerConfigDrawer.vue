@@ -166,7 +166,7 @@ defineExpose({ open, start, stop })
 <style scoped>
 /* 配置抽屉分组标题与提示(高级参数) */
 .cfg-group-title {
-  font-size: 12px;
+  font-size: var(--fs-12);
   font-weight: 600;
   color: var(--text-tertiary);
   letter-spacing: 0.5px;
@@ -175,7 +175,7 @@ defineExpose({ open, start, stop })
 
 .cfg-group-hint {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--text-tertiary);
 }
 </style>

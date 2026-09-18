@@ -149,7 +149,9 @@ const platformUnsupported = computed(() => hasUpdate.value && !info.value?.asset
           <span v-else-if="checking" class="about-hint">正在检查…</span>
           <span v-else-if="!info" class="about-hint">从 GitHub Releases 查询最新版本</span>
           <template v-else-if="hasUpdate">
-            <span class="about-new">发现新版本 <b>{{ info.latest }}</b></span>
+            <span class="about-new"
+              >发现新版本 <b>{{ info.latest }}</b></span
+            >
             <span v-if="platformUnsupported" class="about-hint">当前平台暂不支持自动更新</span>
 
             <template v-if="applying">
@@ -170,7 +172,9 @@ const platformUnsupported = computed(() => hasUpdate.value && !info.value?.asset
             </template>
             <template v-else>
               <div class="about-actions">
-                <a-button size="small" type="primary" :disabled="platformUnsupported" @click="download">下载更新</a-button>
+                <a-button size="small" type="primary" :disabled="platformUnsupported" @click="download"
+                  >下载更新</a-button
+                >
                 <a-button size="small" type="link" @click="openReleaseNotes">查看发布说明</a-button>
                 <a-button size="small" @click="skip">跳过此版本</a-button>
               </div>
@@ -198,7 +202,7 @@ const platformUnsupported = computed(() => hasUpdate.value && !info.value?.asset
 <style scoped>
 .about-version {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--text-primary);
 }
 
@@ -230,10 +234,5 @@ const platformUnsupported = computed(() => hasUpdate.value && !info.value?.asset
 .about-progress :deep(.ant-progress) {
   width: 160px;
   margin: 0;
-}
-
-/* 分组:组内末行去分隔线 */
-.row-group :deep(.setting-row:last-child) {
-  border-bottom: none;
 }
 </style>

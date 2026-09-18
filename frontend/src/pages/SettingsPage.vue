@@ -196,7 +196,7 @@ async function openDir(path?: string) {
   flex-direction: column;
   background: var(--bg-panel);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -207,7 +207,7 @@ async function openDir(path?: string) {
 }
 
 .sn-title {
-  font-size: 14px;
+  font-size: var(--fs-14);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -224,8 +224,8 @@ async function openDir(path?: string) {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  border-radius: 6px;
-  font-size: 13px;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-13);
   color: var(--text-secondary);
   cursor: pointer;
   transition:
@@ -240,12 +240,12 @@ async function openDir(path?: string) {
 
 .sn-item.active {
   background: var(--primary-hover-bg);
-  color: var(--primary);
+  color: var(--primary-text);
   font-weight: 500;
 }
 
 .sn-icon {
-  font-size: 14px;
+  font-size: var(--fs-14);
 }
 
 /* ---------- 右侧设置内容:占满剩余空间 + 独立滚动 ---------- */
@@ -256,7 +256,7 @@ async function openDir(path?: string) {
   flex-direction: column;
   background: var(--bg-panel);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -268,7 +268,7 @@ async function openDir(path?: string) {
 
 .sb-title {
   margin: 0;
-  font-size: 14px;
+  font-size: var(--fs-14);
   font-weight: 600;
   color: var(--text-primary);
 }

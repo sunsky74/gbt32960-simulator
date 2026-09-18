@@ -65,7 +65,7 @@ function onSelect(info: { key: string | number }) {
   padding: 0 14px;
   cursor: pointer;
   font-weight: 600;
-  font-size: 14px;
+  font-size: var(--fs-14);
   color: var(--text-primary);
   border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
@@ -73,14 +73,22 @@ function onSelect(info: { key: string | number }) {
 }
 
 .brand-icon {
-  font-size: 16px;
-  color: var(--primary);
+  font-size: var(--fs-16);
+  color: var(--primary-text);
+}
+
+/* 展开过渡期间宽度 56→168px 动画:品牌文字作为 flex 项可收缩并省略,
+   避免窄宽下被 .sidenav 直接裁切(折叠态该 span 由 v-if 移除) */
+.brand-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .collapse-trigger {
   margin-left: auto;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: var(--fs-13);
 }
 
 .collapsed .sidenav-brand {
@@ -149,6 +157,6 @@ function onSelect(info: { key: string | number }) {
 }
 
 .sidenav :deep(.ant-menu-item-selected .ant-menu-title-content) {
-  color: var(--primary);
+  color: var(--primary-text);
 }
 </style>

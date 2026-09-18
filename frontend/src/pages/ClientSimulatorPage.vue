@@ -310,6 +310,6 @@ onUnmounted(() => {
 
 .profile-del-btn.profile-del-btn:hover {
   opacity: 1;
-  color: #ffa39e; /* 淡红:antd red-3,比原 red-4 更浅 */
+  color: var(--error); /* 统一错误色 token:浅色主题下可读性更好 */
 }
 </style>

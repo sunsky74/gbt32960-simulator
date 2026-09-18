@@ -49,7 +49,7 @@ defineProps<{
 }
 
 .sr-title {
-  font-size: 14px;
+  font-size: var(--fs-14);
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -60,10 +60,10 @@ defineProps<{
 
 .sr-badge {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--fs-11);
   line-height: 1;
   padding: 2px 6px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   color: var(--text-tertiary);
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
@@ -71,7 +71,7 @@ defineProps<{
 
 .sr-desc {
   margin-top: 4px;
-  font-size: 12px;
+  font-size: var(--fs-12);
   line-height: 1.6;
   color: var(--text-secondary);
   max-width: 70%;
@@ -80,7 +80,7 @@ defineProps<{
 
 .sr-desc.mono {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-11);
 }
 
 .sr-action {

@@ -234,19 +234,19 @@ onMounted(refresh)
   align-items: center;
   gap: 8px;
   margin: 0;
-  font-size: 18px;
+  font-size: var(--fs-18);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .ext-title-icon {
-  color: var(--primary);
-  font-size: 17px;
+  color: var(--primary-text);
+  font-size: var(--fs-18);
 }
 
 .ext-sub {
   margin: 2px 0 0;
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--text-tertiary);
 }
 

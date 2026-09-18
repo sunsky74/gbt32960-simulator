@@ -86,7 +86,16 @@ function primClass(v: unknown): string {
     </div>
     <template v-for="entry in entries" :key="entry.key">
       <!-- 容器条目行:整行可点击切换;stop 防止冒泡触发宿主行 -->
-      <div v-if="isContainer(entry.value)" class="jt-row jt-container" role="button" @click.stop="toggle(entry.key)">
+      <div
+        v-if="isContainer(entry.value)"
+        class="jt-row jt-container"
+        role="button"
+        tabindex="0"
+        :aria-expanded="isOpen(entry.key)"
+        @click.stop="toggle(entry.key)"
+        @keydown.enter.prevent="toggle(entry.key)"
+        @keydown.space.prevent="toggle(entry.key)"
+      >
         <span class="jt-toggle">{{ isOpen(entry.key) ? '▾' : '▸' }}</span>
         <span class="jt-key">{{ entry.text }}</span>
         <span class="jt-count">{{ countText(entry.value) }}</span>
@@ -107,7 +116,7 @@ function primClass(v: unknown): string {
 <style scoped>
 .jt {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-12);
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
 }
@@ -126,7 +135,7 @@ function primClass(v: unknown): string {
 /* 容器行可点击,hover 反馈与全局 item-hover 一致 */
 .jt-row.jt-container {
   cursor: pointer;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
 }
 
 .jt-row.jt-container:hover {
@@ -154,15 +163,15 @@ function primClass(v: unknown): string {
 }
 
 .jt-val.jt-str {
-  color: var(--success);
+  color: var(--success-text);
 }
 
 .jt-val.jt-num {
-  color: var(--primary);
+  color: var(--primary-text);
 }
 
 .jt-val.jt-bool {
-  color: var(--warning);
+  color: var(--warning-text);
 }
 
 .jt-val.jt-null {

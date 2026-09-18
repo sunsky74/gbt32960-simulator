@@ -28,10 +28,3 @@ const plannedRows: PlannedRow[] = [
     <PlannedSettingRows :rows="plannedRows" />
   </div>
 </template>
-
-<style scoped>
-/* 分组:组内末行去分隔线 */
-.row-group :deep(.setting-row:last-child) {
-  border-bottom: none;
-}
-</style>

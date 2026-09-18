@@ -154,7 +154,7 @@ const tooltipHex = computed(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: var(--fs-14);
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -162,7 +162,7 @@ const tooltipHex = computed(() => {
 .ov-bar {
   width: 3px;
   height: 14px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   background: var(--primary);
 }
 
@@ -189,19 +189,19 @@ const tooltipHex = computed(() => {
 }
 
 .ov-k {
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--text-secondary);
   flex-shrink: 0;
 }
 
 .ov-hex {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-12);
   letter-spacing: 0.5px;
   color: var(--text-secondary);
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 3px 10px;
   max-width: 620px;
   min-width: 0;
@@ -234,25 +234,27 @@ const tooltipHex = computed(() => {
   padding: 3px 10px;
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .mb-k {
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--text-secondary);
 }
 
 .mb-v {
-  font-size: 13px;
+  font-size: var(--fs-13);
   font-weight: 600;
   color: var(--text-primary);
   font-family: var(--font-mono);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* VIN 主色强调,便于快速定位车辆 */
 .meta-vin .mb-v {
-  color: var(--primary);
+  color: var(--primary-text);
 }
 
 /* 编辑区:grid-rows 0fr/1fr 平滑展开收起(与全局 cc-body 同款折叠动画) */
@@ -274,32 +276,6 @@ const tooltipHex = computed(() => {
   overflow: hidden;
   min-height: 0;
 }
-
-.hex-input :deep(textarea) {
-  font-family: var(--font-mono);
-  letter-spacing: 0.5px;
-}
-
-.parse-alert {
-  margin-top: 10px;
-  /* 多告警帧(如截断报文)会产生大量告警行,约束高度防撑爆工具栏区挤出工作台 */
-  max-height: 140px;
-  overflow: auto;
-}
-
-/* 解析错误/告警:淡入淡出,避免突然弹出把工作台顶跳 */
-.alert-enter-active {
-  transition: opacity 0.18s ease;
-}
-
-.alert-leave-active {
-  transition: opacity 0.12s ease;
-}
-
-.alert-enter-from,
-.alert-leave-to {
-  opacity: 0;
-}
 </style>
 
 <style>
@@ -315,7 +291,7 @@ const tooltipHex = computed(() => {
 
 .parser-hex-tip .hex-tip-body {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-11);
   line-height: 1.75;
   white-space: pre;
 }

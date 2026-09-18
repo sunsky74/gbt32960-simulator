@@ -327,7 +327,7 @@ async function onIntervalChange(v: number | string | null | undefined) {
               </a-form-item>
             </a-form>
 
-            <a-button type="primary" :disabled="!online" @click="sendReissue">发送补发 (0x03)</a-button>
+            <a-button type="primary" size="small" :disabled="!online" @click="sendReissue">发送补发 (0x03)</a-button>
           </div>
         </div>
       </a-tab-pane>
@@ -343,9 +343,3 @@ async function onIntervalChange(v: number | string | null | undefined) {
     </a-modal>
   </div>
 </template>
-
-<style scoped>
-.hex-input :deep(input) {
-  font-family: var(--font-mono);
-}
-</style>

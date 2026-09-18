@@ -186,24 +186,18 @@ onBeforeUnmount(stopPolling)
 </template>
 
 <style scoped>
-.track-file {
-  margin-top: 6px;
-  font-size: 12px;
-  opacity: 0.75;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .track-controls {
   display: flex;
   align-items: center;
   gap: 6px;
   margin-top: 10px;
-  font-size: 12px;
+  font-size: var(--fs-12);
 }
 
 .track-controls .label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -222,19 +216,19 @@ onBeforeUnmount(stopPolling)
 }
 
 .track-meta {
-  font-size: 12px;
+  font-size: var(--fs-12);
   opacity: 0.75;
 }
 
 .track-error {
   margin-top: 4px;
-  font-size: 12px;
-  color: #cf1322;
+  font-size: var(--fs-12);
+  color: var(--error);
 }
 
 .track-hint {
   margin-top: 8px;
-  font-size: 11px;
+  font-size: var(--fs-11);
   line-height: 1.5;
   opacity: 0.55;
 }

@@ -306,12 +306,7 @@ async function clearConsole() {
       </template>
       <div class="respond-code">
         <span class="toolbar-label">应答码</span>
-        <a-radio-group
-          v-model:value="respondModal.respCode"
-          class="resp-code-group"
-          button-style="solid"
-          size="small"
-        >
+        <a-radio-group v-model:value="respondModal.respCode" class="resp-code-group" button-style="solid" size="small">
           <a-radio-button v-for="c in respondModal.respCodeOptions" :key="c.code" :value="c.code">
             0x{{ c.code.toString(16).padStart(2, '0').toUpperCase() }} {{ c.label }}
           </a-radio-button>
@@ -352,13 +347,13 @@ async function clearConsole() {
 
 /* 事件方向徽标:仅上色,布局交给全局 .row-kind */
 .row-kind.tx {
-  color: var(--primary);
+  color: var(--primary-text);
 }
 .row-kind.rx {
-  color: var(--success);
+  color: var(--success-text);
 }
 .row-kind.conn {
-  color: var(--warning);
+  color: var(--warning-text);
 }
 .row-kind.error {
   color: var(--error);
@@ -372,14 +367,8 @@ async function clearConsole() {
 .row-sub {
   padding: 2px 0 2px 140px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--fs-12);
   cursor: pointer;
-}
-
-.modal-hint {
-  color: var(--text-secondary);
-  font-size: 13px;
-  margin-bottom: 12px;
 }
 
 .param-rows {
@@ -404,19 +393,19 @@ async function clearConsole() {
 }
 
 .param-id {
-  color: var(--primary);
-  font-size: 12px;
+  color: var(--primary-text);
+  font-size: var(--fs-12);
   font-variant-numeric: tabular-nums;
 }
 
 .param-name {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--fs-12);
 }
 
 .param-hint {
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--fs-11);
   line-height: 1.4;
 }
 
@@ -449,7 +438,7 @@ async function clearConsole() {
 
 .format-desc {
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--fs-12);
   margin-left: 8px;
 }
 </style>

@@ -35,7 +35,7 @@ const cleanPlanned: PlannedRow[] = [
 </script>
 
 <template>
-  <div class="group-title">存储位置</div>
+  <div class="settings-group-title">存储位置</div>
   <div class="row-group">
     <SettingRow title="配置目录" mono-desc :description="storagePaths?.config ?? '读取中…'">
       <template #action>
@@ -49,7 +49,7 @@ const cleanPlanned: PlannedRow[] = [
     </SettingRow>
     <PlannedSettingRows :rows="locationPlanned" />
   </div>
-  <div class="group-title">历史与缓存</div>
+  <div class="settings-group-title">历史与缓存</div>
   <div class="row-group">
     <PlannedSettingRows :rows="historyPlanned" />
     <SettingRow title="控制台导出缓冲条数" description="客户端控制台导出保留的事件条数;数值越大内存占用越高">
@@ -70,9 +70,9 @@ const cleanPlanned: PlannedRow[] = [
 </template>
 
 <style scoped>
-/* 分组:标题 + 行组;组内末行去分隔线 */
-.group-title {
-  font-size: 12px;
+/* 分组:标题 + 行组 */
+.settings-group-title {
+  font-size: var(--fs-12);
   font-weight: 600;
   color: var(--text-tertiary);
   text-transform: uppercase;
@@ -80,11 +80,7 @@ const cleanPlanned: PlannedRow[] = [
   margin: 20px 0 2px;
 }
 
-.group-title:first-child {
+.settings-group-title:first-child {
   margin-top: 6px;
-}
-
-.row-group :deep(.setting-row:last-child) {
-  border-bottom: none;
 }
 </style>

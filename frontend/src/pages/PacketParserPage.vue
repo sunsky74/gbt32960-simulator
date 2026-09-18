@@ -117,6 +117,7 @@ function onBytePin(r: ByteRange | null) {
 function onFieldHover(r: ByteRange | null, pos?: { x: number; y: number }) {
   if (!r) {
     hovered.value = null
+    byteHover.value = null // 移出字段表/悬停非字段行:同步关闭悬停信息卡片(与 onByteHover 对齐)
     return
   }
   // 同一字段区间内移动:仅跟随鼠标刷新信息卡片,不重建高亮(避免高频重扫)
@@ -360,7 +361,7 @@ function doCopyHex() {
 
 .hbar {
   height: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-pill);
   cursor: row-resize;
   flex-shrink: 0;
   background: transparent;

@@ -19,7 +19,15 @@ function toggle() {
 
 <template>
   <div class="side-card collapsible-card" :class="{ open }">
-    <div class="cc-head" role="button" tabindex="0" @click="toggle" @keydown.enter="toggle">
+    <div
+      class="cc-head"
+      role="button"
+      tabindex="0"
+      :aria-expanded="open"
+      @click="toggle"
+      @keydown.enter="toggle"
+      @keydown.space.prevent="toggle"
+    >
       <span class="cc-title">{{ title }}</span>
       <span class="cc-extra">
         <slot name="extra" />

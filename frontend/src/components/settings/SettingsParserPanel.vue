@@ -27,15 +27,11 @@ const plannedRows: PlannedRow[] = [
 </template>
 
 <style scoped>
-/* 分类说明 + 组内末行去分隔线 */
+/* 分类说明 */
 .cat-hint {
   margin: 10px 0 6px;
-  font-size: 12px;
+  font-size: var(--fs-12);
   line-height: 1.7;
   color: var(--text-tertiary);
-}
-
-.row-group :deep(.setting-row:last-child) {
-  border-bottom: none;
 }
 </style>

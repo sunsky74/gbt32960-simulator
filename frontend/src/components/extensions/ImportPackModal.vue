@@ -110,7 +110,7 @@ defineExpose({ open, clearError })
   <a-modal v-model:open="importOpen" title="导入扩展包" :footer="null" :mask-closable="false" width="640px">
     <a-tabs v-model:active-key="importTab" @change="jsonError = ''">
       <a-tab-pane key="file" tab="选择文件">
-        <p class="tab-hint">
+        <p class="modal-hint">
           从本地选择一个扩展包 JSON 文件导入。校验(语法/码位/干跑)通过后才会落盘;同 id
           覆盖导入会清空该包已保存的表单值。
         </p>
@@ -123,7 +123,7 @@ defineExpose({ open, clearError })
           spellcheck="false"
           placeholder='粘贴扩展包 JSON,例如: {"meta": {"id": "my-pack", "label": "我的包", "baseVersion": "2016"}, ...}'
         />
-        <p class="tab-hint">格式与文件导入一致,写法见「格式说明」页签;完整文档 docs/extpack-guide.md。</p>
+        <p class="modal-hint">格式与文件导入一致,写法见「格式说明」页签;完整文档 docs/extpack-guide.md。</p>
       </a-tab-pane>
       <a-tab-pane key="spec" tab="格式说明">
         <div class="spec-body">
@@ -270,7 +270,7 @@ defineExpose({ open, clearError })
             <a-button size="small" type="primary" @click="fillExample">填入示例并去粘贴页</a-button>
             <a-button size="small" @click="copyExample">复制示例</a-button>
           </div>
-          <p class="tab-hint">完整规范、字段类型取值表与错误解读见仓库 docs/extpack-guide.md。</p>
+          <p class="modal-hint">完整规范、字段类型取值表与错误解读见仓库 docs/extpack-guide.md。</p>
         </div>
       </a-tab-pane>
     </a-tabs>
@@ -291,17 +291,10 @@ defineExpose({ open, clearError })
 </template>
 
 <style scoped>
-/* ---------- 导入弹窗(沿用 PackManager 样式) ---------- */
-.tab-hint {
-  margin: 0 0 8px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
+/* ---------- 导入弹窗(沿用 PackManager 样式;说明文字统一走全局 .modal-hint) ---------- */
 .json-input :deep(textarea) {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-12);
 }
 
 .import-alert {
@@ -330,30 +323,30 @@ defineExpose({ open, clearError })
 
 .spec-lead {
   margin: 4px 0 8px;
-  font-size: 12px;
+  font-size: var(--fs-12);
   line-height: 1.7;
   color: var(--text-primary);
 }
 
 .spec-body h4 {
   margin: 14px 0 6px;
-  font-size: 13px;
+  font-size: var(--fs-13);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .spec-body code {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-11);
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 0 4px;
 }
 
 .spec-p {
   margin: 0 0 6px;
-  font-size: 12px;
+  font-size: var(--fs-12);
   line-height: 1.7;
   color: var(--text-secondary);
 }
@@ -361,7 +354,7 @@ defineExpose({ open, clearError })
 .spec-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--fs-12);
 }
 
 .spec-table td {
@@ -376,14 +369,16 @@ defineExpose({ open, clearError })
   width: 130px;
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-11);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .spec-list {
   margin: 0;
   padding-left: 18px;
-  font-size: 12px;
+  font-size: var(--fs-12);
   line-height: 1.8;
   color: var(--text-secondary);
 }
@@ -391,12 +386,12 @@ defineExpose({ open, clearError })
 .spec-example {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-11);
   line-height: 1.6;
   color: var(--text-primary);
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   padding: 10px 12px;
   max-height: 250px;
   overflow: auto;

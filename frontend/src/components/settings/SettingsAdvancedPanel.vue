@@ -36,7 +36,7 @@ function confirmReset() {
 </script>
 
 <template>
-  <div class="group-title">扩展包</div>
+  <div class="settings-group-title">扩展包</div>
   <div class="row-group">
     <SettingRow title="扩展包目录" mono-desc :description="storagePaths?.packs ?? '读取中…'">
       <template #action>
@@ -44,11 +44,11 @@ function confirmReset() {
       </template>
     </SettingRow>
   </div>
-  <div class="group-title">调试</div>
+  <div class="settings-group-title">调试</div>
   <div class="row-group">
     <PlannedSettingRows :rows="plannedRows" />
   </div>
-  <div class="group-title danger-zone">危险操作</div>
+  <div class="settings-group-title danger-zone">危险操作</div>
   <div class="row-group">
     <SettingRow title="恢复默认设置" description="重置外观 / 常用等应用设置;不影响连接档案、扩展包与报文配置">
       <template #action>
@@ -59,9 +59,9 @@ function confirmReset() {
 </template>
 
 <style scoped>
-/* 分组:标题 + 行组;组内末行去分隔线 */
-.group-title {
-  font-size: 12px;
+/* 分组:标题 + 行组 */
+.settings-group-title {
+  font-size: var(--fs-12);
   font-weight: 600;
   color: var(--text-tertiary);
   text-transform: uppercase;
@@ -69,15 +69,11 @@ function confirmReset() {
   margin: 20px 0 2px;
 }
 
-.group-title:first-child {
+.settings-group-title:first-child {
   margin-top: 6px;
 }
 
-.group-title.danger-zone {
-  color: var(--error-color, #ff4d4f);
-}
-
-.row-group :deep(.setting-row:last-child) {
-  border-bottom: none;
+.settings-group-title.danger-zone {
+  color: var(--error);
 }
 </style>

@@ -90,7 +90,7 @@ function scopeTextOf(scope?: string[]): string {
   padding: 14px 16px;
   background: var(--bg-panel);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   transition:
     border-color 0.15s ease,
@@ -118,8 +118,8 @@ function scopeTextOf(scope?: string[]): string {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
-  font-size: 17px;
+  border-radius: var(--radius-lg);
+  font-size: var(--fs-16);
   font-weight: 700;
   font-family: var(--font-mono);
   color: hsl(var(--pk-h, 210) 55% 52%);
@@ -137,7 +137,7 @@ function scopeTextOf(scope?: string[]): string {
 }
 
 .ec-title {
-  font-size: 14px;
+  font-size: var(--fs-14);
   font-weight: 600;
   color: var(--text-primary);
   overflow: hidden;
@@ -146,7 +146,7 @@ function scopeTextOf(scope?: string[]): string {
 }
 
 .ec-id {
-  font-size: 11px;
+  font-size: var(--fs-11);
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -174,12 +174,12 @@ function scopeTextOf(scope?: string[]): string {
 
 .ec-k {
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--text-tertiary);
 }
 
 .ec-v {
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -193,16 +193,16 @@ function scopeTextOf(scope?: string[]): string {
 /* 绑定状态:唯一保留的轻量徽标,紧跟厂商名 */
 .ec-bound {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: var(--fs-11);
   line-height: 1;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   color: var(--text-tertiary);
   background: var(--bg-elevated);
 }
 
 .ec-bound.on {
-  color: var(--success);
+  color: var(--success-text);
   background: rgba(82, 196, 26, 0.12);
 }
 
@@ -227,21 +227,21 @@ function scopeTextOf(scope?: string[]): string {
 }
 
 .ec-stat-num {
-  font-size: 15px;
+  font-size: var(--fs-16);
   font-weight: 600;
   color: var(--text-primary);
   font-family: var(--font-mono);
 }
 
 .ec-stat-label {
-  font-size: 11px;
+  font-size: var(--fs-11);
   color: var(--text-tertiary);
 }
 
 .ec-detail {
   margin-left: auto;
-  font-size: 12px;
-  color: var(--primary);
+  font-size: var(--fs-12);
+  color: var(--primary-text);
   transition: opacity 0.12s ease;
 }
 

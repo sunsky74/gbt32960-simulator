@@ -191,7 +191,7 @@ defineExpose({ invalidateJson })
   gap: 4px;
   padding: 3px;
   background: var(--bg-page);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   margin-bottom: 14px;
 }
 
@@ -199,9 +199,9 @@ defineExpose({ invalidateJson })
   flex: 1;
   height: 28px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: transparent;
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--text-secondary);
   cursor: pointer;
   transition:
@@ -231,7 +231,7 @@ defineExpose({ invalidateJson })
 .dd-card {
   background: var(--bg-page);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 14px;
   display: flex;
   flex-direction: column;
@@ -247,12 +247,12 @@ defineExpose({ invalidateJson })
 
 .dd-k {
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--text-tertiary);
 }
 
 .dd-v {
-  font-size: 12px;
+  font-size: var(--fs-12);
   font-weight: 500;
   color: var(--text-primary);
   text-align: right;
@@ -262,7 +262,7 @@ defineExpose({ invalidateJson })
 }
 
 .dd-v.dd-ok {
-  color: var(--primary);
+  color: var(--primary-text);
 }
 
 .dd-v.dd-off {
@@ -271,10 +271,10 @@ defineExpose({ invalidateJson })
 }
 
 .dd-scope {
-  font-size: 11px;
+  font-size: var(--fs-11);
   line-height: 1;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: var(--bg-elevated);
   color: var(--text-secondary);
 }
@@ -285,7 +285,7 @@ defineExpose({ invalidateJson })
 
 .dd-hint {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fs-12);
   line-height: 1.6;
   color: var(--text-tertiary);
 }
@@ -300,11 +300,11 @@ defineExpose({ invalidateJson })
 .dd-btn {
   flex: 1;
   height: 32px;
-  font-size: 12px;
+  font-size: var(--fs-12);
 }
 
 .dd-btn-danger {
-  color: var(--error-color, #ff4d4f);
+  color: var(--error);
   border-color: var(--border-subtle);
   transition:
     background-color 0.15s ease,
@@ -336,7 +336,7 @@ defineExpose({ invalidateJson })
 }
 
 .ext-detail-drawer .ant-drawer-title {
-  font-size: 15px;
+  font-size: var(--fs-16);
   font-weight: 600;
 }
 
@@ -348,7 +348,7 @@ defineExpose({ invalidateJson })
   width: 30px;
   height: 30px;
   margin-inline-end: -6px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   transition: background-color 0.15s ease;
 }
 

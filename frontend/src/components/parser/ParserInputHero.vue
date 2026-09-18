@@ -103,14 +103,14 @@ const selectedPackProxy = computed({
 
 .hero-title {
   margin: 0 0 4px;
-  font-size: 22px;
+  font-size: var(--fs-22);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .hero-sub {
   margin: 0 0 20px;
-  font-size: 13px;
+  font-size: var(--fs-13);
   color: var(--text-tertiary);
 }
 
@@ -120,40 +120,9 @@ const selectedPackProxy = computed({
   margin-top: 12px;
 }
 
-/* 扩展包下拉:解析报文与清空之间 */
-.pack-select {
-  width: 220px;
-}
-
 .hero-hint {
   margin: 12px 0 0;
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--text-tertiary);
-}
-
-.hex-input :deep(textarea) {
-  font-family: var(--font-mono);
-  letter-spacing: 0.5px;
-}
-
-.parse-alert {
-  margin-top: 10px;
-  /* 多告警帧(如截断报文)会产生大量告警行,约束高度防撑爆工具栏区挤出工作台 */
-  max-height: 140px;
-  overflow: auto;
-}
-
-/* 解析错误/告警:淡入淡出,避免突然弹出把工作台顶跳 */
-.alert-enter-active {
-  transition: opacity 0.18s ease;
-}
-
-.alert-leave-active {
-  transition: opacity 0.12s ease;
-}
-
-.alert-enter-from,
-.alert-leave-to {
-  opacity: 0;
 }
 </style>

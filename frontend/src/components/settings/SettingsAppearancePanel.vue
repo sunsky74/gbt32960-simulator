@@ -3,7 +3,7 @@
 import { appSettings } from '../../composables/useAppSettings'
 import SettingRow from './SettingRow.vue'
 import PlannedSettingRows from './PlannedSettingRows.vue'
-import { CTRL_W, type PlannedRow } from './planned'
+import { type PlannedRow } from './planned'
 
 // 界面 → 性能上限档位选项(与 useAppSettings 的钳制区间一致)
 const packetStreamCapOptions = [100, 200, 500, 1000, 2000].map((v) => ({ value: v, label: String(v) }))
@@ -19,7 +19,7 @@ const plannedRows: PlannedRow[] = [
 </script>
 
 <template>
-  <div class="group-title">主题</div>
+  <div class="settings-group-title">主题</div>
   <div class="row-group">
     <SettingRow title="应用程序主题" description="选择界面配色;「跟随系统」随操作系统外观实时切换">
       <template #action>
@@ -31,7 +31,7 @@ const plannedRows: PlannedRow[] = [
       </template>
     </SettingRow>
   </div>
-  <div class="group-title">界面</div>
+  <div class="settings-group-title">界面</div>
   <div class="row-group">
     <SettingRow title="启用界面动画" description="关闭后抑制全局面板过渡与动画,降低视觉噪声">
       <template #action>
@@ -44,7 +44,7 @@ const plannedRows: PlannedRow[] = [
           v-model:value="appSettings.packetStreamCap"
           size="small"
           :options="packetStreamCapOptions"
-          :style="{ width: CTRL_W }"
+          class="w-180"
         />
       </template>
     </SettingRow>
@@ -54,7 +54,7 @@ const plannedRows: PlannedRow[] = [
           v-model:value="appSettings.consoleEventCap"
           size="small"
           :options="consoleEventCapOptions"
-          :style="{ width: CTRL_W }"
+          class="w-180"
         />
       </template>
     </SettingRow>
@@ -63,9 +63,9 @@ const plannedRows: PlannedRow[] = [
 </template>
 
 <style scoped>
-/* 分组:标题 + 行组;组内末行去分隔线 */
-.group-title {
-  font-size: 12px;
+/* 分组:标题 + 行组 */
+.settings-group-title {
+  font-size: var(--fs-12);
   font-weight: 600;
   color: var(--text-tertiary);
   text-transform: uppercase;
@@ -73,11 +73,7 @@ const plannedRows: PlannedRow[] = [
   margin: 20px 0 2px;
 }
 
-.group-title:first-child {
+.settings-group-title:first-child {
   margin-top: 6px;
-}
-
-.row-group :deep(.setting-row:last-child) {
-  border-bottom: none;
 }
 </style>

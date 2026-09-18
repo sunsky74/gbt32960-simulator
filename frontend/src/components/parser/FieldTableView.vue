@@ -298,11 +298,7 @@ onBeforeUnmount(() => {
   font-style: normal;
   color: var(--text-tertiary);
   font-weight: 400;
-  font-size: 12px;
-}
-
-.mono {
-  font-family: var(--font-mono);
+  font-size: var(--fs-12);
 }
 
 /* 长文本截断,hover 显示完整 */
@@ -315,13 +311,13 @@ onBeforeUnmount(() => {
 }
 
 .phys {
-  color: var(--primary);
+  color: var(--primary-text);
 }
 
 .phys em {
   font-style: normal;
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: var(--fs-12);
 }
 
 .field-table :deep(tr.row-hl) > td {

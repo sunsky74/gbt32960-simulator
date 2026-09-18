@@ -73,7 +73,7 @@ function onlineDur(s: SessionRow): string {
 .sess-platform-tag {
   margin-left: 4px;
   padding: 0 4px;
-  font-size: 10px;
+  font-size: var(--fs-11);
   line-height: 16px;
 }
 </style>

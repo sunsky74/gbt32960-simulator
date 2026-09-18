@@ -131,7 +131,7 @@ defineExpose({ flash, resetWidth })
 
 .vbar {
   width: 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-pill);
   cursor: col-resize;
   background: transparent;
   transition: background-color 0.12s ease;
@@ -143,7 +143,7 @@ defineExpose({ flash, resetWidth })
 
 /* 面板标题:与表格滚动高度测算配合,禁止浏览器默认 p 上下外边距 */
 .section-label {
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--text-secondary);
   margin: 0 0 10px;
 }

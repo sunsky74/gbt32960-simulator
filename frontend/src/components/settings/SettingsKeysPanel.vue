@@ -39,7 +39,7 @@ const shortcuts = [
 /* 分类说明 */
 .cat-hint {
   margin: 10px 0 6px;
-  font-size: 12px;
+  font-size: var(--fs-12);
   line-height: 1.7;
   color: var(--text-tertiary);
 }
@@ -48,7 +48,7 @@ const shortcuts = [
 .keys-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--fs-12);
   margin-top: 6px;
 }
 
@@ -67,19 +67,19 @@ const shortcuts = [
 }
 
 .key-cap {
-  font-size: 11px;
+  font-size: var(--fs-11);
   color: var(--text-primary);
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 1px 6px;
 }
 
 .row-badge {
-  font-size: 10px;
+  font-size: var(--fs-11);
   line-height: 1;
   padding: 2px 5px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   color: var(--text-tertiary);
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);

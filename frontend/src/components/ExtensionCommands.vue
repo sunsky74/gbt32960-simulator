@@ -207,7 +207,4 @@ async function onReportIntervalChange(g: GroupSchema) {
   gap: 8px;
   margin-bottom: 8px;
 }
-.hex-input :deep(input) {
-  font-family: var(--font-mono);
-}
 </style>

@@ -35,7 +35,8 @@ const emit = defineEmits<{
 
 const gridEl = ref<HTMLElement | null>(null)
 
-// 每行字节数随面板宽度自适应:窄面板 8 字节/行,宽面板 16 字节/行(紧凑 IDE 风格,消除横向空白)
+// 每行字节数随面板宽度实时自适应:下限 6,上限为当前宽度可容纳的最大列数(撑满面板,消除横向空白)
+const MIN_PER_ROW = 6
 const perRow = ref(8)
 
 const rows = computed(() => {
@@ -53,9 +54,14 @@ const rows = computed(() => {
   return out
 })
 
-// 16 字节/行所需内容宽度:offset 40 + 16×24 单元格 + 17×4 间距 + 6 分组间隔 + 20 内边距 ≈ 516px
+// 宽度预算:offset 40 + 内边距 20 + 行内间距 4×(n+1) + 单元格 24×n + 分组间隔 6(n>8)
+// ⇒ 所需宽度 = 64 + 28n(n≤8)/ 70 + 28n(n>8);线性求解最大列数,ResizeObserver 在拖拽中实时刷新
 function fitPerRow() {
-  perRow.value = (gridEl.value?.clientWidth ?? 0) >= 516 ? 16 : 8
+  const w = gridEl.value?.clientWidth ?? 0
+  if (w <= 0) return
+  let n = Math.floor((w - 64) / 28)
+  if (n > 8) n = Math.floor((w - 70) / 28)
+  perRow.value = Math.max(MIN_PER_ROW, n)
 }
 
 let ro: ResizeObserver | null = null
@@ -176,7 +182,7 @@ function onClick(e: MouseEvent) {
 <style scoped>
 .byte-grid {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-12);
   overflow-y: auto;
   overflow-x: hidden;
   padding: 8px 10px;
@@ -199,7 +205,7 @@ function onClick(e: MouseEvent) {
   width: 40px;
   flex: none;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--fs-11);
 }
 
 /* 24px 内容 + 4px gap = 28px 槽位,scale(1.15) 放大后不挤压相邻字节 */
@@ -212,7 +218,7 @@ function onClick(e: MouseEvent) {
   color: var(--text-primary);
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   transform-origin: center;
   transition:
     transform 0.12s ease,
@@ -221,7 +227,7 @@ function onClick(e: MouseEvent) {
     opacity 0.12s ease;
 }
 
-/* 16 字节/行时,第 9 个字节前加分组间隔(8 + 8 视觉分组) */
+/* 每行 >8 字节时,第 9 个字节前加分组间隔(8 字节视觉分组) */
 .byte-cell.g8 {
   margin-left: 6px;
 }

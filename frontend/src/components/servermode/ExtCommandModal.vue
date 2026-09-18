@@ -156,20 +156,10 @@ defineExpose({ open })
 </template>
 
 <style scoped>
-.modal-hint {
-  color: var(--text-secondary);
-  font-size: 13px;
-  margin-bottom: 12px;
-}
-
 .extcmd-fields {
   display: flex;
   flex-direction: column;
   gap: 8px;
   margin-top: 12px;
-}
-
-.hex-input :deep(input) {
-  font-family: var(--font-mono);
 }
 </style>

@@ -39,7 +39,7 @@ const emit = defineEmits<{
 
 .dd-hint {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--fs-12);
   line-height: 1.6;
   color: var(--text-tertiary);
 }
@@ -52,18 +52,18 @@ const emit = defineEmits<{
 }
 
 .dd-json-label {
-  font-size: 10px;
+  font-size: var(--fs-11);
   font-weight: 700;
   letter-spacing: 0.5px;
   font-family: var(--font-mono);
   color: var(--text-tertiary);
   border: 1px solid var(--border-subtle);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   padding: 1px 5px;
 }
 
 .dd-copy {
-  font-size: 12px;
+  font-size: var(--fs-12);
   color: var(--text-secondary);
 }
 
@@ -77,12 +77,12 @@ const emit = defineEmits<{
 .dd-json {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-12);
   line-height: 1.65;
   color: #d4d4d4;
   background: #0f0f0f;
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 12px 14px;
   max-height: 360px;
   overflow: auto;
