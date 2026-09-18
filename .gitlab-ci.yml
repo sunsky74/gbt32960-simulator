@@ -1,17 +1,18 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# GitLab CI:推送 v* 标签 → 构建三平台产物 → 发布到 GitLab Release(可直接下载)
+# GitLab CI:推送 v* 标签 → 构建产物 → 发布到 GitLab Release(可直接下载)
 #
 # 与 .github/workflows/release.yml 同源(命令 / 依赖 / 版本逐字对齐):
 #   · Linux runner 一次产出:linux 二进制 + Windows exe + NSIS 安装包(交叉编译)
-#   · macOS runner 产出:darwin universal .app.zip(Wails CLI 硬限制:只能 Mac 编)
+#   · macOS(.app.zip)本轮暂不构建:需 macOS runner;恢复方式见文件底部注释与 docs/backlog.md
 #   · 产物上传 Generic Package(不过期)→ Release 页给出永久下载链接
 #
 # 下载入口(发布后):
 #   · Release 页:项目 → Deploy → Releases(推荐)
-#   · 永久最新直链:/-/releases/permalink/latest/downloads/{macos,windows,windows-installer,linux}
+#   · 永久最新直链:/-/releases/permalink/latest/downloads/{windows,windows-installer,linux}
 #   · 兜底:项目 → Build → Artifacts(job 产物归档)
 #
 # 前置条件与待确认事项(影响首次运行成败):见 docs/backlog.md「3. 工具链:GitLab CI」条目
+#   · runner 标签待对齐:确认公司 runner 标签后给 job 加 tags:(或让 runner 允许未打标签任务)
 # ─────────────────────────────────────────────────────────────────────────────
 
 workflow:
@@ -67,34 +68,17 @@ build_linux:
       - dist/
     expire_in: never # job artifacts 为兜底下载渠道;长期下载走 Release(Generic Package)
 
-# ── macOS runner:macOS 产物只能 Mac 编(Wails CLI 对非 darwin 宿主直接拒绝) ──
-# runner 前置:Xcode Command Line Tools、Go 1.25、Node 22、Git
-# tags 需替换为实例上注册的 macOS runner 标签(如 macos / macos-m1)
-build_macos:
-  stage: build
-  tags: [macos]
-  <<: *go_cache
-  rules:
-    - if: '$CI_COMMIT_TAG =~ /^v/'
-  script:
-    - export PATH="$HOME/go/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-    - go install github.com/wailsapp/wails/v2/cmd/wails@${WAILS_VERSION}
-    - wails build -platform darwin/universal -clean -trimpath -ldflags "-X main.version=${CI_COMMIT_TAG}"
-    # ditto 保留 bundle 符号链接/权限(与 GitHub Actions 一致)
-    - mkdir -p dist
-    - ditto -c -k --keepParent "build/bin/gbt32960-simulator.app" "dist/gbt32960-simulator.app.zip"
-  artifacts:
-    name: "gbt32960-simulator-$CI_COMMIT_TAG-macos"
-    paths:
-      - dist/
-    expire_in: never
+# ── macOS 构建:本轮暂不启用(决定 2026-09-17)──────────────────────────────
+# .app.zip 只能在 macOS 上构建(Wails CLI 对非 darwin 宿主直接拒绝),需要一台 macOS runner。
+# 恢复步骤:① 注册 macOS runner(shell executor,tag macos;需 Xcode CLT / Go 1.25 / Node 22);
+#           ② 从 git 历史(ccd462b)取回 build_macos job,并在 upload / release 中恢复 macOS 条目。
 
 # ── 上传 Generic Package(Release 永久链接的落脚点;包文件不过期) ─────────────
 # alpine 基础镜像确保 job 为 root,可写工作目录;内网不可达则替换为内网镜像
 upload:
   stage: package
   image: alpine:3
-  needs: [build_linux, build_macos]
+  needs: [build_linux]
   rules:
     - if: '$CI_COMMIT_TAG =~ /^v/'
   before_script:
@@ -105,9 +89,9 @@ upload:
     - echo "PKG_VERSION=${PKG_VERSION}" > pkg.env # 经 dotenv 传给 release job(needs 自动传递)
     - BASE="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/gbt32960-simulator/${PKG_VERSION}"
     - cd dist
-    - sha256sum gbt32960-simulator gbt32960-simulator.exe gbt32960-simulator-amd64-installer.exe gbt32960-simulator.app.zip > SHA256SUMS
+    - sha256sum gbt32960-simulator gbt32960-simulator.exe gbt32960-simulator-amd64-installer.exe > SHA256SUMS
     - |
-      for f in gbt32960-simulator gbt32960-simulator.exe gbt32960-simulator-amd64-installer.exe gbt32960-simulator.app.zip SHA256SUMS; do
+      for f in gbt32960-simulator gbt32960-simulator.exe gbt32960-simulator-amd64-installer.exe SHA256SUMS; do
         curl --fail --silent --show-error --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file "$f" "${BASE}/$f"
       done
   artifacts:
@@ -137,10 +121,6 @@ release:
     description: "gbt32960-simulator ${CI_COMMIT_TAG} — 构建产物见下方 Assets 下载列表"
     assets:
       links:
-        - name: "macOS (universal, .app.zip)"
-          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/gbt32960-simulator/${PKG_VERSION}/gbt32960-simulator.app.zip"
-          filepath: "/macos"
-          link_type: "package"
         - name: "Windows x64 (.exe)"
           url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/gbt32960-simulator/${PKG_VERSION}/gbt32960-simulator.exe"
           filepath: "/windows"
