@@ -45,11 +45,11 @@ const {
   maxSize: (total) => Math.max(LEFT_MIN, total - RIGHT_MIN - 12),
 })
 
-// 固定左右 Grid:默认 45fr/55fr(按自由空间分配,不会因 6px 分割条/间距溢出容器);
+// 固定左右 Grid:默认 35fr/65fr(按自由空间分配,不会因 6px 分割条/间距溢出容器);
 // 左右均设最小宽度,窗口不足时工作区内部横向滚动,绝不被压缩成竖条
 const duoStyle = computed(() => {
-  const left = leftW.value !== null ? leftW.value + 'px' : 'minmax(360px, 45fr)'
-  const right = leftW.value !== null ? 'minmax(480px, 1fr)' : 'minmax(480px, 55fr)'
+  const left = leftW.value !== null ? leftW.value + 'px' : 'minmax(360px, 35fr)'
+  const right = leftW.value !== null ? 'minmax(480px, 1fr)' : 'minmax(480px, 65fr)'
   return { gridTemplateColumns: `${left} 6px ${right}` }
 })
 
@@ -62,7 +62,7 @@ function flash() {
   el.classList.add('content-refresh')
 }
 
-// 清空时恢复默认 45fr/55fr(由页面调用)
+// 清空时恢复默认 35fr/65fr(由页面调用)
 function resetWidth() {
   resetSide()
 }
@@ -104,7 +104,7 @@ defineExpose({ flash, resetWidth })
 </template>
 
 <style scoped>
-/* ---------- 左右两栏:固定 Grid(默认 45fr/55fr,拖拽后左固定 px 右 1fr);
+/* ---------- 左右两栏:固定 Grid(默认 35fr/65fr,拖拽后左固定 px 右 1fr);
    左右最小宽度由 minmax 保证,窗口不足时工作区内部横向滚动而非压缩 ---------- */
 .duo-zone {
   display: grid;
