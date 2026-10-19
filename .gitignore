@@ -47,3 +47,6 @@ coverage.*
 
 # 更新签名私钥(离线保管,绝不入库;覆盖 gbt32960-update-signing.key 等命名)
 *update-signing*.key
+
+# ---- 本地协议扩展包夹具(不入库,仅供本地导入模拟器/跑可选用例) ----
+/docs/extpack/yiwei-tsp-v02-pack.json
