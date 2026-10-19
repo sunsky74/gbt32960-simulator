@@ -26,7 +26,8 @@ jobs:
         include:
           - { os: ubuntu-latest, platform: linux/amd64, artifact: linux-amd64, out: "build/bin/gbt32960-simulator" }
           - { os: windows-latest, platform: windows/amd64, artifact: windows-amd64, out: "build/bin/*.exe" }
-          - { os: macos-latest, platform: darwin/universal, artifact: macos-universal, out: "build/bin/*.zip" }
+          # macOS 双产物:zip(自更新资产,updater 按此名下载) + dmg(人工拖拽安装);多路径用换行分隔
+          - { os: macos-latest, platform: darwin/universal, artifact: macos-universal, out: "build/bin/*.zip\nbuild/bin/*.dmg" }
     steps:
       - uses: actions/checkout@v7
 
@@ -80,6 +81,38 @@ jobs:
       - name: 打包 macOS .app (ditto 保留 bundle 符号链接/权限)
         if: runner.os == 'macOS'
         run: ditto -c -k --keepParent "build/bin/${APP_NAME}.app" "build/bin/${APP_NAME}.app.zip"
+        shell: bash
+
+      # 不签名/不公证(方式 A):dmg 只解决“装到 /Applications”与 App Translocation,
+      # 首次打开仍需用户在 系统设置→隐私与安全性 放行,说明随包提供。
+      - name: 打包 macOS DMG(Applications 符号链接 + 安装说明)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          STAGE="$(mktemp -d)"
+          cp -R "build/bin/${APP_NAME}.app" "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          cat > "$STAGE/安装说明.txt" <<'TXT'
+          安装方法
+          1. 把左侧的 gbt32960-simulator 拖到右侧的“应用程序”文件夹。
+          2. 首次打开若提示“无法验证开发者”,去 系统设置 → 隐私与安全性 → 仍要打开。
+
+          为什么要拖进去
+          - 直接双击下载目录里的 .app,系统会把运行路径改写为随机只读位置。
+          - 拖进“应用程序”后路径固定,自更新与权限都正常。
+
+          仍无法打开时(未签名版本,属预期)
+          - 终端执行:xattr -dr com.apple.quarantine /Applications/gbt32960-simulator.app
+          - 或 系统设置 → 隐私与安全性 → 安全性 → “仍要打开”
+
+          校验下载包
+          - shasum -a 256 gbt32960-simulator-*.dmg
+          TXT
+          hdiutil create -volname "${APP_NAME} ${GITHUB_REF_NAME}" \
+            -srcfolder "$STAGE" -ov -format UDZO \
+            "build/bin/${APP_NAME}-${GITHUB_REF_NAME}.dmg"
+          rm -rf "$STAGE"
+          ls -lh build/bin/*.dmg
         shell: bash
 
       - uses: actions/upload-artifact@v7

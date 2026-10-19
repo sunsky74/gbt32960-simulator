@@ -79,7 +79,16 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-产物：macOS universal `.app.zip` · Windows `.exe` + NSIS 安装包 · Linux 可执行文件。
+产物：macOS universal `.dmg`（拖拽安装）+ `.app.zip`（自更新资产）· Windows `.exe` + NSIS 安装包 · Linux 可执行文件。
+
+### macOS 安装
+
+1. 打开 `.dmg`，把 `gbt32960-simulator` 拖到「应用程序」。
+2. 首次打开若提示「无法验证开发者」：系统设置 → 隐私与安全性 → 仍要打开。
+3. 仍被拦住时，在终端执行 `xattr -dr com.apple.quarantine /Applications/gbt32960-simulator.app`。
+
+> 当前未做 Developer ID 签名与公证（需付费开发者账号）。务必拖进「应用程序」再运行：从下载目录直接双击会被
+> App Translocation 改写为只读随机路径，自更新将无法替换程序。`.app.zip` 只供程序内部更新使用。
 
 ## 项目结构
 
