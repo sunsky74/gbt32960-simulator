@@ -21,6 +21,8 @@ export const store = reactive({
   packs: [] as bridge.PackInfo[],
   schema: [] as GroupSchema[],
   extSchema: [] as GroupSchema[],
+  // 报文配置重载中(实时数据面板据此播放 reload 动画)
+  schemaLoading: false,
   groups: {} as GroupsState,
   consoleEvents: [] as ConsoleEvent[],
   consolePaused: false,
@@ -86,16 +88,34 @@ export async function loadInitialData() {
   }
 }
 
+// 报文配置重载动画的最小可见时长(ms):IPC 常个位数毫秒,不设下限会闪一下看不出。
+const SCHEMA_RELOAD_MIN_MS = 260
+
+// withSchemaReload 包一层「加载态」:置位 schemaLoading → 拉 schema/groups → 至少展示 260ms 再收起。
+async function withSchemaReload(fn: () => Promise<void>) {
+  store.schemaLoading = true
+  const startedAt = Date.now()
+  try {
+    await fn()
+  } finally {
+    const rest = SCHEMA_RELOAD_MIN_MS - (Date.now() - startedAt)
+    if (rest > 0) await new Promise((resolve) => setTimeout(resolve, rest))
+    store.schemaLoading = false
+  }
+}
+
 export async function reloadSchemaForVersion(version: string) {
-  applySchema(await MessageService.GetSchema(version))
-  const payload = await MessageService.DefaultGroups(version)
-  store.groups = payloadToState(payload)
+  await withSchemaReload(async () => {
+    applySchema(await MessageService.GetSchema(version))
+    store.groups = payloadToState(await MessageService.DefaultGroups(version))
+  })
 }
 
 export async function reloadSchemaPreservingGroups(version: string) {
-  applySchema(await MessageService.GetSchema(version))
-  const payload = await MessageService.GetGroups()
-  store.groups = payloadToState(payload)
+  await withSchemaReload(async () => {
+    applySchema(await MessageService.GetSchema(version))
+    store.groups = payloadToState(await MessageService.GetGroups())
+  })
 }
 
 export function filteredConsole(): ConsoleEvent[] {

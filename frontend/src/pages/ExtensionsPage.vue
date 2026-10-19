@@ -4,7 +4,7 @@ import { message, Modal } from 'ant-design-vue'
 import { AppstoreOutlined } from '@ant-design/icons-vue'
 import * as ExtService from '../../wailsjs/go/bridge/ExtService'
 import { cfg } from '../composables/useConnConfig'
-import { reloadSchemaPreservingGroups, store } from '../state'
+import { reloadSchemaPreservingGroups, store, syncSavedBinding } from '../state'
 import PackToolbar from '../components/extensions/PackToolbar.vue'
 import PackCard from '../components/extensions/PackCard.vue'
 import PackDetailDrawer from '../components/extensions/PackDetailDrawer.vue'
@@ -128,6 +128,8 @@ function deletePack(id: string, label: string) {
         if (store.config?.extensionPack === id) {
           store.config.extensionPack = ''
           cfg.extensionPack = ''
+          // 同步绑定快照:否则同 id 重新导入后再选回时会被判为“未变更”,schema 不重载
+          syncSavedBinding({ version: store.config?.version, extensionPack: '' })
           await reloadSchemaPreservingGroups(store.config?.version ?? '2016')
         }
         detailPack.value = null

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
+import { message } from 'ant-design-vue'
 import { QuestionCircleOutlined } from '@ant-design/icons-vue'
 import CollapsibleCard from '../layout/CollapsibleCard.vue'
 import { cfg } from '../../composables/useConnConfig'
 import { formRef, rules, saveOnly, onVersionChange } from '../../composables/useConnActions'
 import * as ExtService from '../../../wailsjs/go/bridge/ExtService'
-import { store } from '../../state'
+import * as ConnectionService from '../../../wailsjs/go/bridge/ConnectionService'
+import { reloadSchemaPreservingGroups, store, syncSavedBinding } from '../../state'
 
 async function refreshPacks() {
   try {
@@ -25,6 +27,19 @@ const packOptions = computed(() =>
 )
 
 onMounted(refreshPacks)
+
+// 扩展包变更即时生效:先落盘(后端 schema 依赖已保存的 connCfg),再带 reload 动画重拉分组。
+// 表单未填完整时 SaveConfig 会拒绝:提示补全后保存,不做半截切换。
+async function onPackChange() {
+  try {
+    await ConnectionService.SaveConfig(cfg)
+  } catch {
+    message.warning('扩展包已选择，请补全连接配置并保存后生效')
+    return
+  }
+  syncSavedBinding(cfg)
+  await reloadSchemaPreservingGroups(cfg.version)
+}
 </script>
 
 <template>
@@ -58,6 +73,7 @@ onMounted(refreshPacks)
           :options="packOptions"
           allow-clear
           placeholder="请选择协议扩展包"
+          @change="onPackChange"
           @dropdown-visible-change="(open: boolean) => open && refreshPacks()"
         />
       </a-form-item>

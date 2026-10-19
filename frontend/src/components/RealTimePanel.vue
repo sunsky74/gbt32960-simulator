@@ -25,13 +25,11 @@ import ExtensionCommands from './ExtensionCommands.vue'
 
 const activeKeys = ref<string[]>([])
 
-// schema 加载后默认展开启用的组
+// 分组默认全部收起:用户手动展开的组,在报文配置重载(切版本/换扩展包)后也回到收起态。
 watch(
   () => store.schema,
-  (schema) => {
-    if (schema.length > 0) {
-      activeKeys.value = schema.filter((g) => g.enabled).map((g) => g.key)
-    }
+  () => {
+    activeKeys.value = []
   },
   { immediate: true },
 )
@@ -192,112 +190,124 @@ async function onIntervalChange(v: number | string | null | undefined) {
             />
           </div>
 
-          <a-collapse v-model:active-key="activeKeys" ghost expand-icon-position="end" class="group-collapse">
-            <a-collapse-panel v-for="g in store.schema" :key="g.key">
-              <template #header>
-                <span class="group-title">{{ g.title }}</span>
-                <a-tag v-if="locLocked(g)" color="blue" class="row-tag">轨迹回放中 · 不可编辑</a-tag>
-                <a-tag v-else-if="g.multiple" color="blue" class="row-tag">{{ ensureGroup(g).rows.length }} 行</a-tag>
-              </template>
-              <template #extra>
-                <a-switch v-model:checked="ensureGroup(g).enabled" size="small" :disabled="locLocked(g)" @click.stop />
-              </template>
-
-              <div class="group-body">
-                <div v-for="(row, ri) in ensureGroup(g).rows" :key="ri" class="group-row">
-                  <div v-if="g.multiple" class="row-head">
-                    <span class="row-label">第 {{ ri + 1 }} 行</span>
-                    <a-button size="small" type="text" danger @click="removeRow(g, ri)">删除行</a-button>
-                  </div>
-                  <div class="fields-grid">
-                    <template v-for="f in g.fields" :key="f.key">
-                      <div v-if="f.kind === 'enum'" class="field">
-                        <span class="field-label">{{ f.label }}</span>
-                        <a-select
-                          :value="numOf(row, f.key)"
-                          size="small"
-                          :options="enumOptions(f)"
-                          :disabled="locLocked(g)"
-                          @change="(v: unknown) => setEnum(row, f.key, v)"
-                        />
-                      </div>
-
-                      <div v-else-if="f.kind === 'int' || f.kind === 'float'" class="field">
-                        <span class="field-label"
-                          >{{ f.label }}<em v-if="f.unit"> ({{ f.unit }})</em></span
-                        >
-                        <a-input-number
-                          :value="numOf(row, f.key)"
-                          size="small"
-                          :step="f.kind === 'int' ? 1 : 0.1"
-                          :min="f.min"
-                          :max="f.max"
-                          :disabled="locLocked(g)"
-                          style="width: 100%"
-                          @change="(v: number | string | null | undefined) => setNum(row, f.key, v)"
-                        />
-                      </div>
-
-                      <div v-else-if="f.kind === 'bytes'" class="field">
-                        <span class="field-label"
-                          >{{ f.label }}<em v-if="f.length"> ({{ f.length }}B hex)</em></span
-                        >
-                        <a-input
-                          :value="hexOf(row, f.key)"
-                          class="hex-input"
-                          size="small"
-                          :placeholder="f.length ? `${f.length * 2} 个 hex 字符` : 'hex'"
-                          @update:value="(v: string) => setHex(row, f.key, f, v)"
-                        />
-                      </div>
-
-                      <div v-else-if="f.kind === 'bool'" class="field field-bool">
-                        <span class="field-label">{{ f.label }}</span>
-                        <a-switch
-                          :checked="boolOf(row, f.key)"
-                          size="small"
-                          :disabled="locLocked(g)"
-                          @change="(v: unknown) => setBool(row, f.key, v)"
-                        />
-                      </div>
-
-                      <div v-else-if="f.kind === 'bitgroup'" class="field field-bits">
-                        <span class="field-label">{{ f.label }}</span>
-                        <a-checkbox-group
-                          :value="bitsArrayOf(row, f)"
-                          :options="bitOptions(f)"
-                          class="bits-group"
-                          @change="(vals: Array<string | number | boolean>) => setBitsArray(row, f, vals)"
-                        />
-                      </div>
-
-                      <div v-else-if="f.kind === 'array_float'" class="field field-array">
-                        <span class="field-label"
-                          >{{ f.label }}<em v-if="f.unit"> ({{ f.unit }})</em></span
-                        >
-                        <div class="array-editor">
-                          <a-space v-for="(_, ai) in arrayValues(row, f.key)" :key="ai" size="small">
-                            <a-input-number
-                              :value="arrayValues(row, f.key)[ai]"
-                              size="small"
-                              class="w-84"
-                              @change="(v: number | string | null | undefined) => setArrayValue(row, f.key, ai, v)"
-                            />
-                            <a-button size="small" type="text" @click="removeArrayItem(row, f.key, ai)">×</a-button>
-                          </a-space>
-                          <a-button size="small" type="dashed" @click="addArrayItem(row, f.key)"
-                            >＋ {{ f.itemLabel }}</a-button
-                          >
-                        </div>
-                      </div>
-                    </template>
-                  </div>
-                </div>
-
-                <a-button v-if="g.multiple" size="small" type="dashed" block @click="addRow(g)">＋ 添加一行</a-button>
+          <div class="schema-shell" :class="{ 'is-reloading': store.schemaLoading }">
+            <transition name="schema-fade">
+              <div v-if="store.schemaLoading" class="schema-reload-mask">
+                <a-spin size="large" />
+                <span class="schema-reload-text">正在重新加载报文配置…</span>
               </div>
-            </a-collapse-panel>
-          </a-collapse>
+            </transition>
+            <a-collapse v-model:active-key="activeKeys" ghost expand-icon-position="end" class="group-collapse">
+              <a-collapse-panel v-for="g in store.schema" :key="g.key">
+                <template #header>
+                  <span class="group-title">{{ g.title }}</span>
+                  <a-tag v-if="locLocked(g)" color="blue" class="row-tag">轨迹回放中 · 不可编辑</a-tag>
+                  <a-tag v-else-if="g.multiple" color="blue" class="row-tag">{{ ensureGroup(g).rows.length }} 行</a-tag>
+                </template>
+                <template #extra>
+                  <!-- 原生 span 阻断冒泡:antd Switch 的 click 是 props.onClick,组件级 @click.stop 拿不到事件,
+                       冒泡到 collapse header 会把整组收起 → 用原生元素包一层才能真正 stopPropagation -->
+                  <span class="group-switch" @click.stop>
+                    <a-switch v-model:checked="ensureGroup(g).enabled" size="small" :disabled="locLocked(g)" />
+                  </span>
+                </template>
+
+                <div class="group-body">
+                  <div v-for="(row, ri) in ensureGroup(g).rows" :key="ri" class="group-row">
+                    <div v-if="g.multiple" class="row-head">
+                      <span class="row-label">第 {{ ri + 1 }} 行</span>
+                      <a-button size="small" type="text" danger @click="removeRow(g, ri)">删除行</a-button>
+                    </div>
+                    <div class="fields-grid">
+                      <template v-for="f in g.fields" :key="f.key">
+                        <div v-if="f.kind === 'enum'" class="field">
+                          <span class="field-label">{{ f.label }}</span>
+                          <a-select
+                            :value="numOf(row, f.key)"
+                            size="small"
+                            :options="enumOptions(f)"
+                            :disabled="locLocked(g)"
+                            @change="(v: unknown) => setEnum(row, f.key, v)"
+                          />
+                        </div>
+
+                        <div v-else-if="f.kind === 'int' || f.kind === 'float'" class="field">
+                          <span class="field-label"
+                            >{{ f.label }}<em v-if="f.unit"> ({{ f.unit }})</em></span
+                          >
+                          <a-input-number
+                            :value="numOf(row, f.key)"
+                            size="small"
+                            :step="f.kind === 'int' ? 1 : 0.1"
+                            :min="f.min"
+                            :max="f.max"
+                            :disabled="locLocked(g)"
+                            style="width: 100%"
+                            @change="(v: number | string | null | undefined) => setNum(row, f.key, v)"
+                          />
+                        </div>
+
+                        <div v-else-if="f.kind === 'bytes'" class="field">
+                          <span class="field-label"
+                            >{{ f.label }}<em v-if="f.length"> ({{ f.length }}B hex)</em></span
+                          >
+                          <a-input
+                            :value="hexOf(row, f.key)"
+                            class="hex-input"
+                            size="small"
+                            :placeholder="f.length ? `${f.length * 2} 个 hex 字符` : 'hex'"
+                            @update:value="(v: string) => setHex(row, f.key, f, v)"
+                          />
+                        </div>
+
+                        <div v-else-if="f.kind === 'bool'" class="field field-bool">
+                          <span class="field-label">{{ f.label }}</span>
+                          <a-switch
+                            :checked="boolOf(row, f.key)"
+                            size="small"
+                            :disabled="locLocked(g)"
+                            @change="(v: unknown) => setBool(row, f.key, v)"
+                          />
+                        </div>
+
+                        <div v-else-if="f.kind === 'bitgroup'" class="field field-bits">
+                          <span class="field-label">{{ f.label }}</span>
+                          <a-checkbox-group
+                            :value="bitsArrayOf(row, f)"
+                            :options="bitOptions(f)"
+                            class="bits-group"
+                            @change="(vals: Array<string | number | boolean>) => setBitsArray(row, f, vals)"
+                          />
+                        </div>
+
+                        <div v-else-if="f.kind === 'array_float'" class="field field-array">
+                          <span class="field-label"
+                            >{{ f.label }}<em v-if="f.unit"> ({{ f.unit }})</em></span
+                          >
+                          <div class="array-editor">
+                            <a-space v-for="(_, ai) in arrayValues(row, f.key)" :key="ai" size="small">
+                              <a-input-number
+                                :value="arrayValues(row, f.key)[ai]"
+                                size="small"
+                                class="w-84"
+                                @change="(v: number | string | null | undefined) => setArrayValue(row, f.key, ai, v)"
+                              />
+                              <a-button size="small" type="text" @click="removeArrayItem(row, f.key, ai)">×</a-button>
+                            </a-space>
+                            <a-button size="small" type="dashed" @click="addArrayItem(row, f.key)"
+                              >＋ {{ f.itemLabel }}</a-button
+                            >
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+
+                  <a-button v-if="g.multiple" size="small" type="dashed" block @click="addRow(g)">＋ 添加一行</a-button>
+                </div>
+              </a-collapse-panel>
+            </a-collapse>
+          </div>
         </div>
       </a-tab-pane>
 
@@ -343,3 +353,57 @@ async function onIntervalChange(v: number | string | null | undefined) {
     </a-modal>
   </div>
 </template>
+
+<style scoped>
+/* 报文版本 / 扩展包变更后的重载遮罩:盖住分组列表,底层内容轻微变淡+模糊 */
+.schema-shell {
+  position: relative;
+}
+
+/* 分组启停开关:原生元素承载 stopPropagation,点开关不再连带整组展开/收起 */
+.group-switch {
+  display: inline-flex;
+}
+
+.schema-shell > :not(.schema-reload-mask) {
+  transition:
+    opacity 0.18s ease,
+    filter 0.18s ease;
+}
+
+.schema-shell.is-reloading > :not(.schema-reload-mask) {
+  opacity: 0.35;
+  filter: blur(1px);
+  pointer-events: none;
+}
+
+.schema-reload-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-panel) 55%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.schema-reload-text {
+  font-size: var(--fs-12);
+  color: var(--text-secondary);
+  opacity: 0.85;
+}
+
+.schema-fade-enter-active,
+.schema-fade-leave-active {
+  transition: opacity 0.18s ease;
+}
+
+.schema-fade-enter-from,
+.schema-fade-leave-to {
+  opacity: 0;
+}
+</style>
