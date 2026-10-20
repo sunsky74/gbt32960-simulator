@@ -3,17 +3,33 @@ package store
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-// Dir 返回配置目录(os.UserConfigDir()/gbt32960-simulator),不存在则创建。
+// homeEnv 覆盖数据目录的环境变量:开发/验收时指向独立目录,
+// 避免本机日常档案与扩展包混进 release 包的行为里。
+const homeEnv = "GBT32960_HOME"
+
+// Dir 返回数据目录:默认 os.UserConfigDir()/gbt32960-simulator;
+// 设了 GBT32960_HOME 则用它(相对路径按启动目录解析,建议传绝对路径),不存在则创建。
 func Dir() (string, error) {
-	base, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
+	var dir string
+	if override := strings.TrimSpace(os.Getenv(homeEnv)); override != "" {
+		abs, err := filepath.Abs(override)
+		if err != nil {
+			return "", fmt.Errorf("%s 路径无效: %w", homeEnv, err)
+		}
+		dir = abs
+	} else {
+		base, err := os.UserConfigDir()
+		if err != nil {
+			return "", err
+		}
+		dir = filepath.Join(base, "gbt32960-simulator")
 	}
-	dir := filepath.Join(base, "gbt32960-simulator")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}

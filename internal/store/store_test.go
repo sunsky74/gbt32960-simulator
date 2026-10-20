@@ -123,3 +123,42 @@ func TestSaveLeavesNoTempFile(t *testing.T) {
 		}
 	}
 }
+
+// TestDirEnvOverride GBT32960_HOME 覆盖默认数据目录:Dir/Save 都落到覆盖目录。
+func TestDirEnvOverride(t *testing.T) {
+	tempHome(t)
+	custom := filepath.Join(t.TempDir(), "sim-data")
+	t.Setenv("GBT32960_HOME", custom)
+
+	dir, err := Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dir != custom {
+		t.Fatalf("Dir() = %q, 期望 %q", dir, custom)
+	}
+	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
+		t.Fatalf("覆盖目录未创建: %v", err)
+	}
+
+	if err := Save("probe.json", sample()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(custom, "probe.json")); err != nil {
+		t.Fatalf("文件未落在覆盖目录: %v", err)
+	}
+}
+
+// TestDirEnvBlank 空白值等价于未设置,回落默认目录(避免误配清空为 "" 时写到启动目录)。
+func TestDirEnvBlank(t *testing.T) {
+	tempHome(t)
+	t.Setenv("GBT32960_HOME", "   ")
+
+	dir, err := Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(dir) != "gbt32960-simulator" {
+		t.Fatalf("Dir() = %q, 期望默认目录", dir)
+	}
+}

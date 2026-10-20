@@ -70,6 +70,22 @@ cd frontend && npm test    # 前端（Vitest）
 wails build
 ```
 
+### 数据目录
+
+连接档案、报文配置、扩展包存在系统用户配置目录（macOS：`~/Library/Application Support/gbt32960-simulator`）。
+开发或 release 验收时可指向独立目录，避免与本机日常档案、扩展包混在一起：
+
+```bash
+# 直接跑二进制才会继承环境变量（open -a 不保证传递 shell 环境）
+GBT32960_HOME=/tmp/gbt32960-clean \
+  /Applications/gbt32960-simulator.app/Contents/MacOS/gbt32960-simulator
+
+# 开发模式同理：同一 shell 内先 export
+export GBT32960_HOME=/tmp/gbt32960-clean && wails dev
+```
+
+不设该变量时行为不变。设置页「数据与存储」展示的配置目录与扩展包目录会跟随该变量。
+
 ## 发布
 
 推送 `v*` 标签即触发 GitHub Actions 三平台构建并自动创建 Release（见 [.github/workflows/release.yml](.github/workflows/release.yml)）：
